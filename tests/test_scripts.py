@@ -59,10 +59,15 @@ class KbconfTest(Tmp):
     def test_validate_problems(self):
         problems = kbconf.validate({"schema": 2, "metadata": "xml", "bogus": 1,
                                     "partitions": {"max": 5, "topic_start": 2, "fallback": "07"},
-                                    "names": {"nope": "x"}, "timezone": "Mars/Base"})
+                                    "names": {"nope": "x"}, "timezone": "Mars Base"})
         text = " ".join(problems)
-        for word in ("schema", "metadata", "bogus", "fallback", "nope", "Mars/Base"):
+        for word in ("schema", "metadata", "bogus", "fallback", "nope", "Mars Base"):
             self.assertIn(word, text)
+
+    def test_timezone_check_is_version_independent(self):
+        self.assertEqual(kbconf.check_timezone("Europe/London"), [])
+        self.assertEqual(kbconf.check_timezone("+08:00"), [])
+        self.assertTrue(kbconf.check_timezone("not a zone!"))
 
     def test_limits(self):
         self.assertEqual(kbconf.default_limits("zh-CN"), (55, 80))
