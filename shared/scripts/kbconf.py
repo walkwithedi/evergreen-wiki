@@ -254,22 +254,28 @@ def validate(raw):
     return problems
 
 
+class TimezoneUnavailable(ConfigError):
+    """The name may be fine, but this Python cannot resolve IANA names
+    (3.8 has no zoneinfo; Windows has no system timezone database)."""
+
+
 def check_timezone(name):
-    """Validate the spelling only, so a config checks the same on every Python version."""
+    """Validate the spelling only, so a config checks the same on every system."""
     if name in (None, "", "UTC", "Z") or re.fullmatch(r"[+-]\d{2}:?\d{2}", str(name)):
         return []
     if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_+-]*(/[A-Za-z0-9_+-]+){0,2}", str(name)):
         return [f"timezone {name!r} is neither an IANA name nor an offset like +08:00"]
     try:
         tzinfo(name)
+    except TimezoneUnavailable:
+        pass
     except ConfigError as e:
-        if "Python 3.9" not in str(e):  # unknown name; a missing zoneinfo module is not a config error
-            return [str(e)]
+        return [str(e)]
     return []
 
 
 def tzinfo(name):
-    """IANA name (needs Python 3.9+ zoneinfo) or a fixed offset such as +08:00 / UTC."""
+    """IANA name or a fixed offset such as +08:00 / UTC."""
     if name in (None, "", "UTC", "Z"):
         return timezone.utc
     m = re.fullmatch(r"([+-])(\d{2}):?(\d{2})", name)
@@ -277,11 +283,15 @@ def tzinfo(name):
         sign = 1 if m.group(1) == "+" else -1
         return timezone(sign * timedelta(hours=int(m.group(2)), minutes=int(m.group(3))))
     try:
-        from zoneinfo import ZoneInfo  # Python 3.9+
-        return ZoneInfo(name)
+        import zoneinfo  # Python 3.9+
     except ImportError:
-        raise ConfigError(f"timezone {name!r} needs Python 3.9+; use a fixed offset like +08:00")
+        raise TimezoneUnavailable(f"timezone {name!r} needs Python 3.9+; use a fixed offset like +08:00")
+    try:
+        return zoneinfo.ZoneInfo(name)
     except Exception:
+        if not zoneinfo.available_timezones():
+            raise TimezoneUnavailable(f"this system has no timezone database for {name!r} "
+                                      "(usual on Windows); use a fixed offset like +08:00")
         raise ConfigError(f"unknown timezone {name!r}")
 
 

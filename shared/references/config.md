@@ -62,7 +62,7 @@ The spec is the source of every rule about partitions, topics, terms and thresho
 ```
 
 - language: language of replies, readme files and new files for this library.
-- timezone: IANA name or a fixed offset such as +08:00. Use it for every time stamp (note times, archive suffixes, log names).
+- timezone: IANA name or a fixed offset such as +08:00. Use it for every time stamp (note times, archive suffixes, log names). The scripts resolve IANA names only on Python 3.9+ with a timezone database (Windows usually has none); there, use the fixed offset.
 - metadata: yaml (front matter and entity links, see entity-yaml.md) or text (plain header from _kb-params.md).
 - sensitivity.enabled: when true, class-A data (ID numbers, card and account numbers, passwords, one-time codes) is masked to at most the last keep_last characters before anything is written or shown.
 - partitions: highest partition number, first topic partition (00 and 01 hold summary files), and the fallback partition for new topics.
