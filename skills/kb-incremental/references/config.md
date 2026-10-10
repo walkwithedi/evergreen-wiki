@@ -86,7 +86,7 @@ The spec is the source of every rule about partitions, topics, terms and thresho
 | old_suffix | _old | archived copies: <stem>_old<YYYYMMDDHHMMSS>.md |
 | snapshot_prefix | snapshot_ | temporary snapshots, never used as sources |
 | readme | README.txt | the readme that comes with each delivery |
-| run_log_prefix | _run-log_dedupe_ | archive run log file name prefix |
+| run_log_prefix | _run-log_ | run log file name prefix (archive mode and direct delivery) |
 | note_marker | Quick note: | first line of each quick note inside a filed batch |
 | assistant_label, user_label | Assistant, User | speaker labels in quick notes |
 

@@ -134,6 +134,18 @@ class IndexTest(Tmp):
         self.assertIn("文件名 ｜ 原始文件名 ｜ 原文哈希", text)
         self.assertIn("02_体检_报告_乙.md ｜ 乙.pdf ｜ ", text)
 
+    def test_refuses_library_index(self):
+        lib = self.p("lib")
+        write(os.path.join(lib, "_kb.json"), "{}")
+        idx = os.path.join(lib, "01_File-Index.md")
+        write(idx, read(self.idx))
+        p = run("index_tool.py", "add", idx, "--name", "02_X.md", "--orig", "x", check=False)
+        self.assertEqual(p.returncode, 5)
+        p = run("index_tool.py", "write", self.idx, "--out", idx, "--date", "2026-10-10", check=False)
+        self.assertEqual(p.returncode, 5)
+        self.assertEqual(read(idx), read(self.idx))
+        run("index_tool.py", "add", idx, "--name", "02_X.md", "--orig", "x", "--in-library")
+
     def test_empty_index(self):
         idx = self.p("empty.md")
         write(idx, "Entries: 0\nLast updated: 2026-01-01\n\n| File name | Source file name | Source hash |\n| --- | --- | --- |\n")
@@ -187,7 +199,7 @@ class ArchivePlanTest(Tmp):
         write(self.p("r.json"), json.dumps({"1": "ok"}))
         out = run("archive_plan.py", "log", "--plan", self.p("plan.json"), "--results", self.p("r.json"),
                   "--end-time", "2026-10-10 12:05:00", "--out", self.p("log.txt")).stdout
-        self.assertIn("Log file name: _run-log_dedupe_20261010_120500.txt", out)
+        self.assertIn("Log file name: _run-log_20261010_120500.txt", out)
         self.assertIn("Archived 1, failed 0.", out)
 
 
@@ -228,7 +240,7 @@ class PackageTest(Tmp):
         self.assertEqual(read(os.path.join(self.lib, "02_Health_Report_A.md")), "new version\n")
         arch = os.listdir(os.path.join(self.lib, "Archive"))
         self.assertTrue(any(n.startswith("02_Health_Report_A_old") for n in arch))
-        self.assertTrue(any(n.startswith("_run-log_dedupe_") for n in arch))
+        self.assertTrue(any(n.startswith("_run-log_") for n in arch))
         self.assertTrue(any(n.endswith("_README.txt") for n in arch))
         self.assertTrue(os.path.isfile(os.path.join(self.lib, "Entities", "Self.md")))
         self.assertFalse(os.path.exists(os.path.join(self.lib, "README.txt")))

@@ -17,6 +17,8 @@ Subcommands:
   add    INDEX --name FILE --orig SOURCE_NAME [--file SOURCE]      append a row (in place)
   update INDEX --name FILE --orig NEW_SOURCE_NAME [--file SOURCE]  update source name and hash (in place)
   write  INDEX --out PATH --date YYYY-MM-DD               sort rows, update entry count and date
+add, update and write refuse to change a file that sits next to _kb.json (a library root):
+intake works on a copy in the work folder, and delivery puts the result in the library.
 Results go to stdout, logs to stderr. The header fields recognised are
 "Entries:" / "条目数：" and "Last updated:" / "最后更新：".
 """
@@ -123,6 +125,14 @@ def norm_orig(s):
     return (stem2 + ext.lower()).strip()
 
 
+def guard_library(path, allow):
+    """The index in a library root is changed only by delivery, never by these commands."""
+    root = os.path.dirname(os.path.abspath(path))
+    if not allow and os.path.isfile(os.path.join(root, "_kb.json")):
+        log.error("%s is inside a library root (next to _kb.json); work on a copy in the work folder", path)
+        sys.exit(5)
+
+
 def save(path, lines):
     d = os.path.dirname(path)
     if d and not os.path.isdir(d):
@@ -177,6 +187,7 @@ def cmd_check(a):
 
 
 def cmd_add(a):
+    guard_library(a.index, a.in_library)
     lines, rows = parse(a.index)
     if any(r[1] == a.name for r in rows):
         log.error("file name already indexed; use update for a new version: %s", a.name)
@@ -200,6 +211,7 @@ def last_table_line(lines):
 
 
 def cmd_update(a):
+    guard_library(a.index, a.in_library)
     lines, rows = parse(a.index)
     hit = [r for r in rows if r[1] == a.name]
     if not hit:
@@ -240,6 +252,7 @@ def extend_header(head):
 
 
 def cmd_write(a):
+    guard_library(a.out, a.in_library)
     lines, rows = parse(a.index)
     if not rows and not a.allow_empty:
         log.error("index has no entries; refusing to write (use --allow-empty for a new library)")
@@ -310,6 +323,9 @@ def main():
         p.add_argument("--orig", required=True); p.add_argument("--file")
     p = sub.add_parser("write"); p.add_argument("index"); p.add_argument("--out", required=True)
     p.add_argument("--date", required=True); p.add_argument("--allow-empty", action="store_true")
+    for c in ("add", "update", "write"):
+        sub.choices[c].add_argument("--in-library", action="store_true",
+                                    help="allow changing an index inside a library root (not for normal intake)")
     a = ap.parse_args()
     logging.basicConfig(level="DEBUG" if a.verbose else a.log_level, format=LOG_FORMAT, stream=sys.stderr)
     log.info("subcommand: %s", a.cmd)

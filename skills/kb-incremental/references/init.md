@@ -61,4 +61,7 @@ End with: reply "confirm" to write. The turn ends here.
 4. ensure_folder for the archive, entities (YAML mode) and notes folders.
 5. Verify every file exists once.
 6. Registry: if the registry is a file you can write (KB_LIBRARIES or ~/.config/kb/kb-libraries.json), show the entry and add it after the user agrees, creating the file if needed. Otherwise give the entry (or the whole registry) as a block for the user to paste into project instructions, or to bake into a private skill build (build_skill.py --config).
-7. Report what was written and anything that needs a manual decision.
+7. Make the libraries visible. An assistant only consults kb-query when it knows a knowledge base exists, and it cannot see the registry until a skill reads it. Propose one line for the instructions the assistant always reads (CLAUDE.md, AGENTS.md or GEMINI.md in the user's home or project, or the claude.ai Project instructions), listing every registered library:
+   "I keep knowledge bases: <label> (<scope>); <label> (<scope>). For questions about these, use kb-query before searching code or answering from memory; to save something, use kb-note."
+   Add it after the user agrees (to an existing file, append; never replace other content), or give it to paste.
+8. Report what was written and anything that needs a manual decision.

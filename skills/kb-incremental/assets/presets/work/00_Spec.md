@@ -53,10 +53,10 @@ none; n/a; not applicable; - | placeholders, SQL keywords, ticket codes, generic
 
 7. Naming
 
-Topic files: <partition>_<topic>_<type>_<short title>.md. No date in the name: the same name means the same document in successive versions, and older versions are archived.
+Topic files: <partition>_<topic>_<type>_<short title>.md, with spaces inside each part written as hyphens. No date in the name: the same name means the same document in successive versions, and older versions are archived.
 Embed what tells similar material apart in the short title:
-(1) Recurring material (weekly reports, monthly metrics): the period, as in 08_Recurring reports_report_2026-W41.md.
-(2) One template filled by several parties: the party, as in 03_Status reports_report_2026-09-Payments.md.
+(1) Recurring material (weekly reports, monthly metrics): the period, as in 08_Recurring-reports_report_2026-W41.md.
+(2) One template filled by several parties: the party, as in 03_Status-reports_report_2026-09-Payments.md.
 (3) Similar topics with different content: a distinguishing word.
 Summary files have fixed names; see _kb.json names.
 Entity pages live in the entities folder, named after the entity.
