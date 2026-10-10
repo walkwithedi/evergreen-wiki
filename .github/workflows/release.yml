@@ -1,0 +1,33 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check
+        run: |
+          python -m unittest discover -s tests
+          python scripts/check_repo.py
+          python scripts/sync_shared.py --check
+          python scripts/sensitive_scan.py
+      - name: Tag matches skills version
+        run: |
+          v=$(grep -m1 -oE '^Version: [0-9.]+' skills/kb-note/SKILL.md | cut -d' ' -f2)
+          [ "v$v" = "${GITHUB_REF_NAME}" ] || { echo "tag ${GITHUB_REF_NAME} does not match skills version $v"; exit 1; }
+      - name: Build
+        run: |
+          python scripts/build_skill.py
+          python scripts/build_skill.py --locale zh
+          git archive --format=zip --prefix=evergreen-wiki/ -o "dist/evergreen-wiki-${GITHUB_REF_NAME}.zip" HEAD
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" dist/*.zip --title "${GITHUB_REF_NAME}" --notes-file <(awk "/^## ${GITHUB_REF_NAME#v}/{f=1;next} /^## /{f=0} f" CHANGELOG.md)

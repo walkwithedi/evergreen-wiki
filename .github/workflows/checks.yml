@@ -1,0 +1,55 @@
+name: checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-latest, python: "3.8"}
+          - {os: ubuntu-latest, python: "3.12"}
+          - {os: macos-latest, python: "3.12"}
+          - {os: windows-latest, python: "3.12"}
+    runs-on: ${{ matrix.os }}
+    env:
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
+      - name: Repository checks
+        run: python scripts/check_repo.py
+      - name: Shared copies are current
+        run: python scripts/sync_shared.py --check
+      - name: Build zips
+        run: python scripts/build_skill.py && python scripts/build_skill.py --locale zh
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Sensitive data (whole tree)
+        run: python scripts/sensitive_scan.py
+      - name: Sensitive data (commit messages)
+        if: github.event_name == 'pull_request'
+        run: |
+          git log --format=%B ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} > /tmp/msgs.txt
+          python - <<'PY'
+          import sys
+          sys.path.insert(0, "scripts")
+          import sensitive_scan as s
+          lines = [("commit message", i, l.rstrip("\n")) for i, l in enumerate(open("/tmp/msgs.txt", encoding="utf-8"), 1)]
+          sys.exit(1 if s.scan(lines) else 0)
+          PY
