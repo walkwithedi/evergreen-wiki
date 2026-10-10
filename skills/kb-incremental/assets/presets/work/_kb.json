@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "label": "Work",
+  "preset": "work",
+  "language": "en",
+  "timezone": "UTC",
+  "metadata": "yaml",
+  "sensitivity": {"enabled": false, "keep_last": 4},
+  "partitions": {"max": 9, "topic_start": 2, "fallback": "09"},
+  "delivery": "",
+  "names": {}
+}

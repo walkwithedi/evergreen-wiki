@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "label": "Life",
+  "preset": "life",
+  "language": "en",
+  "timezone": "UTC",
+  "metadata": "yaml",
+  "sensitivity": {"enabled": true, "keep_last": 4},
+  "partitions": {"max": 10, "topic_start": 2, "fallback": "06"},
+  "delivery": "",
+  "names": {}
+}
