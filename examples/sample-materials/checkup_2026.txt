@@ -1,0 +1,10 @@
+Riverside Clinic - Annual checkup report
+Patient: Self
+Date of checkup: 2026-10-01
+
+Lipids
+Total cholesterol: 5.1 mmol/L (reference < 5.2)
+LDL: 3.0 mmol/L (reference < 3.4)
+
+Summary
+All results within reference ranges. Next routine checkup in 12 months.
