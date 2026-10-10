@@ -246,15 +246,26 @@ def validate(raw):
     fb = part.get("fallback", "")
     if fb and not (re.fullmatch(r"\d{2}", str(fb)) and ts <= int(fb) <= mx):
         problems.append("partitions.fallback must be a two-digit topic partition inside the range")
-    try:
-        tzinfo(raw.get("timezone", "UTC"))
-    except ConfigError as e:
-        problems.append(str(e))
+    problems += check_timezone(raw.get("timezone", "UTC"))
     names = raw.get("names", {})
     for k in names:
         if not (k in DEFAULT_NAMES or (k.endswith("_key") and k[:-4] in SUMMARY_KEYS)):
             problems.append(f"unknown names key {k!r}")
     return problems
+
+
+def check_timezone(name):
+    """Validate the spelling only, so a config checks the same on every Python version."""
+    if name in (None, "", "UTC", "Z") or re.fullmatch(r"[+-]\d{2}:?\d{2}", str(name)):
+        return []
+    if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_+-]*(/[A-Za-z0-9_+-]+){0,2}", str(name)):
+        return [f"timezone {name!r} is neither an IANA name nor an offset like +08:00"]
+    try:
+        tzinfo(name)
+    except ConfigError as e:
+        if "Python 3.9" not in str(e):  # unknown name; a missing zoneinfo module is not a config error
+            return [str(e)]
+    return []
 
 
 def tzinfo(name):
