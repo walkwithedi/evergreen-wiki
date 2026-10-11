@@ -89,6 +89,8 @@ Scripts need Python 3.8+ and nothing outside the standard library. Without Pytho
 ## Development
 
 ```bash
+git config core.hooksPath .githooks       # once per clone: run every check before each commit
+python3 scripts/run_checks.py             # all of the checks below at once
 python3 -m unittest discover -s tests     # script tests
 python3 scripts/check_repo.py             # skill and manifest consistency
 python3 scripts/sync_shared.py            # copy shared/ into every skill after editing it
