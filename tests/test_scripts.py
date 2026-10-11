@@ -423,6 +423,9 @@ class HookTest(unittest.TestCase):
             write(msg, "Fix it\n\n# real.person@gmail.com in a comment line\nCo-Authored-By: X <noreply@anthropic.com>\n")  # sensitive-scan: ignore
             self.assertEqual(subprocess.run([sys.executable, os.path.join(ROOT, "scripts", "sensitive_scan.py"),
                                              "--message", msg], capture_output=True).returncode, 0)
+            write(msg, "Bump actions\n\nSigned-off-by: dependabot[bot] <support@github.com>\n")
+            self.assertEqual(subprocess.run([sys.executable, os.path.join(ROOT, "scripts", "sensitive_scan.py"),
+                                             "--message", msg], capture_output=True).returncode, 0)
             write(msg, "Ask real.person@gmail.com\n")  # sensitive-scan: ignore
             self.assertEqual(subprocess.run([sys.executable, os.path.join(ROOT, "scripts", "sensitive_scan.py"),
                                              "--message", msg], capture_output=True).returncode, 1)
