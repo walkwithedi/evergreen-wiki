@@ -1,6 +1,6 @@
 # Methodology
 
-Why the skills work the way they do. The rules here grew out of keeping two real libraries (work and personal) with an assistant, where every loose rule eventually produced a stale answer or a lost fact.
+Why the skills work the way they do: every rule below exists because a looser one lets answers go stale or facts get lost.
 
 ## The problem
 

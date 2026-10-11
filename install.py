@@ -112,7 +112,8 @@ MSG = {
         "q_id": "Short id (lowercase letters, digits, hyphens)",
         "id_taken": "The id {id!r} is already registered; using {new!r}. Change it in the preview if you like.",
         "preview": "Preview",
-        "items": ["Folder", "Label", "Id", "Scope", "Language", "Timezone", "Sensitivity and masking"],
+        "items": ["Folder", "Label", "Id", "Scope", "Language", "Timezone", "Sensitivity and masking",
+                  "Convert uploads to Markdown first (fewer tokens, faster)"],
         "on_off": ("on", "off"),
         "files": "Files to create",
         "folders": "Folders to create",
@@ -151,7 +152,8 @@ MSG = {
         "q_id": "简短 id（小写字母、数字、连字符）",
         "id_taken": "id {id!r} 已被登记，改用 {new!r}；可以在预览里修改。",
         "preview": "预览",
-        "items": ["文件夹", "名称", "id", "范围", "语言", "时区", "敏感信息分级与打码"],
+        "items": ["文件夹", "名称", "id", "范围", "语言", "时区", "敏感信息分级与打码",
+                  "上传材料先转成 Markdown 再入库（省 token、更快）"],
         "on_off": ("开", "关"),
         "files": "将创建的文件",
         "folders": "将创建的文件夹",
@@ -261,14 +263,16 @@ def library_settings(il, s):
     """Validate through the same code the skill uses; returns the completed settings."""
     ns = argparse.Namespace(preset=s["preset"], label=s["label"], id=s["id"], scope=s["scope"],
                             language=s["language"], timezone=s["timezone"],
-                            sensitivity="on" if s["sensitivity"] else "off", date=None)
+                            sensitivity="on" if s["sensitivity"] else "off",
+                            convert="on" if s["convert"] else "off", date=None)
     return il.settings(ns)
 
 
 def show_preview(m, il, s, root, reg_path, entry):
     files, folders = il.build_files(s)
     on, off = m["on_off"]
-    values = [root, s["label"], s["id"], s["scope"], s["language"], s["timezone"], on if s["sensitivity"] else off]
+    values = [root, s["label"], s["id"], s["scope"], s["language"], s["timezone"], on if s["sensitivity"] else off,
+              on if s["convert"] else off]
     print(f"\n{m['preview']}")
     for i, (k, v) in enumerate(zip(m["items"], values), 1):
         print(f"  {i}. {k}: {v}")
@@ -284,6 +288,8 @@ def edit_item(q, m, il, s, root, n):
         return ask_root(q, m, il, root)
     if n == 7:
         s["sensitivity"] = q.yes(item, s["sensitivity"])
+    elif n == 8:
+        s["convert"] = q.yes(item, s["convert"])
     else:
         key = ["", "label", "id", "scope", "language", "timezone"][n - 1]
         s[key] = q.ask(item, s[key])

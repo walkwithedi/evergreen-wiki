@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Copy shared files into every skill, or check that the copies are current.
+"""Copy shared files into every skill and tool, or check that the copies are current.
 
 Each skill must work on its own (a claude.ai upload or a copied folder cannot reach a
-sibling directory), so shared references and scripts are copied into each skill.
+sibling directory), so shared references and scripts are copied into each skill; the
+stand-alone tools under tools/ get their copy the same way.
 Edit only the files under shared/; run this script; commit the copies.
 
 Usage:
@@ -21,9 +22,17 @@ LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s.%(funcName)s:%(lineno)d - %(m
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 REFS = ["config.md", "environment.md", "backend-gdrive.md", "backend-local.md"]
-# (shared file, skills that receive it, target folder inside the skill)
-PLAN = [(f"references/{r}", ["kb-note", "kb-query", "kb-incremental"], "references") for r in REFS]
-PLAN.append(("scripts/kbconf.py", ["kb-incremental"], "scripts"))
+# (file under shared/, folders that receive a copy, relative to the repository root)
+PLAN = [(f"references/{r}", [f"skills/{s}/references" for s in ("kb-note", "kb-query", "kb-incremental")])
+        for r in REFS]
+PLAN.append(("scripts/kbconf.py", ["skills/kb-incremental/scripts"]))
+# the converter: used by kb-incremental (scripts/convert.py) and by the stand-alone tool
+PLAN.append(("scripts/doc2kb_core.py", ["skills/kb-incremental/scripts", "tools/doc2kb"]))
+
+
+def copies():
+    """{copy path relative to the root: source path relative to the root}, "/" separated."""
+    return {f"{folder}/{os.path.basename(rel)}": f"shared/{rel}" for rel, folders in PLAN for folder in folders}
 
 
 def main():
@@ -34,21 +43,20 @@ def main():
     a = ap.parse_args()
     logging.basicConfig(level=a.log_level, format=LOG_FORMAT, stream=sys.stderr)
     stale = 0
-    for rel, skills, folder in PLAN:
-        src = os.path.join(ROOT, "shared", rel)
-        for skill in skills:
-            dst = os.path.join(ROOT, "skills", skill, folder, os.path.basename(rel))
-            same = os.path.isfile(dst) and filecmp.cmp(src, dst, shallow=False)
-            if same:
-                log.debug("current: %s", dst)
-                continue
-            if a.check:
-                stale += 1
-                print(f"stale: skills/{skill}/{folder}/{os.path.basename(rel)} (edit shared/{rel} and run scripts/sync_shared.py)")
-            else:
-                os.makedirs(os.path.dirname(dst), exist_ok=True)
-                shutil.copyfile(src, dst)
-                print(f"copied: shared/{rel} -> skills/{skill}/{folder}/")
+    for copy, source in copies().items():
+        src = os.path.join(ROOT, *source.split("/"))
+        dst = os.path.join(ROOT, *copy.split("/"))
+        same = os.path.isfile(dst) and filecmp.cmp(src, dst, shallow=False)
+        if same:
+            log.debug("current: %s", dst)
+            continue
+        if a.check:
+            stale += 1
+            print(f"stale: {copy} (edit {source} and run scripts/sync_shared.py)")
+        else:
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            shutil.copyfile(src, dst)
+            print(f"copied: {source} -> {os.path.dirname(copy)}/")
     if a.check:
         print("result: " + ("stale copies found" if stale else "all copies current"))
         sys.exit(1 if stale else 0)

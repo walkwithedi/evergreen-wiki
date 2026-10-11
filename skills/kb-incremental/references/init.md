@@ -45,13 +45,14 @@ Found out, not asked (all shown in the preview):
 - Language: the language the user writes in. It sets the Table D limits (python3 scripts/kbconf.py limits --language <lang>).
 - Timezone: from the defaults command (the system timezone); in claude.ai or wherever the system timezone is meaningless (often UTC on a server), the timezone the user's messages or profile indicate, else ask in the preview.
 - Sensitivity and masking: the preset's setting (on for life, off for work).
+- Conversion: on, as both presets set it. Uploads are turned into Markdown by a script before intake, which saves tokens and time (references/convert.md). Say in the preview what it does in a few words, so the user can turn it off there.
 - Partitions: the preset's Table A, unchanged unless the user edits it in the preview. Partition numbers stay two-digit and continuous; the fallback partition stays the preset's unless the user changes it.
 
 ## Round 1: checks (existing library)
 
 1. Find and read the spec. Not found: stop, nothing can be derived.
 2. List the root's subfolders and look for _kb.json and _kb-params.md (find_exact).
-3. Derive _kb.json from the spec: partitions.max = highest partition in Table A; topic_start = first partition after the summary partitions; metadata = yaml if the spec has Table E and front matter, else text; names = the summary file names actually in the library and the archive, entities and notes folder names the spec uses (only where they differ from defaults); language from the spec's language; timezone asked once.
+3. Derive _kb.json from the spec: partitions.max = highest partition in Table A; topic_start = first partition after the summary partitions; metadata = yaml if the spec has Table E and front matter, else text; names = the summary file names actually in the library and the archive, entities and notes folder names the spec uses (only where they differ from defaults); language from the spec's language; timezone asked once. Conversion is not in the spec: keep the value of an existing _kb.json, else suggest {"enabled": true} in the preview.
 4. If _kb.json exists, compare field by field. If _kb-params.md is missing, offer the closest preset's params as a draft, every clause marked "from preset, please confirm".
 5. Check that partitions.fallback is a partition in Table A; suggest the broadest one if not.
 
@@ -60,6 +61,7 @@ Found out, not asked (all shown in the preview):
 Fixed structure:
   Library: <label> (id <id>) | branch: new / existing | backend: gdrive <id> / local <path>
   Scope: <one sentence> | language: <lang> | timezone: <tz> | sensitivity: on / off
+  Convert uploads to Markdown first: on / off (fewer tokens and faster intake; pictures in a batch over the limit are read only if you agree)
   1. _kb.json: new / unchanged / replace (field: current -> new)
   2. _kb-params.md: new from preset <name> / unchanged / draft for review
   3. Spec: new from preset (version v1, today), partitions: <number name, one line each> / unchanged
@@ -69,7 +71,7 @@ Fixed structure:
   7. Instructions line: the line, and the file it goes into (or "to paste")
 End with: reply "confirm" to write, or name any item to change. The turn ends here.
 
-For a new library with Python, python3 scripts/init_library.py plan --root <path> --preset <preset> --label <label> --id <id> --scope "<scope>" --language <lang> --timezone <tz> --sensitivity on|off prints items 1 to 5; it refuses (exit 3) when the folder already holds Markdown files. For Drive, run it with --root pointing at an empty work folder just to get the list.
+For a new library with Python, python3 scripts/init_library.py plan --root <path> --preset <preset> --label <label> --id <id> --scope "<scope>" --language <lang> --timezone <tz> --sensitivity on|off --convert on|off prints items 1 to 5; it refuses (exit 3) when the folder already holds Markdown files. For Drive, run it with --root pointing at an empty work folder just to get the list.
 
 ## Round 2: write (after confirmation)
 

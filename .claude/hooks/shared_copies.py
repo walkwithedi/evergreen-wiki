@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Claude Code hooks that keep the copies of shared/ files in the skills current.
 
-Each skill carries a copy of the files under shared/ (scripts/sync_shared.py lists them),
+Each skill (and each tool under tools/) carries a copy of the files under shared/ (scripts/sync_shared.py lists them),
 and CI fails when a copy differs from its source.
   PreToolUse  (Edit, Write, MultiEdit): editing a copy is blocked (exit 2) with a pointer to
               the file under shared/ that must be edited instead.
@@ -21,11 +21,7 @@ import sync_shared  # noqa: E402
 
 def copies():
     """{copy path relative to ROOT: shared source relative to ROOT}"""
-    out = {}
-    for rel, skills, folder in sync_shared.PLAN:
-        for skill in skills:
-            out[f"skills/{skill}/{folder}/{os.path.basename(rel)}"] = f"shared/{rel}"
-    return out
+    return sync_shared.copies()
 
 
 def relpath(path):

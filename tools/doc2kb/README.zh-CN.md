@@ -1,0 +1,107 @@
+# doc2kb：文档转 Markdown 知识库
+
+把 Word、Excel、PowerPoint、PDF 和邮件（.eml）转换成 AI 助手便于检索的 Markdown：合并成一个带索引的文件，或每份文档一个文件。标题层级、表格、嵌入的 Excel 附件和每张图片的位置都会保留；重复的副本只收录一份。
+
+只用 Python 3 标准库，不依赖 pandoc、LibreOffice、python-docx、openpyxl、python-pptx。kb-incremental skill 入库时用同一个转换器（`doc2kb_core.py`）把上传材料先转成 Markdown；本目录是独立工具，用于在 Linux 桌面或定时任务里批量转换整个目录。
+
+[English](README.md)
+
+## 目录内容
+
+| 文件 | 说明 |
+| --- | --- |
+| `doc2kb_core.py` | 转换器：文档解析、内容抽取、图片导出、产物写出。命令行参数控制全部行为，不含界面代码。是 `shared/scripts/doc2kb_core.py` 的副本，修改请改那一份。 |
+| `doc2kb.sh` | 入口脚本：不带参数弹出图形界面（目录批量 / 指定文件 / 增量监控）；带参数进入命令行增量模式，可放进 crontab |
+| `doc2kb_dedup.py` | 目录移动或改名后，删除合并 / 增量文件中正文已在其他产物里出现过的文档节 |
+| `SPEC.md` | 行为契约（英文）：输入、产出与边界处理，供重新实现或理解设计取舍 |
+
+## 运行环境
+
+- Python 3.7 及以上，只用标准库。
+- 以下外部命令为可选，缺失时对应功能给出提示并跳过：
+  - `pdftotext` / `pdfimages` / `pdfinfo`（poppler-utils）：处理 PDF
+  - `zenity`：仅图形界面需要，命令行模式不需要
+  - `montage`（ImageMagick）：仅「合并拼图」需要
+- 必须用 bash 运行 `doc2kb.sh`，不能用 sh。
+
+从 [Releases](https://github.com/walkwithedi/evergreen-wiki/releases) 下载 `doc2kb-<版本>.zip`，或直接取本目录。
+
+## 语言
+
+提示信息和写进产物的标签（标题、说明、表头）有中文和英文两种。`doc2kb.sh` 按环境变量 `DOC2KB_LANG`（en 或 zh）选择，未设置时看系统 locale，`zh` 开头即中文。`doc2kb_core.py` 用 `--lang en|zh` 指定（默认取 `DOC2KB_LANG`，否则英文）。中文产物的标签与文件名在各版本间保持不变，已有的输出目录和正文指纹库可以继续使用。
+
+## 使用方法
+
+### 图形界面
+
+```bash
+./doc2kb.sh
+```
+
+启动后选择模式：目录批量 / 指定文件 / 增量监控。
+
+### 命令行增量模式（定时任务）
+
+```bash
+# 第一次：建立水位，先拉最近 30 天
+./doc2kb.sh -s 源目录 -o 输出目录 -d 30
+
+# 以后每次：裸跑，只出上次之后的新变更
+./doc2kb.sh -s 源目录 -o 输出目录
+```
+
+crontab 示例（每天 18:30 跑一次，路径一律写绝对路径；需要中文时在命令前加 `DOC2KB_LANG=zh`）：
+
+```
+30 18 * * * DOC2KB_LANG=zh /home/user/tools/doc2kb.sh -s /home/user/文档 -o /home/user/tools/output/wd >> /home/user/tools/output/wd/cron.out 2>&1
+```
+
+常用选项（每个长选项都有等价单字母短选项，手工敲命令建议用短选项）：
+
+| 选项 | 作用 |
+| --- | --- |
+| `-d N` | 处理最近 N 天内修改的文档（窗口模式） |
+| `-t DATE` | 指定起点，`YYYY-MM-DD` 或 `"YYYY-MM-DD HH:MM"` |
+| `-i` / `-I` | 导出 / 不导出图片（默认不导，只要文字，速度快） |
+| `-E` | 不把嵌入的 Excel 展开进正文 |
+| `-x 后缀` | 输出文件名后缀（中文默认「增量」） |
+| `-n` | 只报告会处理哪些文件，不实际生成（dry-run） |
+| `-h` | 显示帮助 |
+
+退出码：0 正常（含无新增），1 参数或环境错误，2 处理失败，3 首次运行未指定时间范围。
+
+### 直接调用转换器
+
+```bash
+python3 doc2kb_core.py --batch 源目录 -o 输出目录 --merge --lang zh   # 批量，合并成单个 md
+python3 doc2kb_core.py --files 清单.txt -o 输出目录 --lang zh          # 处理清单中列出的文件
+python3 doc2kb_core.py -h                                              # 查看全部参数
+```
+
+批量运行除了给人看的汇总，还输出 `STAT<TAB>键<TAB>值` 行（new、kept、failed、written、dup、moved、chars、images）和 `FAILED<TAB>路径` 行，供脚本读取。
+
+### 清理重复内容（目录移动后的大增量文件）
+
+子目录被移动、改名或整批复制后，增量模式会把这些文件当作新变动；正文已入库的会被输出目录里的正文指纹库 `.doc2kb_watch_fp` 识别，只列出路径对照。指纹库建立之前已经生成的大增量文件，用 `doc2kb_dedup.py` 清理：
+
+```bash
+# 1. 先试运行，只出报告（目标_去重报告.txt），不改文件
+python3 doc2kb_dedup.py 输出目录/文档_20261007_增量.md -n
+
+# 2. 核对报告无误后正式运行：原文件自动备份为 .bak-时间，
+#    同时建立正文指纹库 .doc2kb_watch_fp，以后增量运行自动跳过已入库内容
+python3 doc2kb_dedup.py 输出目录/文档_20261007_增量.md
+```
+
+- 默认以目标同目录的其他 md（历史增量文件、全量合并文件、独立模式产物）为比对基准，也可用 `-b 文件或目录` 多次指定。
+- 只删除正文文字完全相同的节（忽略元信息、标题层级、图片路径与空白差异）；搬移前后改过内容的文档会保留。
+- 删除的节在索引区「内容未变、仅位置变动的文档」表中列出现路径、原路径和正文所在文件。
+- 不动源文档，不删图片；被删节引用过的图片目录列在报告里，需要时手动清理。
+- 若该文件已导入知识库，清理后需在知识库端用新文件替换旧文件。
+
+## 格式与行为
+
+- 支持格式：`.docx` / `.xlsx` / `.xlsm` / `.pptx` / `.pdf` / `.eml`。
+- 不支持旧版二进制格式（`.doc` / `.xls` / `.ppt` / `.msg`）：遇到时不崩溃，归入「需先转格式」清单。
+- 产物默认合并模式（索引 + 全部正文写进单个 Markdown），另有独立模式（每份文档一个 md）。
+- 增量模式以「上次成功运行时刻」为水位，任何一次成功运行都会推进水位；变动判定取文件系统修改时间、状态变更时间与文档内部属性时间三者中最晚者，新拷入的旧文件也能捕获。

@@ -12,13 +12,15 @@ An LLM-maintained knowledge base that stays current, cites its sources and is ea
 
 ## Why
 
-A knowledge base an assistant maintains goes stale or drifts unless the rules are strict. These skills follow a few that hold up in daily use:
+A knowledge base an assistant maintains goes stale or drifts unless the rules are strict. These skills follow a few strict ones:
 
 - One file name per document. A new version replaces the old one under the same name; the old one moves to the archive folder. Nothing is ever deleted.
 - One status card per library holds the current answer to every recurring question, each line linked to its source. The assistant rewrites it only when new material actually contradicts it, and a script checks that no line was lost in the rewrite.
 - Every judgement (duplicate, new version, change of fact) needs a quote as evidence; without one the skill takes the conservative choice.
 - Partitions and topics come from the library's own spec, which grows when material does not fit, and tells you each time.
 - Entities (people, systems, organisations) get their own pages with backlinks, readable in Obsidian.
+
+Uploads are converted to Markdown before intake (Word, Excel, PowerPoint, PDF, mail), so the assistant reads text instead of binary files: fewer tokens, faster runs. Files the converter cannot handle well (scans, documents that are mostly pictures) are read as originals, and when a batch holds many pictures you decide whether they are read. Each library turns this on or off in `_kb.json`; new libraries start with it on.
 
 The full reasoning is in [docs/methodology.md](docs/methodology.md).
 
@@ -49,7 +51,7 @@ Try everything first on the fictional [sample library](examples/). Prefer to do 
 
 ```text
 life-kb/
-  _kb.json                 settings: language, timezone, names, sensitivity
+  _kb.json                 settings: language, timezone, names, sensitivity, conversion
   _kb-params.md            process parameters: what to close-read, what counts as a change
   00_Spec.md               partitions and topics, term fixes, thresholds, entities
   00_Status-Card.md        current facts, each linked to its source
@@ -81,10 +83,14 @@ Details: [docs/backends.md](docs/backends.md).
 | Environment | Status |
 | --- | --- |
 | Claude Code, local backend | end-to-end tested on the sample library and a new work library: query, note, intake, quick-note filing, health check, init, two-library routing |
-| claude.ai / Claude apps, Drive backend | the design this kit grew out of; English build not yet re-tested |
+| claude.ai / Claude apps, Drive backend | supported; English build not yet re-tested |
 | Codex, Gemini CLI, OpenCode | not yet verified; reports welcome |
 
-Scripts need Python 3.8+ and nothing outside the standard library. Without Python the skills do the same work by hand and say so.
+Scripts need Python 3.8+ and nothing outside the standard library. Without Python the skills do the same work by hand and say so (and read uploads without converting them).
+
+## Tools
+
+[tools/doc2kb](tools/doc2kb/) is the converter as a stand-alone tool: it turns whole folders of Office files, PDFs and mail into one Markdown knowledge base with an index, from a Linux desktop dialog or a cron job, incrementally. Each release attaches it as `doc2kb-<version>.zip`.
 
 ## Development
 
@@ -93,7 +99,7 @@ git config core.hooksPath .githooks       # once per clone: run every check befo
 python3 scripts/run_checks.py             # all of the checks below at once
 python3 -m unittest discover -s tests     # script tests
 python3 scripts/check_repo.py             # skill and manifest consistency
-python3 scripts/sync_shared.py            # copy shared/ into every skill after editing it
+python3 scripts/sync_shared.py            # copy shared/ into every skill and tool after editing it
 python3 scripts/sensitive_scan.py         # personal data check
 ```
 
