@@ -1,0 +1,16 @@
+name: dependency-review
+# Fails a pull request that adds a dependency (here: a GitHub Action) with a known
+# vulnerability. Free for public repositories.
+on:
+  pull_request:
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+        with:
+          comment-summary-in-pr: on-failure

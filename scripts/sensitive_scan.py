@@ -10,6 +10,7 @@ and masked numbers (asterisks). A line can be allowed with the marker  sensitive
 Usage:
   python3 scripts/sensitive_scan.py                 every tracked file
   python3 scripts/sensitive_scan.py --range A..B    only lines added between two commits
+  python3 scripts/sensitive_scan.py --message FILE  a commit message (git commit-msg hook); # lines skipped
 Exit code 1 when anything is found.
 """
 import argparse
@@ -70,6 +71,13 @@ def file_lines(files):
             continue
 
 
+def message_lines(path):
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        for i, line in enumerate(fh, 1):
+            if not line.startswith("#"):
+                yield "commit message", i, line.rstrip("\n")
+
+
 def scan(lines):
     hits = 0
     for f, i, line in lines:
@@ -88,9 +96,14 @@ def scan(lines):
 
 def main():
     ap = argparse.ArgumentParser(description="Scan for personal data")
-    ap.add_argument("--range")
+    g = ap.add_mutually_exclusive_group()
+    g.add_argument("--range")
+    g.add_argument("--message")
     a = ap.parse_args()
-    lines = added_lines(a.range) if a.range else file_lines(tracked_files())
+    if a.message:
+        lines = message_lines(a.message)
+    else:
+        lines = added_lines(a.range) if a.range else file_lines(tracked_files())
     hits = scan(lines)
     print(f"result: {hits} possible findings" if hits else "result: clean")
     sys.exit(1 if hits else 0)
