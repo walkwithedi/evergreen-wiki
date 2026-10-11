@@ -19,7 +19,7 @@ Only the latest release receives fixes.
 
 ## Keeping personal data out
 
-Everything here is public: code, history, commit e-mails, issues, pull requests, discussions and the Actions logs. scripts/sensitive_scan.py looks for personal data (e-mail, phone, ID and card numbers, Drive IDs, home paths), work details (organisation names, internal domains, private and public IP addresses, Windows, UNC and mount paths) and credentials (tokens, keys, private key blocks, passwords), and for metadata in images and documents. It runs:
+Everything here is public: code, history, commit e-mails, issues, pull requests, discussions and the Actions logs. scripts/sensitive_scan.py looks for personal data (e-mail, phone, ID and card numbers, Drive IDs, home paths), work details (organisation names, internal domains, private and public IP addresses, Windows, UNC and mount paths, confidentiality markings; scripts/sensitive_scan.py lists them) and credentials (tokens, keys, private key blocks, passwords), and for metadata in images and documents. It runs:
 
 - before each commit, commit message and push (.githooks, after `git config core.hooksPath .githooks`; Claude Code sessions through .claude/settings.json);
 - on every pull request and push to main, over the tree and the new commits, with gitleaks over all of history;

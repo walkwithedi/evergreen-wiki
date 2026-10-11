@@ -8,7 +8,9 @@ Rules (a line can be allowed with the marker  sensitive-scan: ignore):
   work         organisation names (有限公司, 集团, 研究院 ..., Co., Ltd, Inc., LLC, GmbH), internal
                domain suffixes (.corp .internal .intranet .lan .local), Windows drive and UNC paths,
                workstation mount paths (/media, /run/media, /mnt, gvfs, smb:// nfs:// cifs://) and
-               system data directories (/opt /srv /data), private and public IPv4 addresses
+               system data directories (/opt /srv /data), private and public IPv4 addresses,
+               confidentiality markers (机密, 内部资料, 不得外传 ..., CONFIDENTIAL, INTERNAL ONLY,
+               DO NOT DISTRIBUTE, Proprietary)
   credentials  GitHub, Google, AWS, Slack, OpenAI and Anthropic tokens, private key blocks,
                passwords in URLs and password/secret/token assignments
   private      terms from a private list kept outside the repository (employer, system and people
@@ -139,6 +141,13 @@ RULES = [
     ("mount path", re.compile(PATH_START + r"/mnt/(?!user-data\b|data\b)\w[\w.-]*"), placeholder),
     ("network share", re.compile(PATH_START + r"/run/user/\d+/gvfs/|(?<![\w])(?:smb|nfs|cifs|afp)://"), None),
     ("system directory", re.compile(PATH_START + r"/(?:opt|srv|data)/\w[\w.-]*"), placeholder),
+    # Words a document carries when it must stay inside an organisation. Single English words only
+    # as a marking (capitalised or upper case), so "confidential data" in prose passes.
+    ("confidentiality marker", re.compile(r"机密|绝密|秘密|涉密|密级|保密|内部资料|内部文件|内部使用|仅限内部|"
+                                          r"内部公开|不得外传|严禁外传|请勿外传"), None),
+    ("confidentiality marker", re.compile(r"(?i:\b(?:internal (?:use )?only|do not (?:distribute|forward|share)|"
+                                          r"not for (?:distribution|external use))\b)|"
+                                          r"\b(?:CONFIDENTIAL|Confidential|PROPRIETARY|Proprietary)\b"), None),
     # credentials
     ("GitHub token", re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{22,})"), None),
     ("Google API key", re.compile(r"\bAIza[0-9A-Za-z_-]{35}"), None),
