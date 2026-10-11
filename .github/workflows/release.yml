@@ -1,9 +1,17 @@
 name: release
+# Runs when a v* tag is pushed, or when a release is published on the web
+# (Releases > Draft a new release, which creates the tag). Both can fire for one
+# tag, so runs for the same tag are queued and the publish step is idempotent.
 on:
   push:
     tags: ["v*"]
+  release:
+    types: [published]
 permissions:
   contents: write
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -30,4 +38,14 @@ jobs:
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${GITHUB_REF_NAME}" dist/*.zip --title "${GITHUB_REF_NAME}" --notes-file <(awk "/^## ${GITHUB_REF_NAME#v}/{f=1;next} /^## /{f=0} f" CHANGELOG.md)
+        run: |
+          awk "/^## ${GITHUB_REF_NAME#v}/{f=1;next} /^## /{f=0} f" CHANGELOG.md > notes.md
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            # Created on the web: attach the zips, and fill in the notes if left empty.
+            gh release upload "${GITHUB_REF_NAME}" dist/*.zip --clobber
+            if [ -z "$(gh release view "${GITHUB_REF_NAME}" --json body --jq .body)" ]; then
+              gh release edit "${GITHUB_REF_NAME}" --notes-file notes.md
+            fi
+          else
+            gh release create "${GITHUB_REF_NAME}" dist/*.zip --title "${GITHUB_REF_NAME}" --notes-file notes.md
+          fi
