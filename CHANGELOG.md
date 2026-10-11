@@ -2,7 +2,7 @@
 
 All three skills share one version number. Tag a release as v<version> after updating this file and the "Version:" line of every SKILL.md, the plugin manifests and this file together.
 
-## Unreleased
+## 1.1.0
 
 Guided first-time setup.
 - install.py without options starts an interactive installer: language, agent (detected), install, then three questions (kind of library, folder, scope), a preview, and it writes the library, registers it and adds or updates the instructions line after showing it. Existing options are unchanged.
