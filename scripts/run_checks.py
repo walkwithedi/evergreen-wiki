@@ -67,7 +67,7 @@ def main():
         try:
             s.reconfigure(encoding="utf-8", errors="replace")
         except (AttributeError, ValueError):
-            pass
+            pass  # a stream that cannot be reconfigured (replaced, or not a text stream) keeps its encoding
     failed = run_checks(set(a.skip))
     print("result: " + (f"failed: {', '.join(failed)}" if failed else "all checks passed"))
     sys.exit(1 if failed else 0)

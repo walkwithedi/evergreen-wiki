@@ -7,16 +7,27 @@ stderr, where Claude reads them. Commits by hand are covered by .githooks/pre-co
 """
 import json
 import os
-import re
 import subprocess
 import sys
 
-# git, then any global options (-C dir, -c key=value, --flag), then commit
-COMMIT_RE = re.compile(r"\bgit(?:\s+-[Cc]\s+\S+|\s+--?[\w-]+(?:=\S+)?)*\s+commit(?![\w-])")
+# Global options of git that take the next word as their value.
+OPTIONS_WITH_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"}
 
 
 def is_commit(command):
-    return bool(COMMIT_RE.search(command or ""))
+    """True when some git invocation in the command runs the commit subcommand:
+    git, then any global options (-C dir, -c key=value, --flag), then the word commit.
+    Word by word rather than a regular expression, so no input can make it slow."""
+    words = (command or "").replace(";", " ; ").replace("&&", " && ").replace("||", " || ").split()
+    for i, w in enumerate(words):
+        if w != "git" and not w.endswith("/git"):
+            continue
+        j = i + 1
+        while j < len(words) and words[j].startswith("-"):
+            j += 2 if words[j] in OPTIONS_WITH_VALUE else 1
+        if j < len(words) and words[j] == "commit":
+            return True
+    return False
 
 
 def main():

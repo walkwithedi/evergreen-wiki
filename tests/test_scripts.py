@@ -396,9 +396,10 @@ class HookTest(unittest.TestCase):
         sys.path.insert(0, os.path.join(ROOT, ".claude", "hooks"))
         import pre_commit
         for cmd in ("git commit -m x", "cd a && git -C sub commit -qam 'y'", "git -c user.name=t commit",
-                    "git add -A && git commit -F msg.txt"):
+                    "git add -A && git commit -F msg.txt", "git add x;git commit -m y", "/usr/bin/git --no-pager commit"):
             self.assertTrue(pre_commit.is_commit(cmd), cmd)
-        for cmd in ("git status", "git log --grep commit", "echo commit", "git commit-tree abc", ""):
+        for cmd in ("git status", "git log --grep commit", "echo commit", "git commit-tree abc", "",
+                    "git -C commit status", "legit commit"):
             self.assertFalse(pre_commit.is_commit(cmd), cmd)
 
     def hook(self, name, data):
