@@ -65,6 +65,8 @@ class RuleTest(unittest.TestCase):
                      "Do not " + "distribute", "Proprie" + "tary and private"):
             self.assertEqual(labels(line), ["confidentiality marker"], line)
         self.assertEqual(labels("keeps confidential data out"), [])
+        # everyday words, too common to block on
+        self.assertEqual(labels("请注意保密，这不是秘密"), [])
 
     def test_credentials(self):
         self.assertEqual(labels("ghp_" + "a" * 36), ["GitHub token"])

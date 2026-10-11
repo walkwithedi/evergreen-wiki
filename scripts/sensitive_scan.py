@@ -143,7 +143,7 @@ RULES = [
     ("system directory", re.compile(PATH_START + r"/(?:opt|srv|data)/\w[\w.-]*"), placeholder),
     # Words a document carries when it must stay inside an organisation. Single English words only
     # as a marking (capitalised or upper case), so "confidential data" in prose passes.
-    ("confidentiality marker", re.compile(r"机密|绝密|秘密|涉密|密级|保密|内部资料|内部文件|内部使用|仅限内部|"
+    ("confidentiality marker", re.compile(r"机密|绝密|涉密|密级|内部资料|内部文件|内部使用|仅限内部|"
                                           r"内部公开|不得外传|严禁外传|请勿外传"), None),
     ("confidentiality marker", re.compile(r"(?i:\b(?:internal (?:use )?only|do not (?:distribute|forward|share)|"
                                           r"not for (?:distribution|external use))\b)|"
