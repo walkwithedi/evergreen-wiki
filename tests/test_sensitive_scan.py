@@ -3,6 +3,7 @@
 Sample secrets are built by joining pieces, so this file itself holds no complete one and passes
 both the scanner and gitleaks."""
 import io
+import json
 import os
 import shutil
 import subprocess
@@ -45,6 +46,10 @@ class RuleTest(unittest.TestCase):
         self.assertEqual(labels("mail " + "li.lei" + "@gmail.com"), ["e-mail"])
         self.assertEqual(labels("call 1" + "3812345678"), ["phone"])
         self.assertEqual(labels("tel 021-" + "12345678"), ["landline"])
+        self.assertEqual(labels("id 11010519491231002" + "X"), ["ID number"])
+        self.assertEqual(labels("id 11010519491231002" + "1"), [])  # wrong check digit
+        self.assertEqual(labels("card 4111 1111 " + "1111 1111"), ["card number"])
+        self.assertEqual(labels("order 62220212345" + "67890123"), [])  # fails Luhn
         self.assertEqual(labels("姓名" + "：王伟"), ["personal field"])
         self.assertEqual(labels("/home/" + "liwei/notes"), ["home path"])
 
@@ -221,6 +226,22 @@ class PushHookTest(unittest.TestCase):
         self.assertEqual(pre_commit.git_subcommands("git add x && git commit -m y && git push -u origin b"),
                          {"add", "commit", "push"})
         self.assertNotIn("push", pre_commit.git_subcommands("git log --grep push"))
+
+    def test_message_file(self):
+        sys.path.insert(0, os.path.join(ROOT, ".claude", "hooks"))
+        import pre_commit
+        for cmd, want in (("git commit -F msg.txt", "msg.txt"), ("git commit -aF m.txt", "m.txt"),
+                          ("git commit --file=x.txt", "x.txt"), ("git commit -am 'F x'", None),
+                          ("git commit -m y", None)):
+            self.assertEqual(pre_commit.message_file(cmd), want, cmd)
+
+    def test_commit_command_scanned(self):
+        p = subprocess.run([sys.executable, os.path.join(ROOT, ".claude", "hooks", "pre_commit.py")],
+                           input=json.dumps({"tool_name": "Bash", "tool_input": {
+                               "command": "git commit -m 'ask li.lei" + "@gmail.com'"}}),
+                           capture_output=True, text=True, encoding="utf-8", env=ENV)
+        self.assertEqual(p.returncode, 2)
+        self.assertIn("report the findings above to the user", p.stderr)
 
 
 if __name__ == "__main__":

@@ -70,7 +70,9 @@ DOC_NETS = [ipaddress.ip_network(n) for n in ("192.0.2.0/24", "198.51.100.0/24",
 SAFE_IPS = {"0.0.0.0", "255.255.255.255"}
 # Placeholder values: <name>, ${VAR}, XXX, ***, example, your-..., 某 (Chinese "some"), 示例 ("example")
 PLACEHOLDER = re.compile(r"[<>{}$]|\bx{3,}\b|X{2,}|\*{2,}|example|\byour[-_ ]|placeholder|dummy|"
-                         r"changeme|redacted|某|示例|样例|张三|李四", re.I)
+                         r"changeme|redacted|某|示例|样例|举例|例如|张三|李四", re.I)
+# Untracked files above this size are reported, not read line by line
+MAX_UNTRACKED_BYTES = 2 * 1024 * 1024
 # ASCII-only classes in look-arounds: Unicode \w includes CJK, so a number or path right after a
 # Chinese character would be missed
 W = "A-Za-z0-9_"
@@ -110,6 +112,23 @@ def org_ok(m):
     return placeholder(m) or not head or head[-1] in "（(、" or bool(re.search(r"(?:名称|后缀)[：:]?$", head))
 
 
+def id_ok(m):
+    """Chinese ID numbers carry a check digit (GB 11643); a long number that fails it is not one."""
+    s = m.group(0)
+    weights = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2]
+    return "10X98765432"[sum(int(c) * w for c, w in zip(s[:17], weights)) % 11] != s[17].upper()
+
+
+def card_ok(m):
+    """Card numbers pass the Luhn check; a number that fails it is not one."""
+    digits = re.sub(r"\D", "", m.group(0))
+    total = 0
+    for i, c in enumerate(reversed(digits)):
+        d = int(c) * (2 if i % 2 else 1)
+        total += d - 9 if d > 9 else d
+    return total % 10 != 0
+
+
 def domain_ok(m):
     return m.group(0).lower().startswith(("localhost.", "example.", "my-")) or placeholder(m)
 
@@ -121,8 +140,8 @@ RULES = [
     ("phone", re.compile(r"(?<![\d.])(?:\+?86[- ]?)?1[3-9]\d{9}(?!\d)"), None),
     ("phone", re.compile(r"(?<![\d.])\+?\d{1,3}[- ]\(?\d{2,4}\)?[- ]\d{3,4}[- ]\d{3,4}(?!\d)"), None),
     ("landline", re.compile(rf"(?<![{W}.-])0\d{{2,3}}-\d{{7,8}}(?![{W}-])"), None),
-    ("ID number", re.compile(r"(?<!\d)[1-9]\d{5}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx](?!\d)"), None),
-    ("card number", re.compile(r"(?<![\d-])(?:\d{4}[ -]){3}\d{4,7}(?![\d-])|(?<!\d)\d{16,19}(?!\d)"), None),
+    ("ID number", re.compile(r"(?<!\d)[1-9]\d{5}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx](?!\d)"), id_ok),
+    ("card number", re.compile(r"(?<![\d-])(?:\d{4}[ -]){3}\d{4,7}(?![\d-])|(?<!\d)\d{16,19}(?!\d)"), card_ok),
     ("Drive ID", re.compile(r"(?<![A-Za-z0-9_-])1[A-Za-z0-9_-]{32}(?![A-Za-z0-9_-])"), drive_ok),
     ("home path", re.compile(r"(?:/home/|/Users/|[A-Za-z]:\\\\?Users\\\\?)([A-Za-z0-9._-]+)"), home_ok),
     ("personal field", re.compile(r"(?:姓名|联系人|负责人|经办人|审批人|申请人|收件人|账号|帐号|用户名|工号|员工号|"
@@ -432,6 +451,12 @@ def pdf_metadata(data):
     return found
 
 
+def gh_escape(text, prop=False):
+    """Escape a GitHub Actions workflow command: % and line breaks in data, also : and , in properties."""
+    text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+    return text.replace(":", "%3A").replace(",", "%2C") if prop else text
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     g = ap.add_mutually_exclusive_group()
@@ -467,6 +492,14 @@ def main():
         scan_commits(sc, ["--all"])
     else:
         files = tracked_files()
+        untracked = set(git("ls-files", "-z", "--others", "--exclude-standard").split("\0"))
+        for f in [f for f in files if f in untracked]:
+            size = os.path.getsize(os.path.join(ROOT, f))
+            if size > MAX_UNTRACKED_BYTES:
+                # not read line by line, so a hook stays fast; still reported, to be checked or ignored
+                sc.add(f, 0, f"large untracked file not scanned ({size // 1024} KB); check it or add it to "
+                       ".gitignore", "")
+                files.remove(f)
         sc.lines(file_lines(files))
         for f in files:
             if os.path.splitext(f)[1].lower() in META_EXT:
@@ -475,7 +508,7 @@ def main():
     for f in sc.findings:
         print(f.show(redact))
         if actions and f.line and os.path.isfile(os.path.join(ROOT, f.where)):
-            print(f"::error file={f.where},line={f.line}::possible {f.label}")
+            print(f"::error file={gh_escape(f.where, True)},line={f.line}::possible {gh_escape(f.label)}")
     if sc.findings and any(x.private for x in sc.findings):
         print("note: private-term findings come from your own list; edit the text, the ignore marker does not apply")
     print(f"result: {len(sc.findings)} possible findings" if sc.findings else "result: clean")

@@ -54,7 +54,13 @@ jobs:
         if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000')
         env:
           RANGE: ${{ github.event_name == 'pull_request' && format('{0}..{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || format('{0}..{1}', github.event.before, github.event.after) }}
-        run: python scripts/sensitive_scan.py --range "$RANGE"
+        run: |
+          # After a history rewrite the old and new commits share no ancestor; the whole-tree
+          # scan above and gitleaks below still cover the result.
+          if ! git merge-base "${RANGE%%..*}" "${RANGE##*..}" >/dev/null 2>&1; then
+            echo "no common ancestor in $RANGE (history rewritten): range scan skipped"; exit 0
+          fi
+          python scripts/sensitive_scan.py --range "$RANGE"
       - name: Credentials (gitleaks, all of history)
         # Installed through the Go module proxy: the version is pinned and its checksum is
         # verified against sum.golang.org.
