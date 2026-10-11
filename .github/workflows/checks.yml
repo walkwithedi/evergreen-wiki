@@ -32,24 +32,32 @@ jobs:
       - name: Build zips
         run: python scripts/build_skill.py && python scripts/build_skill.py --locale zh
   scan:
+    # Logs of this public repository are public: the scanner prints only file:line and the rule
+    # under GitHub Actions, and gitleaks runs with --redact.
     runs-on: ubuntu-latest
+    env:
+      # Private terms (employer, system and people names) from the repository secret; empty on
+      # pull requests from forks, which then get every check except this one.
+      SENSITIVE_TERMS: ${{ secrets.SENSITIVE_TERMS }}
+      GITLEAKS_VERSION: v8.30.1
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - name: Sensitive data (whole tree)
+      - name: Sensitive data (whole tree, file names and metadata)
         run: python scripts/sensitive_scan.py
-      - name: Sensitive data (commit messages)
-        if: github.event_name == 'pull_request'
+      - name: Sensitive data (new commits - lines, messages, identities, images)
+        if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000')
+        env:
+          RANGE: ${{ github.event_name == 'pull_request' && format('{0}..{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || format('{0}..{1}', github.event.before, github.event.after) }}
+        run: python scripts/sensitive_scan.py --range "$RANGE"
+      - name: Credentials (gitleaks, all of history)
+        # Installed through the Go module proxy: the version is pinned and its checksum is
+        # verified against sum.golang.org.
         run: |
-          git log --format=%B ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} > /tmp/msgs.txt
-          python - <<'PY'
-          import sys
-          sys.path.insert(0, "scripts")
-          import sensitive_scan as s
-          lines = [("commit message", i, l.rstrip("\n")) for i, l in enumerate(open("/tmp/msgs.txt", encoding="utf-8"), 1)]
-          sys.exit(1 if s.scan(lines) else 0)
-          PY
+          go install "github.com/zricethezav/gitleaks/v8@$GITLEAKS_VERSION"
+          "$(go env GOPATH)/bin/gitleaks" git --redact --no-banner --log-opts=--all .
