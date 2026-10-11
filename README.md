@@ -22,39 +22,28 @@ A knowledge base an assistant maintains goes stale or drifts unless the rules ar
 
 The full reasoning is in [docs/methodology.md](docs/methodology.md).
 
-## Quick start (5 minutes)
+## Quick start
 
-1. Install the skills.
-   - Claude Code: `/plugin marketplace add walkwithedi/evergreen-wiki`, then `/plugin install evergreen-wiki@evergreen-wiki`.
-   - claude.ai or the Claude apps: download kb-note, kb-query and kb-incremental zips from [Releases](../../releases) and upload each in Settings > Capabilities > Skills (Chinese trigger phrases: the -zh zips).
-   - Codex, Gemini CLI, OpenCode and other agents that read Agent Skills: `python3 install.py --target agents` (or `--target gemini`, `opencode`, `codex`, `claude-code`, or `--dest <folder>`).
-2. Create a library. Ask your assistant: "set up a new knowledge base". It asks where (a Drive folder or a local folder), which preset (work or life), language and timezone, shows you everything it will create, and writes it after you confirm.
-3. Register your libraries (the assistant offers to do this at the end of setup). A registry is a small JSON file listing each library and what belongs in it:
+Pick the path that matches where you use your assistant. Either way you answer three questions (which kind of library, where it lives, what belongs in it), see a preview, and nothing is written until you confirm.
 
-   ```json
-   {
-     "schema": 1,
-     "preferences": {"output": "markdown"},
-     "libraries": [
-       {"id": "life", "label": "Life", "scope": "me and my family: IDs, health, insurance, money, home",
-        "backend": {"type": "local", "root": "~/Documents/life-kb"}},
-       {"id": "work", "label": "Work", "scope": "team projects, decisions, owners, specs",
-        "backend": {"type": "gdrive", "root": "<drive folder id>"}}
-     ]
-   }
-   ```
+### In a terminal (Claude Code, Codex, Gemini CLI, OpenCode)
 
-   Put it in `~/.config/kb/kb-libraries.json` (or point `KB_LIBRARIES` at it). On claude.ai, paste it into your Project instructions, or build private zips that carry it: `python3 scripts/build_skill.py --config my-libraries.json` (never publish those).
-4. Tell your assistant the libraries exist (setup offers this too). Add one line to the instructions it always reads (CLAUDE.md, AGENTS.md, GEMINI.md, or claude.ai Project instructions):
+```bash
+git clone https://github.com/walkwithedi/evergreen-wiki && cd evergreen-wiki
+python3 install.py
+```
 
-   ```text
-   I keep knowledge bases: Life (me and my family: IDs, health, insurance, money, home); Work (team projects, decisions, owners, specs). For questions about these, use kb-query before searching code or answering from memory; to save something, use kb-note.
-   ```
+The installer asks for your language and agent, installs the three skills, sets up a local library (an Obsidian vault works), registers it and, after showing you the line, tells your agent the library exists. Restart your agent and say "note this: ...".
 
-   Without it, questions that do not sound personal (for example "what is the payments API rate limit?") may be answered from code or general knowledge instead of your library.
-5. Use it: "note this", "file these" with attachments, or just ask.
+Claude Code users who prefer the plugin: `/plugin marketplace add walkwithedi/evergreen-wiki`, then `/plugin install evergreen-wiki@evergreen-wiki`, restart, and say "get started with the knowledge base".
 
-Try everything first on the fictional [sample library](examples/).
+### In claude.ai or the Claude apps (Google Drive)
+
+1. Download the kb-note, kb-query and kb-incremental zips from [Releases](../../releases) (the -zh zips for Chinese trigger phrases) and upload each in Settings > Capabilities > Skills.
+2. Connect Google Drive, create an empty folder for the library, and open a Project for your knowledge base.
+3. In the Project, say "get started with the knowledge base". The assistant asks three questions, shows a preview, writes the library into the folder and gives you one block to paste into the Project instructions. Paste it, save, and start a new conversation in the Project.
+
+Try everything first on the fictional [sample library](examples/). Prefer to do each step by hand, or need the registry format? See [docs/manual-setup.md](docs/manual-setup.md).
 
 ## How a library looks
 

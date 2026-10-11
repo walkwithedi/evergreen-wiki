@@ -11,7 +11,10 @@ Look for the registry in this order and use the first one found:
 3. ~/.config/kb/kb-libraries.json (on Windows %APPDATA%\kb\kb-libraries.json).
 4. config/kb-libraries.json inside this skill folder (present only in a private build made with build_skill.py --config).
 
-If none exists, tell the user no library is set up and offer the init mode of kb-incremental. Never guess a folder ID or path.
+If none exists, nothing is set up yet. Never guess a folder ID or path. Offer setup once, in one line, then go on:
+- kb-query: a question unrelated to any knowledge base is answered normally, without the offer. A question meant for the knowledge base: say it is not set up yet and offer: "No knowledge base is set up yet. Set one up now? Three questions, a preview, nothing written before you confirm."
+- kb-note: show the finished note in the reply so nothing is lost, then make the same offer; once the library exists, offer to save the note there.
+- If the user agrees, follow the getting-started part of kb-incremental init mode (references/init.md in kb-incremental). If not, do not offer again in this conversation.
 
 ```json
 {
