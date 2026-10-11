@@ -1,0 +1,57 @@
+name: Bug report
+description: A skill or script did something wrong
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Never paste real personal data, library folder IDs or private paths; describe them instead (for example "a Drive folder ID", "~/kb/life").
+        Security problems go through the Security tab ("Report a vulnerability"), not here.
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Where did it happen
+      options:
+        - Claude Code
+        - claude.ai or a Claude app
+        - Codex
+        - Gemini CLI
+        - OpenCode
+        - Other agent
+    validations:
+      required: true
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Library backend
+      options:
+        - Local folder
+        - Google Drive
+        - Not about a library
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Skills version
+      description: The "Version:" line in SKILL.md, or the release you installed
+      placeholder: "1.1.0"
+  - type: textarea
+    id: request
+    attributes:
+      label: What you asked
+      description: The request you made, word for word if possible
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: What happened, and what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: The library's _kb.json (optional)
+      description: Remove folder IDs and paths first
+      render: json

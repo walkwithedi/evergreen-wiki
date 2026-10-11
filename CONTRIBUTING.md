@@ -1,6 +1,16 @@
 # Contributing
 
-Thanks for helping. A few rules keep the skills reliable:
+Thanks for helping.
+
+## How to start
+
+1. Pick an issue. Ones labelled good first issue are small and self-contained; help wanted ones need someone with a particular setup (claude.ai, Codex, Gemini CLI, OpenCode). Say in the issue that you are taking it.
+2. Fork the repository, make a branch, and open a pull request against main. The template lists the checks; CI runs them again on four platforms.
+3. Not sure about an idea? Open an issue first and describe the problem before writing code.
+
+## Rules
+
+A few rules keep the skills reliable:
 
 1. Edit shared files only under shared/, then run python3 scripts/sync_shared.py. CI fails when a copy is stale.
 2. Keep environment-specific tool names and paths in the backend and environment references; SKILL.md and other references use the abstract operations. scripts/check_repo.py enforces this.
