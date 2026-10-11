@@ -51,7 +51,7 @@ DEFAULT_NAMES = {
     "old_suffix": "_old",
     "snapshot_prefix": "snapshot_",
     "readme": "README.txt",
-    "run_log_prefix": "_run-log_dedupe_",
+    "run_log_prefix": "_run-log_",
     "note_marker": "Quick note:",
     "assistant_label": "Assistant",
     "user_label": "User",

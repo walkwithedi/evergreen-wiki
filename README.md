@@ -45,7 +45,14 @@ The full reasoning is in [docs/methodology.md](docs/methodology.md).
    ```
 
    Put it in `~/.config/kb/kb-libraries.json` (or point `KB_LIBRARIES` at it). On claude.ai, paste it into your Project instructions, or build private zips that carry it: `python3 scripts/build_skill.py --config my-libraries.json` (never publish those).
-4. Use it: "note this", "file these" with attachments, or just ask.
+4. Tell your assistant the libraries exist (setup offers this too). Add one line to the instructions it always reads (CLAUDE.md, AGENTS.md, GEMINI.md, or claude.ai Project instructions):
+
+   ```text
+   I keep knowledge bases: Life (me and my family: IDs, health, insurance, money, home); Work (team projects, decisions, owners, specs). For questions about these, use kb-query before searching code or answering from memory; to save something, use kb-note.
+   ```
+
+   Without it, questions that do not sound personal (for example "what is the payments API rate limit?") may be answered from code or general knowledge instead of your library.
+5. Use it: "note this", "file these" with attachments, or just ask.
 
 Try everything first on the fictional [sample library](examples/).
 
@@ -84,7 +91,7 @@ Details: [docs/backends.md](docs/backends.md).
 
 | Environment | Status |
 | --- | --- |
-| Claude Code, local backend | scripts covered by unit tests on Linux, macOS and Windows; end-to-end run with the sample library pending |
+| Claude Code, local backend | end-to-end tested on the sample library and a new work library: query, note, intake, quick-note filing, health check, init, two-library routing |
 | claude.ai / Claude apps, Drive backend | the design this kit grew out of; English build not yet re-tested |
 | Codex, Gemini CLI, OpenCode | not yet verified; reports welcome |
 

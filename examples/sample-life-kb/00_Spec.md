@@ -77,9 +77,9 @@ Separate aliases with semicolons. If one wording refers to several entities, lis
 
 6. Naming
 
-Topic files: <partition>_<topic>_<type>_<short title>.md. No date in the name: the same name means the same document in successive versions, and older versions are archived.
+Topic files: <partition>_<topic>_<type>_<short title>.md, with spaces inside each part written as hyphens. No date in the name: the same name means the same document in successive versions, and older versions are archived.
 Embed what tells similar material apart in the short title:
-(1) Recurring material (annual checkup, monthly spending, yearly tax return): the period, as in 02_Checkups_report_2026-annual.md or 03_Income and spending_list_2026-09.md.
+(1) Recurring material (annual checkup, monthly spending, yearly tax return): the period, as in 02_Checkups_report_2026-annual.md or 03_Income-and-spending_list_2026-09.md.
 (2) Family material: the relation, as in 02_Checkups_report_2026-annual-Father.md.
 (3) Similar topics with different content: a distinguishing word.
 Summary files have fixed names; see _kb.json names.
@@ -96,6 +96,7 @@ topic: "Checkups"
 type: "report"
 people: ["[[Self]]"] (Table E names as quoted links, others as plain text)
 organisations: [] (same rule)
+people_note / organisations_note: "…" (only when the field is empty or wording was dropped; keeps the source wording)
 keywords: ["…"] (Table E names as links, others plain)
 sensitivity: "B"
 status: "current"

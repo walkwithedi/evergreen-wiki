@@ -64,7 +64,7 @@ Check 3: from the spec take Table A (partitions, topics and type list), Table B 
 
 Check 4: metadata mode. _kb.json metadata says yaml or text. Write one line: Metadata: YAML / text. In YAML mode read references/entity-yaml.md and follow it in step 1, in file output, in summary-file basis lines and for entity pages; also take Table E (entities) and Table F (value filters, if any) from the spec.
 
-Copy whatever the scripts need (at least the file index) into the work folder.
+Copy whatever the scripts need into the work folder, at least the file index as <work>/<index name>. Every script runs on these copies; nothing in the library changes before delivery (index_tool.py refuses to edit an index inside a library root).
 
 ## Step 1: place the material
 
@@ -73,7 +73,7 @@ First apply the spec's scope clause, if there is one. Out of scope: write "Intak
 For material in scope, set the date and fields as params require. Common fields:
 - Partition, topic, type: from Table A; if no topic fits, see "Topic expansion".
 - Short title: a few words naming the material, no version number. Embed what tells similar material apart: the period for recurring material, the reporting party (or family member in a life library) for one template filled by several parties, a distinguishing word for similar topics.
-- Proposed file name: <partition>_<topic>_<type>_<short title>.md, no date suffix, no longer than the Table D limit (shorten the short title if needed).
+- Proposed file name: <partition>_<topic>_<type>_<short title>.md, no date suffix, no longer than the Table D limit (shorten the short title if needed). Spaces in topic, type and short title become hyphens in the file name (topic "Primary home" -> 05_Primary-home_...); underscores separate the four parts only.
 
 In YAML mode, map entities as entity-yaml.md says and add one line: Entities: <linked names> | New: <name or none> | Kept as text: <wording or none>.
 
@@ -114,7 +114,7 @@ For material on the params close-reading list, read section by section and write
 
 The script does the mechanical checks; you make the call.
 
-  python3 scripts/index_tool.py check <index> --orig "<source file name>" --name "<proposed file name>" --file <source file>
+  python3 scripts/index_tool.py check <work>/<index name> --orig "<source file name>" --name "<proposed file name>" --file <source file>
 
 It reports whether the content hash is already in the index, whether the source name is (copy numbers and paths normalised; a hit says whether that row's hash matches, differs or is missing), and whether the proposed name is. Without Python: compare names by hand and skip the hash; note "no hash check".
 
@@ -157,9 +157,9 @@ Without Python: compare item by item yourself and mark the delivery note "not sc
 ## Index and lists
 
 The file index is rewritten every run, by script:
-  python3 scripts/index_tool.py add    <index> --name <file> --orig <source name> --file <source file>
-  python3 scripts/index_tool.py update <index> --name <file> --orig <new source name> --file <source file>
-  python3 scripts/index_tool.py write  <index> --out <out>/<index name> --date YYYY-MM-DD
+  python3 scripts/index_tool.py add    <work>/<index name> --name <file> --orig <source name> --file <source file>
+  python3 scripts/index_tool.py update <work>/<index name> --name <file> --orig <new source name> --file <source file>
+  python3 scripts/index_tool.py write  <work>/<index name> --out <out>/<index name> --date YYYY-MM-DD
 Pass --file whenever there is an original file; the hash goes in the third column. Without one, leave it out (update then clears the old hash, which no longer matches). Older rows without a hash are not back-filled. write sorts by name, updates the entry count and date, adds the hash column header when needed and keeps non-entry lines. Duplicate uploads, out-of-scope items and mostly class-A material get no index row.
 
 Glossary and issue list: read and rewrite only when something is added; categories are in params. Record, never change source text.

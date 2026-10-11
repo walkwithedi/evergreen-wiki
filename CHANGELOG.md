@@ -12,3 +12,4 @@ First public version.
 - Work and life presets; fictional sample library.
 - Scripts: kbconf.py (new), package.py (replaces package.sh, adds local delivery), clean, index_tool, card_check, archive_plan made language-neutral; Python 3.8+, standard library only.
 - Chinese trigger-phrase builds (--locale zh); Claude Code plugin manifest; install.py for other agents.
+- From end-to-end testing in Claude Code: index_tool refuses to edit an index inside a library root; spaces become hyphens in file names; setup proposes an instructions line so the assistant knows the libraries exist; run logs use the neutral prefix _run-log_.
