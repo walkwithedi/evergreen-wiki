@@ -122,8 +122,10 @@ def defaults(preset=None, language=None):
     out = {"language": language, "timezone": detect_timezone()}
     if preset:
         label, scope = PRESET_DEFAULTS[preset][language]
+        kb = load_preset_kb(preset)
         out.update({"preset": preset, "id": preset, "label": label, "scope": scope,
-                    "sensitivity": load_preset_kb(preset)["sensitivity"]["enabled"]})
+                    "sensitivity": kb["sensitivity"]["enabled"],
+                    "convert": kb.get("convert", {}).get("enabled", False)})
     return out
 
 
@@ -142,6 +144,8 @@ def settings(a):
             s[k] = d[k]
     sens = getattr(a, "sensitivity", None)
     s["sensitivity"] = d["sensitivity"] if sens is None else sens == "on"
+    conv = getattr(a, "convert", None)
+    s["convert"] = d["convert"] if conv is None else conv == "on"
     s["date"] = getattr(a, "date", None) or datetime.now(local_tz(s["timezone"])).strftime("%Y-%m-%d")
     problems = kbconf.check_timezone(s["timezone"])
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", s["id"]):
@@ -165,6 +169,7 @@ def build_files(s):
     kb = load_preset_kb(s["preset"])
     kb.update({"label": s["label"], "preset": s["preset"], "language": s["language"], "timezone": s["timezone"]})
     kb["sensitivity"] = dict(kb["sensitivity"], enabled=bool(s["sensitivity"]))
+    kb["convert"] = dict(kb.get("convert", {}), enabled=bool(s.get("convert", False)))
     problems = kbconf.validate(kb)
     if problems:
         raise kbconf.ConfigError("generated _kb.json: " + "; ".join(problems))
@@ -208,7 +213,8 @@ def plan_text(root, s, files, folders):
     lines = [f"Library: {s['label']} (id {s['id']}) | preset {s['preset']} | {root}",
              f"Scope: {s['scope']}",
              f"Language: {s['language']} | timezone: {s['timezone']} | "
-             f"sensitivity and masking: {'on' if s['sensitivity'] else 'off'}",
+             f"sensitivity and masking: {'on' if s['sensitivity'] else 'off'} | "
+             f"convert uploads to Markdown: {'on' if s.get('convert') else 'off'}",
              "Files:"]
     lines += [f"  {p}" for p, _ in files]
     lines.append("Folders: " + ", ".join(folders))
@@ -355,6 +361,7 @@ def main():
         for opt in ("label", "id", "scope", "language", "timezone", "date"):
             p.add_argument("--" + opt)
         p.add_argument("--sensitivity", choices=["on", "off"])
+        p.add_argument("--convert", choices=["on", "off"])
     p = sub.add_parser("register")
     p.add_argument("--registry")
     for opt in ("id", "label", "scope", "root"):

@@ -5,7 +5,7 @@ description: Maintains an evergreen knowledge base of Markdown files (Google Dri
 
 # Knowledge base intake, archive, health check and init
 
-Version: 1.2.0
+Version: 1.3.0
 
 ## Modes
 
@@ -53,6 +53,8 @@ You file and judge; you do not advise, recommend or evaluate. These rules apply 
 ## Input checks
 
 Check 1: material is readable. Handle several items one by one, never merged. Read images and scans as text first; record unreadable parts as they are and log them as issues. Keep the path of each original upload (the file itself, not a converted copy) for the hash in step 4; pasted text has no original file and step 4 runs without --file.
+
+Conversion, before reading anything: when _kb.json convert.enabled is true (or the user asks for it in this request, and not when the user says not to convert this batch), convert the uploaded files with references/convert.md, which says which file to read for each item and what to do with the pictures in them. Off, or without Python: read the originals as before.
 
 Check 2: find the summary files with find_by_name using the search keys (references/config.md).
 - Always read: spec, status card, file index.
@@ -186,6 +188,6 @@ Deliver by the library's delivery setting:
 - zip (only when _kb.json sets it, or has an inbox entry): python3 scripts/package.py zip <work>/out <work>/<label>_intake_YYYYMMDD.zip --library <work>/_kb.json --max-name-len <Table D>, then hand over that one zip, however few files it holds. End the delivery note with: upload the zip and its files to the library root (entity pages to the entities folder, not the readme), then say "archive" to move older versions. If _kb.json has an inbox entry, say instead to upload the zip as is to the inbox folder.
 - direct (the default): the two rounds in the backend file (references/backend-local.md or references/backend-gdrive.md): preview, confirm, deliver. Old versions move to the archive folder in the same step, so nothing is left for the user to upload or archive.
 
-After delivery, say in a few sentences what was processed, the trigger decision and anything that needs attention; list "Topics added this run (please review)" if any. Do not repeat the readme.
+After delivery, say in a few sentences what was processed, the trigger decision and anything that needs attention; list "Topics added this run (please review)" if any. With conversion on, include its line (references/convert.md). Do not repeat the readme.
 
 Intake only creates files. It never deletes or moves existing library files, except the archive step of direct delivery and the second round of quick-note filing, both after the user confirms.

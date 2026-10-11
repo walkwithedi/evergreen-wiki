@@ -63,6 +63,13 @@ SUMMARY_KEYS = ("spec", "status_card", "index", "open_items", "changelog", "glos
 DEFAULT_LIMITS = {"zh": (55, 80), "ja": (55, 80), "ko": (60, 90)}
 FALLBACK_LIMITS = (90, 120)
 
+# Converting uploads to Markdown before intake (kb-incremental scripts/convert.py).
+# enabled: off unless the library turns it on (new libraries from a preset do).
+# image_limit: pictures in one batch that are read without asking.
+# min_pdf_chars_per_page, min_chars_per_image: below these a file is read as the original.
+CONVERT_DEFAULTS = {"enabled": False, "image_limit": 10, "min_pdf_chars_per_page": 200,
+                    "min_chars_per_image": 100}
+
 DEFAULTS = {
     "schema": SCHEMA,
     "label": "",
@@ -73,6 +80,7 @@ DEFAULTS = {
     "sensitivity": {"enabled": False, "keep_last": 4},
     "partitions": {"max": 9, "topic_start": 2, "fallback": ""},
     "delivery": "",
+    "convert": CONVERT_DEFAULTS,
     "names": {},
 }
 KNOWN_KEYS = set(DEFAULTS) | {"backend", "inbox", "notes"}
@@ -239,6 +247,7 @@ def validate(raw):
         problems.append("metadata must be yaml or text")
     if raw.get("delivery", "") not in ("", "zip", "direct"):
         problems.append("delivery must be zip or direct")
+    problems += check_convert(raw.get("convert", {}))
     part = raw.get("partitions", {})
     mx, ts = part.get("max", 9), part.get("topic_start", 2)
     if not (isinstance(mx, int) and isinstance(ts, int) and 0 < ts <= mx <= 99):
@@ -251,6 +260,20 @@ def validate(raw):
     for k in names:
         if not (k in DEFAULT_NAMES or (k.endswith("_key") and k[:-4] in SUMMARY_KEYS)):
             problems.append(f"unknown names key {k!r}")
+    return problems
+
+
+def check_convert(conv):
+    if not isinstance(conv, dict):
+        return ["convert must be an object such as {\"enabled\": true}"]
+    problems = []
+    for k, v in conv.items():
+        if k not in CONVERT_DEFAULTS:
+            problems.append(f"unknown convert key {k!r}")
+        elif k == "enabled" and not isinstance(v, bool):
+            problems.append("convert.enabled must be true or false")
+        elif k != "enabled" and not (isinstance(v, int) and not isinstance(v, bool) and v >= 0):
+            problems.append(f"convert.{k} must be a whole number of 0 or more")
     return problems
 
 

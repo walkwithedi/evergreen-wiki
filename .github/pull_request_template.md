@@ -8,4 +8,5 @@
 - [ ] Shared files edited under `shared/` only, then `python3 scripts/sync_shared.py`
 - [ ] A test added or updated for script changes
 - [ ] No personal data, work details (organisation, host or system names), credentials, folder IDs or private paths; examples use fictional names; images carry no metadata
+- [ ] No case stories or background about where a change came from (CONTRIBUTING.md, rule 7)
 - [ ] Tried in an agent (say which) / not applicable

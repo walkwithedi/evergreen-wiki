@@ -8,5 +8,6 @@
   "sensitivity": {"enabled": false, "keep_last": 4},
   "partitions": {"max": 9, "topic_start": 2, "fallback": "09"},
   "delivery": "",
+  "convert": {"enabled": true, "image_limit": 10},
   "names": {}
 }

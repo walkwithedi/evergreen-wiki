@@ -64,6 +64,7 @@ The spec is the source of every rule about partitions, topics, terms and thresho
   "sensitivity": {"enabled": true, "keep_last": 4},
   "partitions": {"max": 10, "topic_start": 2, "fallback": "06"},
   "delivery": "",
+  "convert": {"enabled": true, "image_limit": 10},
   "names": {}
 }
 ```
@@ -74,6 +75,7 @@ The spec is the source of every rule about partitions, topics, terms and thresho
 - sensitivity.enabled: when true, class-A data (ID numbers, card and account numbers, passwords, one-time codes) is masked to at most the last keep_last characters before anything is written or shown.
 - partitions: highest partition number, first topic partition (00 and 01 hold summary files), and the fallback partition for new topics.
 - delivery: direct or zip. Empty means direct: the assistant writes the files into the library after you confirm a preview, and archives the old versions at the same time. A Drive library with an inbox entry (its own unpack script) defaults to zip.
+- convert: kb-incremental turns uploaded Office, PDF and mail files into Markdown with a script before reading them (fewer tokens, faster). enabled: true or false (false when the key is missing; new libraries from a preset start with true). image_limit: pictures in one batch that are read without asking (default 10); over it the user decides once for the batch. min_pdf_chars_per_page (default 200) and min_chars_per_image (default 100): below these a file is read as the original instead (a scan, or a document that is mostly pictures).
 - names: overrides for any default name below. Leave out the keys you do not change.
 
 ### Names
