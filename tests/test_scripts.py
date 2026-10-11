@@ -401,6 +401,31 @@ class HookTest(unittest.TestCase):
         for cmd in ("git status", "git log --grep commit", "echo commit", "git commit-tree abc", ""):
             self.assertFalse(pre_commit.is_commit(cmd), cmd)
 
+    def hook(self, name, data):
+        return subprocess.run([sys.executable, os.path.join(ROOT, ".claude", "hooks", name)],
+                              input=json.dumps(data), capture_output=True, text=True, encoding="utf-8")
+
+    def test_shared_copy_edit_blocked(self):
+        copy = os.path.join(ROOT, "skills", "kb-query", "references", "config.md")
+        p = self.hook("shared_copies.py", {"hook_event_name": "PreToolUse", "tool_name": "Edit",
+                                          "tool_input": {"file_path": copy}})
+        self.assertEqual(p.returncode, 2)
+        self.assertIn("shared/references/config.md", p.stderr)
+        for path in ("shared/references/config.md", "README.md", "/etc/hosts"):
+            p = self.hook("shared_copies.py", {"hook_event_name": "PreToolUse", "tool_name": "Edit",
+                                              "tool_input": {"file_path": path}})
+            self.assertEqual(p.returncode, 0, path)
+
+    def test_commit_message_scan(self):
+        with tempfile.TemporaryDirectory() as d:
+            msg = os.path.join(d, "MSG")
+            write(msg, "Fix it\n\n# real.person@gmail.com in a comment line\nCo-Authored-By: X <noreply@anthropic.com>\n")  # sensitive-scan: ignore
+            self.assertEqual(subprocess.run([sys.executable, os.path.join(ROOT, "scripts", "sensitive_scan.py"),
+                                             "--message", msg], capture_output=True).returncode, 0)
+            write(msg, "Ask real.person@gmail.com\n")  # sensitive-scan: ignore
+            self.assertEqual(subprocess.run([sys.executable, os.path.join(ROOT, "scripts", "sensitive_scan.py"),
+                                             "--message", msg], capture_output=True).returncode, 1)
+
     def test_other_commands_pass(self):
         p = subprocess.run([sys.executable, os.path.join(ROOT, ".claude", "hooks", "pre_commit.py")],
                            input=json.dumps({"tool_name": "Bash", "tool_input": {"command": "ls"}}),
