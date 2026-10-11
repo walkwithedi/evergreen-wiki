@@ -3,3 +3,5 @@ __pycache__/
 dist/
 .DS_Store
 config/kb-libraries.json
+# a private-terms list belongs in ~/.config/evergreen-wiki/, never here
+sensitive_terms.txt
