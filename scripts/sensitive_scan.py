@@ -22,11 +22,15 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MARK = "sensitive-scan: ignore"
 SKIP_EXT = {".png", ".jpg", ".jpeg", ".gif", ".zip", ".pdf", ".ico"}
+# Addresses of services, not people: GitHub's bots sign their commits with them
+# ("Signed-off-by: dependabot[bot] <support@github.com>").
+SERVICE_ADDRESSES = {"support@github.com", "noreply@github.com"}
 OK_USERS = {"user", "me", "you", "alice", "bob", "runner", "name", "username", "<user>", "claude"}
 
 RULES = [
     ("e-mail", re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"),
-     lambda m: re.search(r"@(example\.(com|org|net)|users\.noreply\.github\.com|anthropic\.com)$", m.group(0), re.I)),
+     lambda m: re.search(r"@(example\.(com|org|net)|users\.noreply\.github\.com|anthropic\.com)$", m.group(0), re.I)
+     or m.group(0).lower() in SERVICE_ADDRESSES),
     ("phone", re.compile(r"(?<![\d.])(?:\+?86[- ]?)?1[3-9]\d{9}(?!\d)"), None),
     ("phone", re.compile(r"(?<![\d.])\+?\d{1,3}[- ]\(?\d{2,4}\)?[- ]\d{3,4}[- ]\d{3,4}(?!\d)"), None),
     ("ID number", re.compile(r"(?<!\d)[1-9]\d{5}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx](?!\d)"), None),

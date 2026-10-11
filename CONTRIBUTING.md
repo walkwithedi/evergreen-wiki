@@ -1,6 +1,16 @@
 # Contributing
 
-Thanks for helping. A few rules keep the skills reliable:
+Thanks for helping.
+
+## How to start
+
+1. Pick an issue. Ones labelled good first issue are small and self-contained; help wanted ones need someone with a particular setup (claude.ai, Codex, Gemini CLI, OpenCode). Say in the issue that you are taking it.
+2. Fork the repository, make a branch, and open a pull request against main. The template lists the checks; CI runs them again on four platforms.
+3. Not sure about an idea? Open an issue first and describe the problem before writing code.
+
+## Rules
+
+A few rules keep the skills reliable:
 
 0. Run `git config core.hooksPath .githooks` once after cloning. Then pre-commit runs scripts/run_checks.py (unit tests, repository checks, shared copies, personal-data scan) and commit-msg scans the commit message; either stops a commit that fails.
    Claude Code sessions get the same through .claude/settings.json: the checks run once when a cloud session starts and before every git commit Claude makes (a failure blocks the commit); editing a skill's copy of a shared/ file is blocked, and editing a file under shared/ refreshes the copies.
