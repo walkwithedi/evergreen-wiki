@@ -61,6 +61,10 @@ class RuleTest(unittest.TestCase):
         self.assertEqual(labels("/mnt/" + "nas/x"), ["mount path"])
         self.assertEqual(labels("smb" + "://nas"), ["network share"])
         self.assertEqual(labels("/opt/" + "acme/bin"), ["system directory"])
+        for line in ("本文件为内部" + "资料", "严禁" + "外传", "CONFIDEN" + "TIAL", "Internal use " + "only",
+                     "Do not " + "distribute", "Proprie" + "tary and private"):
+            self.assertEqual(labels(line), ["confidentiality marker"], line)
+        self.assertEqual(labels("keeps confidential data out"), [])
 
     def test_credentials(self):
         self.assertEqual(labels("ghp_" + "a" * 36), ["GitHub token"])
