@@ -72,7 +72,7 @@ def scan_command(root, command, cwd):
                 with open(os.path.join(cwd, os.path.expanduser(path)), encoding="utf-8") as fh:
                     texts.append(("commit message file", fh.read()))
             except (OSError, UnicodeDecodeError):
-                pass
+                pass  # unreadable: git commit then fails on it too, and commit-msg scans what it reads
         for label, text in texts:
             f = os.path.join(d, "text.txt")
             with open(f, "w", encoding="utf-8") as fh:
