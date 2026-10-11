@@ -1,6 +1,6 @@
 # Changelog
 
-All three skills share one version number. Tag a release as v<version> after updating this file and the "Version:" line of every SKILL.md, the plugin manifests and this file together.
+All three skills share one version number. To release, update this file, the "Version:" line of every SKILL.md and the plugin manifests together and merge to main; the release workflow then publishes v<version>.
 
 ## 1.1.0
 
