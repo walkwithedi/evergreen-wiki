@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Install the evergreen-wiki skills into an agent's user-level skills folder.
 
+Interactive (recommended the first time):
+  python3 install.py                          asks a few questions, installs the skills, can set up
+                                              a local knowledge base, registers it and tells your
+                                              agent it exists; previews everything before writing
 Usage:
   python3 install.py --target agents          ~/.agents/skills (read by several agents)
   python3 install.py --target claude-code     ~/.claude/skills
@@ -9,7 +13,7 @@ Usage:
   python3 install.py --target codex           ~/.codex/skills
   python3 install.py --dest /some/skills/dir  any folder
 Options: --locale zh (Chinese descriptions), --link (symlink instead of copy, for development),
---force (replace an existing install), --dry-run.
+--force (replace an existing install), --dry-run, --wizard (interactive even without a terminal).
 
 Claude Code users can also install as a plugin:  /plugin marketplace add walkwithedi/evergreen-wiki
 claude.ai users upload the zips from the Releases page in Settings > Capabilities > Skills.
@@ -70,11 +74,321 @@ def install_one(name, dest_root, a, desc):
     return True
 
 
+# Interactive setup. The questions and defaults are the ones init mode uses
+# (skills/kb-incremental/references/init.md); the files come from the same script.
+
+AGENT_ORDER = ["claude-code", "codex", "gemini", "opencode", "agents"]
+AGENT_NAMES = {"claude-code": "Claude Code", "codex": "Codex", "gemini": "Gemini CLI",
+               "opencode": "OpenCode", "agents": "~/.agents/skills (several agents)"}
+AGENT_HOMES = {"claude-code": os.path.join(HOME, ".claude"), "codex": os.path.join(HOME, ".codex"),
+               "gemini": os.path.join(HOME, ".gemini"), "opencode": os.path.join(HOME, ".config", "opencode"),
+               "agents": os.path.join(HOME, ".agents")}
+# The file each agent always reads, where one line tells it the libraries exist:
+# (path, verified against the agent's own documentation)
+INSTRUCTION_FILES = {
+    "claude-code": (os.path.join(HOME, ".claude", "CLAUDE.md"), True),
+    "gemini": (os.path.join(HOME, ".gemini", "GEMINI.md"), True),
+    "codex": (os.path.join(HOME, ".codex", "AGENTS.md"), False),
+    "opencode": (os.path.join(HOME, ".config", "opencode", "AGENTS.md"), False),
+}
+
+MSG = {
+    "en": {
+        "agent": "Which agent should get the skills?",
+        "found": "found on this computer",
+        "other": "another folder",
+        "folder": "Skills folder",
+        "plugin_note": "Already installed the Claude Code plugin? Then answer n to the next question.",
+        "install": "Install kb-note, kb-query and kb-incremental into {dest}?",
+        "replace": "{names} already installed there. Replace with this version?",
+        "unverified": "note: this folder is not confirmed by the agent's documentation; if the skills do not show up, run again and choose another folder.",
+        "registered": "Libraries already registered in {path}:",
+        "setup": "Set up a local knowledge base now? Three questions, a preview, nothing is written before you confirm.",
+        "q_preset": "Question 1 of 3. Which kind of library?",
+        "life": "life: me and my family - IDs, health, insurance, money, home, subscriptions",
+        "work": "work: team projects, decisions, owners, specs, meetings",
+        "q_root": "Question 2 of 3. Folder for the library (new or empty; an Obsidian vault works)",
+        "q_scope": "Question 3 of 3. One sentence: what belongs in this library? The assistant uses it to pick the library for each request.",
+        "q_id": "Short id (lowercase letters, digits, hyphens)",
+        "id_taken": "The id {id!r} is already registered; using {new!r}. Change it in the preview if you like.",
+        "preview": "Preview",
+        "items": ["Folder", "Label", "Id", "Scope", "Language", "Timezone", "Sensitivity and masking"],
+        "on_off": ("on", "off"),
+        "files": "Files to create",
+        "folders": "Folders to create",
+        "registry": "Registry entry, added to {path}",
+        "confirm": "Press Enter or y to write, a number to change that item, n to cancel",
+        "cancelled": "Cancelled. Nothing was written.",
+        "written": "Library written to {root} and registered in {path}.",
+        "line": "Your agent only consults the knowledge base when it knows one exists. Line for {path} ({what}):",
+        "line_added": "added", "line_updated": "updated", "line_unchanged": "already there",
+        "line_ok": "Write it?",
+        "line_paste": "Add this line to the instructions your agent always reads (AGENTS.md, CLAUDE.md, GEMINI.md or similar):",
+        "skipped_line": "Not written. Add the line above yourself when you are ready.",
+        "done": "Done. Restart your agent, then try:",
+        "tries": ['"note this: the dentist recall is due in March"', '"what is due this month?"',
+                  '"file these" with a document attached'],
+        "later": "No library set up. To set one up later, run this again or tell your agent: \"get started with the knowledge base\".",
+        "bad": "Not valid: {err}",
+        "yes": "Y/n", "no": "y/N",
+    },
+    "zh": {
+        "agent": "把技能装到哪个助手？",
+        "found": "本机已检测到",
+        "other": "其他文件夹",
+        "folder": "技能文件夹",
+        "plugin_note": "已经装过 Claude Code 插件的，下一题回答 n 即可。",
+        "install": "把 kb-note、kb-query、kb-incremental 装到 {dest}？",
+        "replace": "{names} 已经装在那里。替换为当前版本？",
+        "unverified": "提示：该文件夹未经此助手官方文档确认；若技能没有出现，请重新运行并选择其他文件夹。",
+        "registered": "{path} 中已登记的知识库：",
+        "setup": "现在建一个本地知识库吗？共三个问题，写入前会先给预览，确认后才写。",
+        "q_preset": "问题 1/3：建哪一类知识库？",
+        "life": "life 生活库：我和家人的证件、健康、保险、财务、住房、订阅",
+        "work": "work 工作库：团队项目、决策、负责人、规范、会议",
+        "q_root": "问题 2/3：知识库放在哪个文件夹（新文件夹或空文件夹；Obsidian 库也可以）",
+        "q_scope": "问题 3/3：用一句话说明这个库收什么内容。助手靠这句话判断每次请求该用哪个库。",
+        "q_id": "简短 id（小写字母、数字、连字符）",
+        "id_taken": "id {id!r} 已被登记，改用 {new!r}；可以在预览里修改。",
+        "preview": "预览",
+        "items": ["文件夹", "名称", "id", "范围", "语言", "时区", "敏感信息分级与打码"],
+        "on_off": ("开", "关"),
+        "files": "将创建的文件",
+        "folders": "将创建的文件夹",
+        "registry": "注册表条目，写入 {path}",
+        "confirm": "回车或 y 写入；输入编号修改该项；n 取消",
+        "cancelled": "已取消，没有写入任何内容。",
+        "written": "知识库已写入 {root}，并登记到 {path}。",
+        "line": "助手只有知道你有知识库时才会去查。要写入 {path} 的一行（{what}）：",
+        "line_added": "新增", "line_updated": "更新已有的一行", "line_unchanged": "已存在，无需改动",
+        "line_ok": "写入吗？",
+        "line_paste": "请把这一行加到助手每次都会读的指令文件里（AGENTS.md、CLAUDE.md、GEMINI.md 等）：",
+        "skipped_line": "未写入。准备好后请自行添加上面这一行。",
+        "done": "完成。重启助手后可以试试：",
+        "tries": ["「记一下：牙医复查定在三月」", "「这个月有什么到期的？」", "附上一份文件说「增量整理」"],
+        "later": "暂未建库。以后要建库，重新运行本向导，或对助手说「开始使用知识库」。",
+        "bad": "无效：{err}",
+        "yes": "Y/n", "no": "y/N",
+    },
+}
+
+
+class Asker:
+    """Reads answers from stdin; works with a terminal and with piped input (tests)."""
+
+    def __init__(self, lang="en"):
+        self.m = MSG[lang]
+
+    def ask(self, prompt, default=""):
+        shown = f"{prompt} [{default}]: " if default else f"{prompt}: "
+        try:
+            ans = input(shown)
+        except EOFError:
+            print()
+            raise KeyboardInterrupt
+        return ans.strip() or default
+
+    def yes(self, prompt, default=True):
+        ans = self.ask(f"{prompt} ({self.m['yes'] if default else self.m['no']})").lower()
+        if not ans:
+            return default
+        return ans[0] in ("y", "是", "好")
+
+    def choose(self, prompt, options, default):
+        """options: [(value, text)]; answer with the number or the value."""
+        print(prompt)
+        for i, (_, text) in enumerate(options, 1):
+            print(f"  {i}. {text}")
+        values = [v for v, _ in options]
+        while True:
+            ans = self.ask(">", str(values.index(default) + 1))
+            if ans.isdigit() and 1 <= int(ans) <= len(options):
+                return values[int(ans) - 1]
+            if ans in values:
+                return ans
+
+
+def choose_dest(q, m):
+    found = [t for t in AGENT_ORDER if os.path.isdir(AGENT_HOMES[t])]
+    default = found[0] if found else "agents"
+    opts = [(t, f"{AGENT_NAMES[t]}  ({TARGETS[t][0]}){'  - ' + m['found'] if t in found else ''}")
+            for t in AGENT_ORDER]
+    opts.append(("other", m["other"]))
+    target = q.choose(m["agent"], opts, default)
+    if target == "other":
+        return None, os.path.abspath(os.path.expanduser(q.ask(m["folder"])))
+    if not TARGETS[target][1]:
+        print(m["unverified"])
+    return target, TARGETS[target][0]
+
+
+def install_skills(q, m, target, dest_root, lang):
+    if target == "claude-code":
+        print(m["plugin_note"])
+    if not q.yes(m["install"].format(dest=dest_root)):
+        return
+    present = [n for n in SKILLS if os.path.lexists(os.path.join(dest_root, n))]
+    force = bool(present) and q.yes(m["replace"].format(names=", ".join(present)))
+    opts = argparse.Namespace(force=force, dry_run=False, link=False)
+    desc = None
+    if lang != "en":
+        with open(os.path.join(ROOT, "locales", lang, "descriptions.json"), encoding="utf-8") as f:
+            desc = json.load(f)
+    done = sum(install_one(n, dest_root, opts, desc) for n in SKILLS)
+    print(f"installed {done} of {len(SKILLS)} skills in {dest_root}")
+
+
+def free_id(base, taken):
+    if base not in taken:
+        return base
+    n = 2
+    while f"{base}-{n}" in taken:
+        n += 1
+    return f"{base}-{n}"
+
+
+def ask_root(q, m, il, default):
+    while True:
+        root = os.path.abspath(os.path.expanduser(q.ask(m["q_root"], default)))
+        try:
+            il.check_root(root)
+            return root
+        except il.Refused as e:
+            print(m["bad"].format(err=e))
+
+
+def library_settings(il, s):
+    """Validate through the same code the skill uses; returns the completed settings."""
+    ns = argparse.Namespace(preset=s["preset"], label=s["label"], id=s["id"], scope=s["scope"],
+                            language=s["language"], timezone=s["timezone"],
+                            sensitivity="on" if s["sensitivity"] else "off", date=None)
+    return il.settings(ns)
+
+
+def show_preview(m, il, s, root, reg_path, entry):
+    files, folders = il.build_files(s)
+    on, off = m["on_off"]
+    values = [root, s["label"], s["id"], s["scope"], s["language"], s["timezone"], on if s["sensitivity"] else off]
+    print(f"\n{m['preview']}")
+    for i, (k, v) in enumerate(zip(m["items"], values), 1):
+        print(f"  {i}. {k}: {v}")
+    print(f"{m['files']}: " + ", ".join(p for p, _ in files))
+    print(f"{m['folders']}: " + ", ".join(folders))
+    print(m["registry"].format(path=reg_path))
+    print("  " + json.dumps(entry, ensure_ascii=False))
+
+
+def edit_item(q, m, il, s, root, n):
+    item = m["items"][n - 1]
+    if n == 1:
+        return ask_root(q, m, il, root)
+    if n == 7:
+        s["sensitivity"] = q.yes(item, s["sensitivity"])
+    else:
+        key = ["", "label", "id", "scope", "language", "timezone"][n - 1]
+        s[key] = q.ask(item, s[key])
+    return root
+
+
+def setup_library(q, m, il, lang):
+    reg_path = il.registry_path()
+    reg = il.load_registry_or_new(reg_path, lang)
+    taken = [lib.get("id") for lib in reg.get("libraries", [])]
+    if taken:
+        print(m["registered"].format(path=reg_path))
+        for lib in reg["libraries"]:
+            print(f"  {lib.get('id')}: {lib.get('label')} - {lib.get('scope')}")
+    if not q.yes(m["setup"]):
+        return None
+    preset = q.choose(m["q_preset"], [("life", m["life"]), ("work", m["work"])], "life")
+    s = il.defaults(preset, lang)
+    new_id = free_id(s["id"], taken)
+    if new_id != s["id"]:
+        print(m["id_taken"].format(id=s["id"], new=new_id))
+        s["id"] = new_id
+    root = ask_root(q, m, il, os.path.join(HOME, "kb", s["id"]))
+    s["scope"] = q.ask(m["q_scope"], s["scope"])
+    while True:
+        try:
+            s = library_settings(il, s)
+            entry = il.registry_entry(s["id"], s["label"], s["scope"], "local", root)
+            il.add_to_registry(reg_path, entry, lang, dry_run=True)
+            show_preview(m, il, s, root, reg_path, entry)
+        except (il.Refused, il.kbconf.ConfigError) as e:
+            print(m["bad"].format(err=e))
+            ans = q.ask(m["confirm"])
+            if ans.lower().startswith("n"):
+                print(m["cancelled"])
+                return None
+            if ans.isdigit() and 1 <= int(ans) <= len(m["items"]):
+                root = edit_item(q, m, il, s, root, int(ans))
+            continue
+        ans = q.ask(m["confirm"]).lower()
+        if ans in ("", "y", "yes", "是"):
+            break
+        if ans.startswith("n"):
+            print(m["cancelled"])
+            return None
+        if ans.isdigit() and 1 <= int(ans) <= len(m["items"]):
+            root = edit_item(q, m, il, s, root, int(ans))
+    il.create_library(root, s)
+    reg = il.add_to_registry(reg_path, entry, lang)
+    print(m["written"].format(root=root, path=reg_path))
+    return reg
+
+
+def add_instructions_line(q, m, il, target, reg, lang):
+    line = il.instructions_line(reg, lang)
+    path, verified = INSTRUCTION_FILES.get(target, (None, False))
+    if not path:
+        print(m["line_paste"])
+        print("  " + line)
+        return
+    what = il.update_instructions_file(path, line, dry_run=True)
+    print(m["line"].format(path=path, what=m["line_" + what]))
+    print("  " + line)
+    if not verified:
+        print(m["unverified"])
+    if what == "unchanged":
+        return
+    if q.yes(m["line_ok"]):
+        il.update_instructions_file(path, line)
+    else:
+        print(m["skipped_line"])
+
+
+def wizard():
+    sys.path.insert(0, os.path.join(ROOT, "skills", "kb-incremental", "scripts"))
+    import init_library as il
+    il.kbconf.utf8_stdio()
+    try:
+        lang = Asker("en").choose("Language / 语言", [("zh", "中文"), ("en", "English")], il.detect_language())
+    except KeyboardInterrupt:
+        sys.exit(1)
+    q = Asker(lang)
+    m = MSG[lang]
+    try:
+        target, dest_root = choose_dest(q, m)
+        install_skills(q, m, target, dest_root, lang)
+        reg = setup_library(q, m, il, lang)
+        if reg is None:
+            print(m["later"])
+            return
+        add_instructions_line(q, m, il, target, reg, lang)
+        print("\n" + m["done"])
+        for t in m["tries"]:
+            print("  " + t)
+    except KeyboardInterrupt:
+        print("\n" + m["cancelled"])
+        sys.exit(1)
+
+
 def main():
     ap = argparse.ArgumentParser(description="Install evergreen-wiki skills")
-    g = ap.add_mutually_exclusive_group(required=True)
+    g = ap.add_mutually_exclusive_group()
     g.add_argument("--target", choices=sorted(TARGETS))
     g.add_argument("--dest")
+    g.add_argument("--wizard", action="store_true", help="interactive setup (the default in a terminal)")
     ap.add_argument("--locale")
     ap.add_argument("--link", action="store_true")
     ap.add_argument("--force", action="store_true")
@@ -83,6 +397,13 @@ def main():
                     choices=["DEBUG", "INFO", "WARNING", "ERROR"])
     a = ap.parse_args()
     logging.basicConfig(level=a.log_level, format=LOG_FORMAT, stream=sys.stderr)
+    if a.wizard or not (a.target or a.dest):
+        # Both ends must be a terminal: on Windows the NUL device reports isatty() as true.
+        if not a.wizard and not (sys.stdin.isatty() and sys.stdout.isatty()):
+            ap.error("give --target or --dest, or run without options in a terminal for interactive setup")
+        if a.locale or a.link or a.force or a.dry_run:
+            ap.error("--locale, --link, --force and --dry-run go with --target or --dest; the wizard asks instead")
+        return wizard()
     if a.link and a.locale:
         ap.error("--locale rewrites SKILL.md and cannot be combined with --link")
     if a.dest:
@@ -99,7 +420,8 @@ def main():
     done = sum(install_one(n, dest_root, a, desc) for n in SKILLS)
     print(f"{'would install' if a.dry_run else 'installed'} {done} of {len(SKILLS)} skills in {dest_root}")
     if done:
-        print("next: register a library (see README, 'Register your libraries'), then restart your agent.")
+        print("next: restart your agent and say \"get started with the knowledge base\", "
+              "or run python3 install.py without options for guided setup.")
 
 
 if __name__ == "__main__":

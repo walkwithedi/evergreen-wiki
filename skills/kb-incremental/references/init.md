@@ -1,9 +1,11 @@
-# Init mode: set up a new library or complete an existing one
+# Init mode: get started, set up a new library or complete an existing one
 
-Trigger: "set up a knowledge base", "new library", "init", "complete the settings".
-Result: the library root holds _kb.json, _kb-params.md, the spec and the empty summary files, and the library is in the registry.
+Trigger: "get started with the knowledge base", "first time", "set up a knowledge base", "new library", "init", "complete the settings". Also entered when kb-query or kb-note found no registry and the user accepted the offer to set one up.
+Result: the library root holds _kb.json, _kb-params.md, the spec and the empty summary files, the library is in the registry, and the assistant's always-read instructions say the library exists.
 
 Presets live in assets/presets/<name>/: _kb.json, _kb-params.md, 00_Spec.md and summary/ (empty summary files). Available: life and work. For a blank start, take the closer one and remove the topics the user does not want. Placeholders {{DATE}}, {{HEADING_LIMIT}} and {{FILENAME_LIMIT}} are filled when writing.
+
+scripts/init_library.py holds the shared definition of a new library: the suggested label, id and scope per preset and language, the files and folders to create, the registry entry and the instructions line. The interactive installer (install.py) uses the same script, so a library made either way looks the same. Use it whenever Python runs; without Python, do its job by hand as described at each step and say "not script-checked" in the report.
 
 ## Rules
 
@@ -11,22 +13,39 @@ Presets live in assets/presets/<name>/: _kb.json, _kb-params.md, 00_Spec.md and 
 2. Only create files. The only move allowed is putting a replaced _kb.json into the archive folder. Never delete or rewrite knowledge files, summary files or the spec of an existing library.
 3. A new library needs an empty folder (empty subfolders are fine). Any .md file in it: stop and switch to the existing-library branch.
 4. Never invent rules. For a new library every partition, topic and type comes from the preset as the user confirmed or changed it. For an existing library every value is read from its spec.
+5. Ask as little as possible. Ask only what cannot be found out reliably; show everything else in the preview, where the user can change any item.
+
+## Getting started (first-time guide)
+
+For a user who has just installed the skills, or says it is the first time. Keep each message short and in the user's language.
+
+1. Look before asking, without telling the user each check:
+   - Registry (references/config.md): found, and with which libraries.
+   - Python: python3 scripts/init_library.py defaults runs (it also prints the suggested timezone and language).
+   - Backends: a Drive tool is available (references/backend-gdrive.md); local files can be written (references/backend-local.md).
+2. Libraries already registered: list them in one line each (label and scope) and ask whether to add another library or complete an existing one. A library that fails step 0 of SKILL.md (missing _kb.json or _kb-params.md) goes to the existing-library branch.
+3. Otherwise say in two sentences what will happen: three questions, a preview, nothing is written before "confirm". Then run Round 1 for a new library.
+4. After Round 2, finish with the report and three things to try (step 9 of Round 2).
 
 ## Branch
 
 - The user names a registered library, or a folder that already holds a spec: existing library. Run SKILL.md step 0 (it may stop at the missing _kb.json; continue here).
-- The user asks for a new library, or names an empty folder: new library.
+- The user asks for a new library, names an empty folder, or comes from getting started with no library: new library.
 - Unclear: ask once, new or existing.
 
 ## Round 1: questions (new library)
 
-Ask one question at a time, each with a suggested answer:
-1. Backend and location: a Google Drive folder (folder ID or link) or a local folder path (an Obsidian vault works).
-2. Preset: work or life. Show its partition table briefly.
-3. Label, short id and one-sentence scope (used to route requests between libraries).
-4. Language and timezone. Language decides the Table D length limits: python3 scripts/kbconf.py limits --language <lang>.
-5. Life preset only: keep sensitivity classes and masking on (suggested) or off.
-Then show the full partition table and let the user keep, rename or drop each partition and topic, and set the fallback partition. Partition numbers stay two-digit and continuous.
+Three questions, one at a time, each with a suggested answer:
+1. Where. Suggest the backend the environment supports: local folder when local files can be written (a path; an Obsidian vault works; suggest ~/kb/<preset>), Google Drive when only a Drive tool is available (a folder link or ID; the folder must exist and be empty). Both available: ask which, suggesting local. Neither: stop and say what is missing (references/environment.md).
+2. Preset: life (me and my family: IDs, health, insurance, money, home) or work (team projects, decisions, owners, specs). One line each; the partition table appears in the preview.
+3. Scope: one sentence saying what belongs in the library, suggested from python3 scripts/init_library.py defaults --preset <preset> --language <language>. Explain that it decides which library each request goes to.
+
+Found out, not asked (all shown in the preview):
+- Label and id: from the defaults for the preset. If the id is already in the registry, add -2, -3.
+- Language: the language the user writes in. It sets the Table D limits (python3 scripts/kbconf.py limits --language <lang>).
+- Timezone: from the defaults command (the system timezone); in claude.ai or wherever the system timezone is meaningless (often UTC on a server), the timezone the user's messages or profile indicate, else ask in the preview.
+- Sensitivity and masking: the preset's setting (on for life, off for work).
+- Partitions: the preset's Table A, unchanged unless the user edits it in the preview. Partition numbers stay two-digit and continuous; the fallback partition stays the preset's unless the user changes it.
 
 ## Round 1: checks (existing library)
 
@@ -39,29 +58,45 @@ Then show the full partition table and let the user keep, rename or drop each pa
 ## Preview (both branches)
 
 Fixed structure:
-  Library: <label> | branch: new / existing | backend: gdrive <id> / local <path>
+  Library: <label> (id <id>) | branch: new / existing | backend: gdrive <id> / local <path>
+  Scope: <one sentence> | language: <lang> | timezone: <tz> | sensitivity: on / off
   1. _kb.json: new / unchanged / replace (field: current -> new)
   2. _kb-params.md: new from preset <name> / unchanged / draft for review
-  3. Spec: new from preset (version v1, today) / unchanged
+  3. Spec: new from preset (version v1, today), partitions: <number name, one line each> / unchanged
   4. Summary files: list of files to create with their names
   5. Folders: archive, entities, notes: present / to create
-  6. Registry: entry to add (see below)
-End with: reply "confirm" to write. The turn ends here.
+  6. Registry: entry to add, and where (a file path, or "to paste into Project instructions")
+  7. Instructions line: the line, and the file it goes into (or "to paste")
+End with: reply "confirm" to write, or name any item to change. The turn ends here.
+
+For a new library with Python, python3 scripts/init_library.py plan --root <path> --preset <preset> --label <label> --id <id> --scope "<scope>" --language <lang> --timezone <tz> --sensitivity on|off prints items 1 to 5; it refuses (exit 3) when the folder already holds Markdown files. For Drive, run it with --root pointing at an empty work folder just to get the list.
 
 ## Round 2: write (after confirmation)
 
 1. Re-check: if the folder or the existing files changed since the preview, stop and report.
 2. Replacing _kb.json: move the old one into the archive folder as _kb_old<YYYYMMDDHHMMSS>.json first.
-3. Write the files with write_new (the backend file says how to set file types). New library: fill the spec template with the confirmed Table A, type list and Table D limits, version v1 and today's date; summary files get their title, "Last updated: <today>" and empty headers; the file index header is
-   Entries: 0
-   Last updated: YYYY-MM-DD
-   | File name | Source file name | Source hash |
-   | --- | --- | --- |
-   so scripts/index_tool.py can maintain it.
-4. ensure_folder for the archive, entities (YAML mode) and notes folders.
-5. Verify every file exists once.
-6. Registry: if the registry is a file you can write (KB_LIBRARIES or ~/.config/kb/kb-libraries.json), show the entry and add it after the user agrees, creating the file if needed. Otherwise give the entry (or the whole registry) as a block for the user to paste into project instructions, or to bake into a private skill build (build_skill.py --config).
-7. Make the libraries visible. An assistant only consults kb-query when it knows a knowledge base exists, and it cannot see the registry until a skill reads it. Propose one line for the instructions the assistant always reads (CLAUDE.md, AGENTS.md or GEMINI.md in the user's home or project, or the claude.ai Project instructions), listing every registered library:
+3. Write the files of a new library:
+   - Local: python3 scripts/init_library.py write with the same options as the plan. It writes every file, creates the archive, notes and (YAML mode) entities folders, and verifies each file.
+   - Drive: python3 scripts/init_library.py render --out <work>/init with the same options, then write_new each file it rendered into the library folder (the backend file says how to set file types) and ensure_folder for the folders it names.
+   - Without Python: fill the preset files yourself: the spec template with the confirmed Table A, type list and Table D limits, version v1 and today's date; summary files with their title, "Last updated: <today>" and empty headers; the file index header is
+     Entries: 0
+     Last updated: YYYY-MM-DD
+     | File name | Source file name | Source hash |
+     | --- | --- | --- |
+     so scripts/index_tool.py can maintain it. Then ensure_folder for the archive, entities (YAML mode) and notes folders.
+   Partition changes the user made in the preview: apply them to Table A of the spec just written (it is new, so rule 2 does not apply yet).
+4. Existing library: write only the files the preview marked new or replace, with write_new.
+5. Verify every file exists once (find_exact for each).
+6. Registry. If the registry is a file you can write (KB_LIBRARIES or ~/.config/kb/kb-libraries.json):
+   python3 scripts/init_library.py register --id <id> --label <label> --scope "<scope>" --type local|gdrive --root <path or folder id> --language <lang>
+   It creates the file if needed, keeps every other entry and refuses an id or root already registered (exit 3: report it, ask for another id). Without Python, add the entry by hand.
+   Otherwise (claude.ai and other environments without a writable registry): the registry lives in the Project instructions. Put the registry the instructions already hold, if any, into <work>/kb-libraries.json, run register with --registry <work>/kb-libraries.json, then
+   python3 scripts/init_library.py instructions --registry <work>/kb-libraries.json --project-block
+   and give its output as one block to paste, with: open the Project, Project instructions, replace the old knowledge base lines and registry with this block (or add it), save, and start a new conversation in the Project. Not working in a Project: say that only Project instructions persist, and suggest creating a Project for the knowledge base. Without Python, write the same block by hand: the instructions line (step 7), a blank line, "Knowledge base registry (kb-libraries.json):" and the registry JSON.
+7. Make the libraries visible. An assistant only consults kb-query when it knows a knowledge base exists, and it cannot see the registry until a skill reads it. The line lists every registered library:
    "I keep knowledge bases: <label> (<scope>); <label> (<scope>). For questions about these, use kb-query before searching code or answering from memory; to save something, use kb-note."
-   Add it after the user agrees (to an existing file, append; never replace other content), or give it to paste.
-8. Report what was written and anything that needs a manual decision.
+   In Chinese: "我有知识库：<名称>（<范围>）；<名称>（<范围>）。相关问题先用 kb-query 查知识库，再查代码或凭记忆回答；要记录用 kb-note。"
+   python3 scripts/init_library.py instructions --registry <registry> --file <file> prints the line and says whether it would be added or would update the line already there (found by its opening words, so a second library never adds a second line); add --apply to write. The file is the one the assistant always reads: CLAUDE.md, AGENTS.md or GEMINI.md in the user's home or project. Write only after the user agrees, which the preview confirmation covers when item 7 named the file; every other line of the file stays as it is. In claude.ai the line is already part of the block from step 6.
+8. Check: python3 scripts/kbconf.py validate <library root or the rendered _kb.json> passes, and the registry loads (python3 scripts/kbconf.py registry, where the registry is a file).
+9. Report in a few lines: what was written and where, anything that needs a manual step (the paste in step 6, a restart of the agent so it reads the new instructions line), then three things to try, in the library language:
+   "note this: <a fact that fits the scope>"; a question the library will answer once material is filed ("what is due this month?" for life, "what did we decide about <topic>?" for work); "file these" with a document attached.

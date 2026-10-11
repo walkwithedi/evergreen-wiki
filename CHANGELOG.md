@@ -2,6 +2,15 @@
 
 All three skills share one version number. Tag a release as v<version> after updating this file and the "Version:" line of every SKILL.md, the plugin manifests and this file together.
 
+## Unreleased
+
+Guided first-time setup.
+- install.py without options starts an interactive installer: language, agent (detected), install, then three questions (kind of library, folder, scope), a preview, and it writes the library, registers it and adds or updates the instructions line after showing it. Existing options are unchanged.
+- New scripts/init_library.py in kb-incremental: the one definition of a new library (suggested label, id, scope, timezone and language; files and folders; registry entry; instructions line; a block to paste into claude.ai Project instructions). Init mode and the installer both use it.
+- Init mode has a getting-started guide ("get started with the knowledge base", 「开始使用知识库」): it looks at the environment first, asks three questions instead of five plus the partition table, and shows everything else in the preview.
+- kb-query and kb-note offer setup once when no registry exists, instead of only saying nothing is set up.
+- README quick start rewritten as two short paths (terminal, claude.ai); the manual steps moved to docs/manual-setup.md and docs/manual-setup.zh-CN.md.
+
 ## 1.0.0
 
 First public version.

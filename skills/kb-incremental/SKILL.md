@@ -1,6 +1,6 @@
 ---
 name: kb-incremental
-description: Maintains an evergreen knowledge base of Markdown files (Google Drive folder or local/Obsidian vault). Five modes. Intake - the user says "file these", "add to the knowledge base", "intake", or uploads material to be sorted into partitions, de-duplicated, versioned and checked for changes to current conclusions. Archive - "archive old versions", "clean up duplicates". Health check - "check the knowledge base", "health check". Init - "set up a knowledge base", "new library", "init". Quick-note filing - "file my quick notes", "notes are filed". Use it whenever material goes into one of the user's registered knowledge bases or a library is set up, even if these words are not used. Not for answering questions from the knowledge base (kb-query) or for saving a single note (kb-note).
+description: Maintains an evergreen knowledge base of Markdown files (Google Drive folder or local/Obsidian vault). Five modes. Intake - the user says "file these", "add to the knowledge base", "intake", or uploads material to be sorted into partitions, de-duplicated, versioned and checked for changes to current conclusions. Archive - "archive old versions", "clean up duplicates". Health check - "check the knowledge base", "health check". Init and first-time guide - "get started with the knowledge base", "first time", "set up a knowledge base", "new library", "init". Quick-note filing - "file my quick notes", "notes are filed". Use it whenever material goes into one of the user's registered knowledge bases or a library is set up, even if these words are not used. Not for answering questions from the knowledge base (kb-query) or for saving a single note (kb-note).
 ---
 
 # Knowledge base intake, archive, health check and init
@@ -13,7 +13,7 @@ Version: 1.0.0
 - Archive: after step 0, read references/archive.md and follow it instead of the five steps.
 - Health check: after step 0, read references/lint.md. Report only, change nothing.
 - Quick-note filing: read references/notes.md and follow its two rounds; its intake part still uses step 0 and the five steps.
-- Init: read references/init.md and follow its branches (the existing-library branch runs step 0 first; the new-library branch skips it).
+- Init and getting started: read references/init.md and follow it (getting started looks at the environment first; the existing-library branch runs step 0 first; the new-library branch skips it).
 - One request asking for intake and archive: do the intake first. With delivery = direct there is nothing to archive afterwards. With delivery = zip, wait until the user confirms the upload, then run archive mode (or let the user's inbox script do it if _kb.json has an inbox entry).
 
 This skill holds the process. The rules live in each library's own spec. Partitions, topics, terms and thresholds are always read from the spec; never write them from memory or from this file. Differences between libraries live only in _kb.json and _kb-params.md.

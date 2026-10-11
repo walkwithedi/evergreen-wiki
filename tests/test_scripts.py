@@ -256,5 +256,140 @@ class PackageTest(Tmp):
         self.assertEqual(read(os.path.join(self.lib, "02_Health_Report_A.md")), "edited meanwhile, longer\n")
 
 
+class InitLibraryTest(Tmp):
+    def test_write_matches_preset(self):
+        root = self.p("kb", "life")
+        out = run("init_library.py", "write", "--root", root, "--preset", "life", "--language", "zh",
+                  "--timezone", "+08:00", "--scope", "我和家人", "--date", "2026-10-10").stdout
+        self.assertIn("result: written 8 files and 3 folders", out)
+        cfg = kbconf.load_library(root)
+        self.assertEqual((cfg["label"], cfg["language"], cfg["timezone"]), ("生活", "zh", "+08:00"))
+        self.assertTrue(cfg["sensitivity"]["enabled"])
+        self.assertEqual(kbconf.validate(json.loads(read(os.path.join(root, "_kb.json")))), [])
+        names = cfg["names"]
+        spec = read(os.path.join(root, names["spec"]))
+        self.assertIn("Last updated: 2026-10-10", spec)
+        self.assertIn("| 55", spec)
+        self.assertNotIn("{{", spec)
+        for k in kbconf.SUMMARY_KEYS:
+            self.assertNotIn("{{", read(os.path.join(root, names[k])))
+        self.assertIn("Entries: 0", read(os.path.join(root, names["index"])))
+        for d in ("archive_dir", "notes_dir", "entities_dir"):
+            self.assertTrue(os.path.isdir(os.path.join(root, names[d])))
+
+    def test_refuses_existing_library(self):
+        root = self.p("lib")
+        write(os.path.join(root, "notes.md"), "mine\n")
+        p = run("init_library.py", "write", "--root", root, "--preset", "work", check=False)
+        self.assertEqual(p.returncode, 3)
+        self.assertEqual(os.listdir(root), ["notes.md"])
+
+    def test_render_for_upload(self):
+        out = run("init_library.py", "render", "--out", self.p("out"), "--preset", "work", "--language", "en",
+                  "--timezone", "UTC").stdout
+        self.assertIn("create the folders in the library: Archive, Quick-Notes, Entities", out)
+        self.assertEqual(len(os.listdir(self.p("out"))), 8)
+
+    def test_register_and_instructions(self):
+        reg = self.p("cfg", "kb-libraries.json")
+        run("init_library.py", "register", "--registry", reg, "--id", "life", "--label", "Life",
+            "--scope", "me and my family", "--type", "local", "--root", self.p("life"))
+        run("init_library.py", "register", "--registry", reg, "--id", "work", "--label", "Work",
+            "--scope", "team projects", "--type", "gdrive", "--root", "abc123")
+        p = run("init_library.py", "register", "--registry", reg, "--id", "work", "--label", "W",
+                "--scope", "x", "--type", "gdrive", "--root", "zzz", check=False)
+        self.assertEqual(p.returncode, 3)
+        self.assertEqual([lib["id"] for lib in kbconf.load_registry(reg)["libraries"]], ["life", "work"])
+        md = self.p("CLAUDE.md")
+        write(md, "# My rules\n\nBe brief.\n")
+        out = run("init_library.py", "instructions", "--registry", reg, "--file", md).stdout
+        self.assertIn("would be added", out)
+        self.assertEqual(read(md), "# My rules\n\nBe brief.\n")
+        run("init_library.py", "instructions", "--registry", reg, "--file", md, "--apply")
+        text = read(md)
+        self.assertIn("Be brief.", text)
+        self.assertIn("I keep knowledge bases: Life (me and my family); Work (team projects).", text)
+        out = run("init_library.py", "instructions", "--registry", reg, "--file", md, "--apply").stdout
+        self.assertIn("unchanged", out)
+        block = run("init_library.py", "instructions", "--registry", reg, "--project-block").stdout
+        self.assertIn("Knowledge base registry (kb-libraries.json):", block)
+        self.assertIn('"root": "abc123"', block)
+
+    def test_every_preset_has_defaults(self):
+        sys.path.insert(0, SCRIPTS)
+        import init_library as il
+        presets = sorted(os.listdir(il.PRESETS_DIR))
+        self.assertEqual(presets, sorted(il.PRESETS))
+        for p in presets:
+            self.assertEqual(sorted(il.PRESET_DEFAULTS[p]), sorted(il.LANGUAGES))
+
+    def test_upsert_line(self):
+        sys.path.insert(0, SCRIPTS)
+        import init_library as il
+        text, what = il.upsert_line("a\n我有知识库：旧（x）。\nb\n", "I keep knowledge bases: New (y).")
+        self.assertEqual(what, "updated")
+        self.assertEqual(text, "a\nI keep knowledge bases: New (y).\nb\n")
+        self.assertEqual(il.upsert_line("", "L")[0], "L\n")
+
+
+class WizardTest(Tmp):
+    def wizard(self, answers):
+        env = dict(os.environ, HOME=self.p("home"), USERPROFILE=self.p("home"), APPDATA=self.p("home", "appdata"),
+                   XDG_CONFIG_HOME=self.p("home", ".config"), PYTHONIOENCODING="utf-8")
+        env.pop("KB_LIBRARIES", None)
+        return subprocess.run([sys.executable, os.path.join(ROOT, "install.py"), "--wizard"],
+                              input="\n".join(answers) + "\n", capture_output=True, text=True,
+                              encoding="utf-8", env=env)
+
+    def registry(self):
+        sys.path.insert(0, SCRIPTS)
+        import init_library as il
+        old = dict(os.environ)
+        os.environ.update(HOME=self.p("home"), USERPROFILE=self.p("home"), APPDATA=self.p("home", "appdata"),
+                          XDG_CONFIG_HOME=self.p("home", ".config"))
+        os.environ.pop("KB_LIBRARIES", None)
+        try:
+            return kbconf.load_registry(il.registry_path())
+        finally:
+            os.environ.clear()
+            os.environ.update(old)
+
+    def test_install_setup_and_second_library(self):
+        os.makedirs(self.p("home", ".claude"))
+        claude_md = self.p("home", ".claude", "CLAUDE.md")
+        write(claude_md, "# Mine\n")
+        lib1, lib2 = self.p("home", "kb", "work"), self.p("home", "kb", "work2")
+        # language, agent, install, set up, preset, folder, scope, confirm preview, write line
+        p = self.wizard(["2", "", "", "", "2", lib1, "team projects", "", ""])
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        for s in ("kb-note", "kb-query", "kb-incremental"):
+            self.assertTrue(os.path.isfile(self.p("home", ".claude", "skills", s, "SKILL.md")))
+        self.assertTrue(os.path.isfile(os.path.join(lib1, "_kb.json")))
+        self.assertIn("I keep knowledge bases: Work (team projects).", read(claude_md))
+        # second run: keep the installed skills, a second work library gets a free id
+        p = self.wizard(["2", "", "", "n", "", "2", lib2, "", "3", "acme", "", ""])
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertIn("using 'work-2'", p.stdout)
+        libs = self.registry()["libraries"]
+        self.assertEqual([lib["id"] for lib in libs], ["work", "acme"])
+        text = read(claude_md)
+        self.assertTrue(text.startswith("# Mine\n"))
+        self.assertEqual(text.count("I keep knowledge bases:"), 1)
+        self.assertIn("Work (team projects); Work (team projects, decisions, owners, specs).", text)
+
+    def test_cancel_writes_nothing(self):
+        p = self.wizard(["2", "6", self.p("skills"), "n", "", "1", self.p("lib"), "", "n"])
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertIn("Nothing was written", p.stdout)
+        self.assertFalse(os.path.exists(self.p("lib")))
+        self.assertFalse(os.path.exists(self.p("skills")))
+
+    def test_no_terminal_needs_options(self):
+        p = subprocess.run([sys.executable, os.path.join(ROOT, "install.py")], stdin=subprocess.DEVNULL,
+                           capture_output=True, text=True)
+        self.assertEqual(p.returncode, 2)
+        self.assertIn("--target", p.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()
