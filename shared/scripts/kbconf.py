@@ -305,7 +305,10 @@ def default_limits(language):
 
 
 def default_delivery(cfg, backend_type):
-    return cfg.get("delivery") or ("direct" if backend_type == "local" else "zip")
+    """direct for every backend; zip only when set, or when a Drive library has its own inbox script."""
+    if cfg.get("delivery"):
+        return cfg["delivery"]
+    return "zip" if backend_type == "gdrive" and cfg.get("inbox") else "direct"
 
 
 def main():

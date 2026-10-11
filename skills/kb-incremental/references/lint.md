@@ -8,7 +8,7 @@ Files created or modified in the last 30 days by default. "All" checks everythin
 
 ## Checks
 
-1. Stray files in the root: names containing old_suffix, starting with snapshot_prefix or an underscore, and files that are not .md. Expected and not reported: _kb.json, _kb-params.md, and the inbox configuration file named in _kb.json inbox.config (if any).
+1. Stray files in the root: names containing old_suffix, starting with snapshot_prefix or an underscore, and files that are not .md. Expected and not reported: _kb.json, _kb-params.md, the registry file kb-libraries.json (Drive libraries), and the inbox configuration file named in _kb.json inbox.config (if any).
 2. Same-name copies (Drive only): look up each name in scope exactly; list any with two or more copies and suggest archive mode.
 3. Table E and entity pages: list the entities folder and compare with Table E names. List entities without a page and pages without an entity.
 4. Format (YAML mode): read the start of each topic file in scope. Does it start with front matter; are required fields present; are dates ISO; do entity fields hold wording outside Table E (list wording and file); are partition and topic in Table A (report only).

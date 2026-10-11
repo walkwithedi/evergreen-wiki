@@ -2,6 +2,13 @@
 
 All three skills share one version number. To release, update this file, the "Version:" line of every SKILL.md and the plugin manifests together and merge to main; the release workflow then publishes v<version>.
 
+## 1.2.0
+
+Fewer manual steps with Google Drive (found trying the guided setup in claude.ai).
+- Drive libraries are delivered directly: after a preview and "confirm", the assistant moves each old version to the archive folder and writes the new files with the Drive connector. No zip to download, unpack and upload, and no separate "archive" step. New package.py subcommands remote-preview and remote-log plan the moves and write the run log. Libraries with an inbox entry (their own unpack script), or delivery set to zip, keep the zip.
+- The registry can live in Drive (kb-libraries.json in the first library's folder), kept up to date by init mode. claude.ai Project instructions need one line pointing to it, pasted once; later libraries need no pasting. A registry pasted as JSON still works.
+- Health checks no longer report kb-libraries.json as a stray file.
+
 ## 1.1.0
 
 Guided first-time setup.

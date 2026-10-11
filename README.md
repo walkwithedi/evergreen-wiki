@@ -41,7 +41,7 @@ Claude Code users who prefer the plugin: `/plugin marketplace add walkwithedi/ev
 
 1. Download the kb-note, kb-query and kb-incremental zips from [Releases](../../releases) (the -zh zips for Chinese trigger phrases) and upload each in Settings > Capabilities > Skills.
 2. Connect Google Drive, create an empty folder for the library, and open a Project for your knowledge base.
-3. In the Project, say "get started with the knowledge base". The assistant asks three questions, shows a preview, writes the library into the folder and gives you one block to paste into the Project instructions. Paste it, save, and start a new conversation in the Project.
+3. In the Project, say "get started with the knowledge base". The assistant asks three questions, shows a preview, writes the library into the folder and gives you one line to paste into the Project instructions. Paste it, save, and start a new conversation in the Project. That line points to the library list kept in Drive, so adding more libraries later needs no further pasting, and filed material is written straight into Drive after you confirm a preview.
 
 Try everything first on the fictional [sample library](examples/). Prefer to do each step by hand, or need the registry format? See [docs/manual-setup.md](docs/manual-setup.md).
 
@@ -71,7 +71,7 @@ Every name is configurable in `_kb.json`, so an existing library in another lang
 | | Google Drive | Local folder |
 | --- | --- | --- |
 | Works in | claude.ai and Claude apps with the Drive connector; other agents with a Drive MCP server | any agent with file access (Claude Code, Codex, Gemini CLI, OpenCode, Claude desktop with file access) |
-| Delivery of filed material | one zip you upload, then "archive old versions" | written directly after you confirm a preview; old versions archived on the spot |
+| Delivery of filed material | written directly after you confirm a preview; old versions archived on the spot | the same |
 | Obsidian | via Google Drive for desktop sync | open the folder as a vault |
 
 Details: [docs/backends.md](docs/backends.md).
