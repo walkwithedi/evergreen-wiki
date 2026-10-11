@@ -29,7 +29,7 @@ python3 skills/kb-incremental/scripts/init_library.py write --root ~/kb/life --p
 
 注册表是一个小 JSON 文件，列出每个库及其范围，格式见[英文版](manual-setup.md#3-register-your-libraries)。放在 `~/.config/kb/kb-libraries.json`（Windows 为 `%APPDATA%\kb\kb-libraries.json`，或用环境变量 `KB_LIBRARIES` 指定）。`init_library.py register --id ... --label ... --scope ... --type local|gdrive --root ...` 可追加条目，id 或文件夹重复时会拒绝。
 
-claude.ai 上把注册表粘贴进项目指令即可，也可以用 `python3 scripts/build_skill.py --config 我的注册表.json --locale zh` 打私人 zip（不要公开）。
+claude.ai 上由首次引导把注册表存进 Drive（第一个库文件夹里的 kb-libraries.json），项目指令里只需一行含 `registry: Google Drive folder <文件夹 ID>, file kb-libraries.json` 的话；也可以把整段 JSON 粘贴进项目指令，或者用 `python3 scripts/build_skill.py --config 我的注册表.json --locale zh` 打私人 zip（不要公开）。
 
 范围（scope）很重要：助手靠它判断一条记录或一个问题属于哪个库。每个库写一句话，各库范围不要重叠。
 

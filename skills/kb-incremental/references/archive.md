@@ -1,8 +1,8 @@
 # Archive mode: move older same-name copies to the archive folder
 
-For Drive libraries (delivery = zip), where uploads leave several files with one name. In the main folder (and the entities folder) only the newest copy of each .md name stays; older copies move to the archive folder, renamed <stem><old_suffix><YYYYMMDDHHMMSS>.md, and a run log is written there.
+For Drive libraries where files were uploaded by hand (delivery = zip, or files added outside the skills), which leaves several files with one name. Direct delivery, the default, archives as it writes, so a library delivered that way normally has nothing to archive. In the main folder (and the entities folder) only the newest copy of each .md name stays; older copies move to the archive folder, renamed <stem><old_suffix><YYYYMMDDHHMMSS>.md, and a run log is written there.
 
-A local library (delivery = direct) archives at delivery time and never has same-name copies; for it, archive mode only reports stray files (names with old_suffix, snapshot_prefix or a leading underscore in the root) and suggests moving them.
+A local library archives at delivery time and never has same-name copies; for it, archive mode only reports stray files (names with old_suffix, snapshot_prefix or a leading underscore in the root) and suggests moving them.
 
 ## Rules
 

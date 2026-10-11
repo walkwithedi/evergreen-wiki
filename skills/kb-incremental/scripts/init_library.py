@@ -13,6 +13,9 @@ Subcommands (results on stdout, logs on stderr):
   instructions --registry FILE [--language L] [--file F [--apply]] [--project-block]
             print the instructions line, or update it in F, or print a block to paste
             into claude.ai Project instructions (the line plus the registry)
+  instructions --drive-folder ID [--language L]
+            print the one line for claude.ai Project instructions when the registry lives in
+            Google Drive (kb-libraries.json in that folder); it never changes when libraries are added
 
 Options for plan/write/render: --label --id --scope --language --timezone --sensitivity on|off --date.
 Missing options take the values printed by defaults.
@@ -54,6 +57,15 @@ LINE_TAIL = {
     "en": ". For questions about these, use kb-query before searching code or answering from memory; "
           "to save something, use kb-note.",
     "zh": "。相关问题先用 kb-query 查知识库，再查代码或凭记忆回答；要记录用 kb-note。",
+}
+# One line for a registry kept in Google Drive. The "registry: ..." part is what the skills
+# look for (references/config.md), so it stays in English in every language.
+DRIVE_LINE = {
+    "en": "I keep knowledge bases; their list and scopes are in Google Drive "
+          "(registry: Google Drive folder {folder}, file kb-libraries.json). For questions my knowledge "
+          "bases may answer, use kb-query before searching code or answering from memory; to save something, use kb-note.",
+    "zh": "我有知识库，库的清单与范围在 Google Drive 里（registry: Google Drive folder {folder}, file kb-libraries.json）。"
+          "可能记在知识库里的问题，先用 kb-query 查知识库，再查代码或凭记忆回答；要记录用 kb-note。",
 }
 REGISTRY_HEADING = {"en": "Knowledge base registry (kb-libraries.json):", "zh": "知识库注册表（kb-libraries.json）："}
 
@@ -284,7 +296,14 @@ def instructions_line(reg, language=None):
 
 
 def is_our_line(line):
-    return any(line.lstrip().startswith(p.strip()) for p in LINE_PREFIX.values())
+    """Both forms (libraries listed, or registry in Drive) start with the same words."""
+    return any(line.lstrip().startswith(p.strip().rstrip(":：")) for p in LINE_PREFIX.values())
+
+
+def drive_line(folder, language=None):
+    if not re.fullmatch(r"[A-Za-z0-9_-]{10,}", folder or ""):
+        raise kbconf.ConfigError(f"not a Drive folder ID: {folder!r}")
+    return DRIVE_LINE[lang_key(language)].format(folder=folder)
 
 
 def upsert_line(text, line):
@@ -345,6 +364,7 @@ def main():
     p.add_argument("--dry-run", action="store_true")
     p = sub.add_parser("instructions")
     p.add_argument("--registry")
+    p.add_argument("--drive-folder")
     p.add_argument("--language")
     p.add_argument("--file")
     p.add_argument("--apply", action="store_true")
@@ -378,6 +398,8 @@ def main():
             print(f"registry: {path}")
             print(json.dumps(entry, ensure_ascii=False))
             print("result: " + ("would add" if a.dry_run else "added"))
+        elif a.cmd == "instructions" and a.drive_folder:
+            print(drive_line(a.drive_folder, a.language))
         elif a.cmd == "instructions":
             path = registry_path(a.registry)
             reg = kbconf.load_json(path)

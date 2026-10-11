@@ -42,7 +42,7 @@ A registry is a small JSON file listing each library and what belongs in it:
 
 Put it in `~/.config/kb/kb-libraries.json` (on Windows `%APPDATA%\kb\kb-libraries.json`, or point `KB_LIBRARIES` at it). `init_library.py register --id ... --label ... --scope ... --type local|gdrive --root ...` adds an entry and refuses an id or folder that is already there.
 
-On claude.ai, paste it into your Project instructions, or build private zips that carry it: `python3 scripts/build_skill.py --config my-libraries.json` (never publish those).
+On claude.ai, the guided setup keeps it in Drive (kb-libraries.json in the first library's folder) and gives you one line for the Project instructions: `registry: Google Drive folder <folder id>, file kb-libraries.json` inside a short sentence. You can also paste the whole JSON into the Project instructions, or build private zips that carry it: `python3 scripts/build_skill.py --config my-libraries.json` (never publish those).
 
 The scope matters: it is how the assistant decides which library a note or question belongs to. Write one sentence per library, and keep scopes from overlapping.
 

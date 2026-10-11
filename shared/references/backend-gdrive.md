@@ -26,8 +26,27 @@ The library is a Drive folder; backend.root in the registry is its folder ID. Th
 5. A permission error on write or move means the connected Google account cannot edit that folder: stop and say so.
 6. Drive allows several files with one name in a folder. That is how versions pile up, and why archive mode exists.
 
+## Delivery (delivery = direct, the default)
+
+Drive allows several files with one name, so a new version is written only after the old one has moved to the archive folder. Same two rounds as a local library, with the connector doing the writes:
+
+1. Round 1, preview. Copy _kb.json to <work>/_kb.json. For each output file (root files, and entity pages in the entities folder), find_exact its name in the folder it goes to, and collect every copy found as {"rel": "<name or entities_dir/name>", "id": "<file id>", "modified": "<modifiedTime>"} in <work>/existing.json (an empty list when nothing exists). Then
+   python3 scripts/package.py remote-preview <work>/out --library <work>/_kb.json --existing <work>/existing.json --plan <work>/deliver-plan.json --max-name-len <Table D>
+   Show the preview: new files, and existing files whose old copy will move to the archive folder. End with: reply "confirm" to write. The turn ends here.
+2. Round 2, after the user confirms. ensure_folder the archive folder (and the entities folder if the plan has entity pages). For each item of the plan, in order:
+   a. find_exact the name again. If the copies differ from the plan (a copy appeared, disappeared or changed modifiedTime), skip the item and record "changed after preview".
+   b. move_rename each old copy listed under "archive" into the archive folder with its archive_as title.
+   c. write_new the new file (contentMimeType text/markdown, disableConversionToGoogleType true) in the root or the entities folder.
+   d. find_exact once more: exactly one copy must remain. Record "ok" or the error in <work>/results.json as {"<rel>": "ok" | "<error>"}. On a permission error stop at once and report that the connected account needs edit rights on the folder.
+3. python3 scripts/package.py remote-log --plan <work>/deliver-plan.json --results <work>/results.json prints the run log and two file names. write_new the log (text/plain) and the readme (text/plain, under the readme file name printed) into the archive folder.
+4. Report written and failed counts from the log, and the names of any failures. Nothing is left for the user to upload, and archive mode is not needed afterwards.
+
+Without Python: build the same preview by hand (archive names <stem><old_suffix><YYYYMMDDHHMMSS>.md, one second apart from now in the library timezone), carry out round 2 the same way, and write the run log with the same lines.
+
+Many files make many connector calls. Above about 30 files, say so in the preview and suggest splitting the material into two runs.
+
 ## Delivery (delivery = zip)
 
-The skills do not write knowledge files into Drive directly. Intake output is packed into one zip (scripts/package.py zip) that the user uploads; afterwards the user runs archive mode, which moves the older same-name copies to the archive folder. Quick notes (kb-note) and the second round of note filing, init and archive mode do write to Drive, always after a preview the user confirms (kb-note writes without a preview because it only ever creates one new file).
+Used only when _kb.json sets delivery to zip, or has an "inbox" entry: the user runs an inbox script that unpacks uploaded zips (an Apps Script or similar, not part of this kit). Intake output is packed into one zip (scripts/package.py zip); follow the inbox hints for upload and keep the zip layout exactly as package.py builds it. Without an inbox script, the user uploads the files by hand and then runs archive mode, which moves the older same-name copies to the archive folder.
 
-If the user runs an inbox script that unpacks uploaded zips (an Apps Script or similar, not part of this kit), _kb.json may carry an "inbox" object; follow its hints for upload, and keep the zip layout exactly as package.py builds it.
+Quick notes (kb-note), the second round of note filing, init and archive mode always write to Drive directly, after a preview the user confirms (kb-note writes without a preview because it only ever creates one new file).
