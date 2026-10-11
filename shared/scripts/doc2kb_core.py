@@ -530,7 +530,7 @@ def fs_text(s):
         s.encode('utf-8')
         return s
     except UnicodeEncodeError:
-        pass
+        pass  # not valid UTF-8: repaired below
 
     # A path may mix a UTF-8 folder name with a GBK file name; decoding the whole string
     # with one encoding garbles it, so each component is repaired on its own.
@@ -629,7 +629,7 @@ def load_date_styles(zf, names, report, source_name=''):
             try:
                 custom[int(nf.get('numFmtId'))] = nf.get('formatCode') or ''
             except (TypeError, ValueError):
-                pass
+                pass  # a malformed number format id; the cell keeps its raw value
     out = {}
     xfs = root.find(q('s', 'cellXfs'))
     if xfs is None:
@@ -1508,7 +1508,7 @@ def _html_to_text(html):
         import html as _h
         t = _h.unescape(t)
     except Exception:
-        pass
+        pass  # entities stay as they are
     t = re.sub(r'[ \t]+\n', '\n', t)
     t = re.sub(r'\n{3,}', '\n\n', t)
     return t.strip()
@@ -1556,7 +1556,7 @@ def _image_size(data):
             w, h = struct.unpack('<HH', data[6:10])
             return w, h
     except Exception:
-        pass
+        pass  # truncated or odd header: size unknown
     return 0, 0
 
 
@@ -1751,7 +1751,7 @@ def load_fp_db(path):
                 else:
                     db[parts[0]] = (parts[1], parts[2])
     except OSError:
-        pass
+        pass  # no fingerprint file yet: nothing is known
     return db
 
 
@@ -1787,7 +1787,7 @@ def _remove_entry_outputs(e, md_dir, img_root):
         if os.path.isfile(p):
             os.remove(p)
     except OSError:
-        pass
+        pass  # already gone or locked; the output stays, which is harmless
     try:
         ref = (e.get('img_ref') or '').replace('images/', '', 1)
         if ref:
@@ -1797,13 +1797,13 @@ def _remove_entry_outputs(e, md_dir, img_root):
                     try:
                         os.remove(os.path.join(d, fn))
                     except OSError:
-                        pass
+                        pass  # a file that cannot be removed stays
                 while os.path.isdir(d) and not os.listdir(d) and \
                         os.path.abspath(d) != os.path.abspath(img_root):
                     os.rmdir(d)
                     d = os.path.dirname(d)
     except OSError:
-        pass
+        pass  # a folder that cannot be removed stays
 
 
 def drop_known_entries(entries, known, md_dir, img_root):
@@ -1868,7 +1868,7 @@ def dedup_entries(entries, md_dir, img_root, report, merge=False):
                 with open(p, 'w', encoding='utf-8', errors='replace') as f:
                     f.write(_insert_after_header(txt, note))
             except OSError:
-                pass
+                pass  # the note is only a hint; the copy stays without it
         report.log(T('dup_log', keeper['rel'], len(others)))
 
     kept = [e for e in entries if id(e) not in dropped]
@@ -1937,7 +1937,7 @@ def _parse_pdf_date(s):
             return datetime.datetime(y, mo, d, h, mi, sec, tzinfo=tz
                                      ).astimezone().strftime('%Y-%m-%d %H:%M')
         except ValueError:
-            pass
+            pass  # not form 1; try form 2 below
 
     # --- form 2: pdfinfo's readable form, maybe with a zone name at the end ---
     tail_utc = bool(re.search(r'\b(UTC|GMT)\b', s))
@@ -2030,13 +2030,13 @@ def detect_modified(path):
         cands.append(datetime.datetime.fromtimestamp(st.st_mtime))
         cands.append(datetime.datetime.fromtimestamp(st.st_ctime))
     except OSError:
-        pass
+        pass  # no file system time; the document time alone decides
     doc_t, _ = read_doc_modified(path)
     if doc_t:
         try:
             cands.append(datetime.datetime.strptime(doc_t, '%Y-%m-%d %H:%M'))
         except ValueError:
-            pass
+            pass  # unexpected format; the file system times decide
     if not cands:
         return '', 'unknown'
     return max(cands).strftime('%Y-%m-%d %H:%M'), 'newest'
@@ -2095,10 +2095,11 @@ def scan_dir(root, recursive=True, since=None, time_basis='doc'):
 
 
 def human_size(n):
-    for unit in ('B', 'KB', 'MB', 'GB'):
-        if n < 1024 or unit == 'GB':
+    for unit in ('B', 'KB', 'MB'):
+        if n < 1024:
             return '%.0f %s' % (n, unit) if unit == 'B' else '%.1f %s' % (n, unit)
         n /= 1024.0
+    return '%.1f GB' % n
 
 
 def img_sub(rel_dir, base):
@@ -2670,7 +2671,7 @@ def run_batch(args):
             try:
                 entries.append(_kept_entry(src, rel, rel_dir, base, md_path, img_root))
             except OSError:
-                pass
+                pass  # output vanished meanwhile: left out of the summary
             continue
 
         print('[%d/%d] %s' % (i, total, fs_text(rel)), flush=True)
@@ -2699,7 +2700,7 @@ def run_batch(args):
                                    'mtime_src': stat.get('mtime_src', '')},
                                   g, ensure_ascii=False)
                 except OSError:
-                    pass
+                    pass  # no sidecar: the next run reads the times again
 
         entries.append({
             'rel': rel, 'stat': stat, 'summary': summary,
@@ -2720,7 +2721,7 @@ def run_batch(args):
                 os.rmdir(d)
                 d = os.path.dirname(d)
         except OSError:
-            pass
+            pass  # a folder that cannot be removed stays
 
         # write the report after every document, so a cancelled run keeps what it finished
         write_batch_report(entries, md_dir, ts, src_root, skipped, legacy,
@@ -2895,7 +2896,7 @@ def run_files(args):
             if os.path.isdir(d) and not os.listdir(d):
                 os.rmdir(d)
         except OSError:
-            pass
+            pass  # a folder that cannot be removed stays
 
     dup_groups = []
     if not getattr(args, 'no_dedup', False):
@@ -2947,7 +2948,7 @@ def main(argv=None):
         try:
             _stream.reconfigure(errors='replace')
         except (AttributeError, ValueError):
-            pass
+            pass  # a stream that cannot be reconfigured keeps its encoding
 
     ap = argparse.ArgumentParser(description='Convert Office, PDF and mail files to Markdown for a knowledge base.')
     ap.add_argument('input', nargs='?', help='input file (.docx/.xlsx/.pptx/.pdf/.eml)')

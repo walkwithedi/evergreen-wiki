@@ -231,8 +231,8 @@ def pdf(path, lines):
         "(" + ln.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)") + ") '" for ln in lines) + " ET"
     objs = ["<< /Type /Catalog /Pages 2 0 R >>",
             "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> "
-            "/Contents 5 0 R >>",
+            ("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> "
+             "/Contents 5 0 R >>"),
             "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
             f"<< /Length {len(content)} >>\nstream\n{content}\nendstream"]
     out, offsets = b"%PDF-1.4\n", []

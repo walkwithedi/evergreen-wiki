@@ -39,7 +39,6 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import doc2kb_core as core  # noqa: E402
-from doc2kb_core import T, both, text_fingerprint, moved_section_text, moved_rows  # noqa: E402
 
 log = logging.getLogger('doc2kb_dedup')
 LOG_FORMAT = '%(asctime)s [%(levelname)s] %(name)s.%(funcName)s:%(lineno)d - %(message)s'
@@ -52,8 +51,8 @@ SECTION_SPLIT = re.compile(r'\n\n---\n\n(?=# [^\n]*\n\n' + PATH_PREFIX + ')')
 PATH_LINE = re.compile('^' + PATH_PREFIX + r'(.*)$', re.M)
 SOURCE_LINE = re.compile('^' + SOURCE_PREFIX + r'(.*)$', re.M)
 COUNT_LINE = re.compile(r'> 共 (\d+) 份文档。|> (\d+) documents\. ')
-NO_TEXT_FILES = set(both('index_file'))
-NO_TEXT_SUFFIXES = tuple(both('image_list_file'))
+NO_TEXT_FILES = set(core.both('index_file'))
+NO_TEXT_SUFFIXES = tuple(core.both('image_list_file'))
 
 # labels of this script's own report and messages: (English, Chinese)
 LABELS = {
@@ -116,7 +115,7 @@ def split_merged(text):
         rel = m.group(1).strip() if m else title
         content = c.split('\n', 1)[1] if '\n' in c else ''
         sections.append({'title': title, 'rel': rel, 'text': c,
-                         'fp': text_fingerprint(content)})
+                         'fp': core.text_fingerprint(content)})
     return index_part, mark, sections
 
 
@@ -125,7 +124,7 @@ def single_doc(text, path):
     m = SOURCE_LINE.search(text)
     rel = m.group(1).strip() if m else os.path.basename(path)
     return {'title': os.path.splitext(os.path.basename(path))[0],
-            'rel': rel, 'fp': text_fingerprint(text)}
+            'rel': rel, 'fp': core.text_fingerprint(text)}
 
 
 def collect_base_files(target, bases):
@@ -203,15 +202,15 @@ def remove_index_entries(index_part, md_names):
 def add_moved_table(head, moved):
     """Add the moved-documents table to the index; if the section exists, append the rows."""
     pos = -1
-    for h in both('moved_heading'):
+    for h in core.both('moved_heading'):
         if h in head:
             pos = head.find(h)
             break
     if pos < 0:
-        return head.rstrip('\n') + '\n' + moved_section_text(moved)
+        return head.rstrip('\n') + '\n' + core.moved_section_text(moved)
     lines = head[pos:].split('\n')
     last = max(i for i, ln in enumerate(lines) if ln.startswith('|'))
-    lines[last + 1:last + 1] = moved_rows(moved)
+    lines[last + 1:last + 1] = core.moved_rows(moved)
     return head[:pos] + '\n'.join(lines)
 
 
@@ -239,10 +238,11 @@ def write_report(path, target, base_files, moved, before, after, dry_run):
 
 
 def human(n):
-    for unit in ('B', 'KB', 'MB', 'GB'):
-        if n < 1024 or unit == 'GB':
+    for unit in ('B', 'KB', 'MB'):
+        if n < 1024:
             return ('%d %s' % (n, unit)) if unit == 'B' else ('%.1f %s' % (n, unit))
         n /= 1024.0
+    return '%.1f GB' % n
 
 
 def update_fp_db(db_path, base_map, kept, target_name, moved):
@@ -257,7 +257,7 @@ def update_fp_db(db_path, base_map, kept, target_name, moved):
                 if len(parts) >= 3 and parts[0] and parts[2] != target_name:
                     lines.append(tuple(parts[:3]))
     except OSError:
-        pass
+        pass  # no fingerprint file yet: it is created below
     known = set(r[0] for r in lines)
     n0 = len(lines)
     for fp, (rel, kb) in sorted(base_map.items(), key=lambda x: x[1]):
@@ -283,7 +283,7 @@ def main(argv=None):
         try:
             _stream.reconfigure(errors='replace')
         except (AttributeError, ValueError):
-            pass
+            pass  # a stream that cannot be reconfigured keeps its encoding
 
     ap = argparse.ArgumentParser(
         description='Remove sections of a merged or incremental md whose text is already in other md files.')

@@ -242,13 +242,12 @@ class ConvertScriptTest(Tmp):
         self.assertIn("[图片：img_001.png]", read(self.p("conv", "report-zh.md")))
 
     def test_mostly_pictures_falls_back(self):
-        from doc2kb_fixtures import _doc, _img_p, _p, _rels, _zip, png, STYLES
-        body = _p("x") + "".join(_img_p(f"rId{i}") for i in range(1, 5))
-        parts = {"word/document.xml": _doc(body), "word/styles.xml": STYLES,
-                 "word/_rels/document.xml.rels": _rels([(f"rId{i}", f"media/i{i}.png") for i in range(1, 5)])}
+        body = fx._p("x") + "".join(fx._img_p(f"rId{i}") for i in range(1, 5))
+        parts = {"word/document.xml": fx._doc(body), "word/styles.xml": fx.STYLES,
+                 "word/_rels/document.xml.rels": fx._rels([(f"rId{i}", f"media/i{i}.png") for i in range(1, 5)])}
         for i in range(1, 5):
-            parts[f"word/media/i{i}.png"] = png(200, 200, i)
-        path = _zip(self.p("shots.docx"), parts)
+            parts[f"word/media/i{i}.png"] = fx.png(200, 200, i)
+        path = fx._zip(self.p("shots.docx"), parts)
         _, res = self.convert(path)
         self.assertEqual(res["files"][0]["verdict"], "fallback")
         self.assertIn("mostly pictures", res["files"][0]["reason"])
