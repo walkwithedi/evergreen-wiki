@@ -6,7 +6,9 @@ Nothing about a particular library is written in the skills. Everything comes fr
 
 Look for the registry in this order and use the first one found:
 
-1. A registry pasted into the current project instructions (claude.ai Project instructions, AGENTS.md, CLAUDE.md, GEMINI.md and the like).
+1. The current project instructions (claude.ai Project instructions, AGENTS.md, CLAUDE.md, GEMINI.md and the like), in one of two forms:
+   - a line naming a registry in Google Drive: "registry: Google Drive folder <folder id>, file kb-libraries.json". find_exact kb-libraries.json in that folder (the folder ID comes from the instructions, not from memory) and read it; several copies: use the most recently modified and mention it. Not found: say so and offer init mode; do not search elsewhere.
+   - a registry pasted as JSON (the older form; still read as is).
 2. The file named by the environment variable KB_LIBRARIES.
 3. ~/.config/kb/kb-libraries.json (on Windows %APPDATA%\kb\kb-libraries.json).
 4. config/kb-libraries.json inside this skill folder (present only in a private build made with build_skill.py --config).
@@ -28,6 +30,8 @@ If none exists, nothing is set up yet. Never guess a folder ID or path. Offer se
   ]
 }
 ```
+
+A registry in Google Drive is the same JSON, kept by kb-incremental (init mode adds entries to it), so the project instructions never change when a library is added. It sits in the root of the first Drive library under the name kb-libraries.json; the knowledge-file searches skip it because it is not a Markdown file. Drive cannot rewrite a file in place, so an update moves the old copy to that library's archive folder and writes a new one; the folder ID in the instructions stays valid.
 
 - id: short lowercase name used in replies and file names.
 - scope: one sentence saying what belongs in the library. It is how you decide which library a request or question belongs to.
@@ -70,7 +74,7 @@ The spec is the source of every rule about partitions, topics, terms and thresho
 - metadata: yaml (front matter and entity links, see entity-yaml.md) or text (plain header from _kb-params.md).
 - sensitivity.enabled: when true, class-A data (ID numbers, card and account numbers, passwords, one-time codes) is masked to at most the last keep_last characters before anything is written or shown.
 - partitions: highest partition number, first topic partition (00 and 01 hold summary files), and the fallback partition for new topics.
-- delivery: zip or direct. Empty means zip for gdrive and direct for local.
+- delivery: direct or zip. Empty means direct: the assistant writes the files into the library after you confirm a preview, and archives the old versions at the same time. A Drive library with an inbox entry (its own unpack script) defaults to zip.
 - convert: kb-incremental turns uploaded Office, PDF and mail files into Markdown with a script before reading them (fewer tokens, faster). enabled: true or false (false when the key is missing; new libraries from a preset start with true). image_limit: pictures in one batch that are read without asking (default 10); over it the user decides once for the batch. min_pdf_chars_per_page (default 200) and min_chars_per_image (default 100): below these a file is read as the original instead (a scan, or a document that is mostly pictures).
 - names: overrides for any default name below. Leave out the keys you do not change.
 

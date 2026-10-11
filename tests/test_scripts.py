@@ -245,6 +245,41 @@ class PackageTest(Tmp):
         self.assertTrue(os.path.isfile(os.path.join(self.lib, "Entities", "Self.md")))
         self.assertFalse(os.path.exists(os.path.join(self.lib, "README.txt")))
 
+    def test_remote_preview_and_log(self):
+        existing = self.p("existing.json")
+        write(existing, json.dumps([
+            {"rel": "02_Health_Report_A.md", "id": "id-old-2", "modified": "2026-10-02T00:00:00Z"},
+            {"rel": "02_Health_Report_A.md", "id": "id-old-1", "modified": "2026-10-01T00:00:00Z"}]))
+        plan = self.p("plan.json")
+        out = run("package.py", "remote-preview", self.out, "--library", os.path.join(self.lib, "_kb.json"),
+                  "--existing", existing, "--plan", plan).stdout
+        self.assertIn("(Google Drive)", out)
+        self.assertIn("+ 02_Health_Report_B.md", out)
+        self.assertIn("+ Entities/Self.md", out)
+        p = json.loads(read(plan))
+        a = next(i for i in p["items"] if i["rel"] == "02_Health_Report_A.md")
+        self.assertEqual([o["id"] for o in a["archive"]], ["id-old-1", "id-old-2"])
+        names = [o["archive_as"] for o in a["archive"]]
+        self.assertTrue(all(n.startswith("02_Health_Report_A_old") and n.endswith(".md") for n in names))
+        self.assertEqual(len(set(names)), 2)
+        self.assertEqual(next(i for i in p["items"] if i["rel"] == "Entities/Self.md")["folder"], "entities")
+        self.assertNotIn("README.txt", [i["rel"] for i in p["items"]])
+        results = self.p("results.json")
+        write(results, json.dumps({i["rel"]: "ok" for i in p["items"]}))
+        out = run("package.py", "remote-log", "--plan", plan, "--results", results).stdout
+        self.assertIn("Written 4, failed 0.", out)
+        self.assertIn("Run log file name: _run-log_", out)
+        write(results, json.dumps({"02_Health_Report_B.md": "permission denied"}))
+        p2 = run("package.py", "remote-log", "--plan", plan, "--results", results, check=False)
+        self.assertEqual(p2.returncode, 3)
+        self.assertIn("failed  | 02_Health_Report_B.md | permission denied", p2.stdout)
+
+    def test_default_delivery(self):
+        self.assertEqual(kbconf.default_delivery({}, "gdrive"), "direct")
+        self.assertEqual(kbconf.default_delivery({}, "local"), "direct")
+        self.assertEqual(kbconf.default_delivery({"inbox": {"folder": "x"}}, "gdrive"), "zip")
+        self.assertEqual(kbconf.default_delivery({"delivery": "zip"}, "local"), "zip")
+
     def test_deliver_detects_change(self):
         plan = self.p("plan.json")
         run("package.py", "preview", self.out, "--library", self.lib, "--plan", plan)
@@ -322,6 +357,17 @@ class InitLibraryTest(Tmp):
         self.assertEqual(presets, sorted(il.PRESETS))
         for p in presets:
             self.assertEqual(sorted(il.PRESET_DEFAULTS[p]), sorted(il.LANGUAGES))
+
+    def test_drive_line(self):
+        out = run("init_library.py", "instructions", "--drive-folder", "1AbCdEfGhIjKlMnOpQ", "--language", "zh").stdout
+        self.assertIn("registry: Google Drive folder 1AbCdEfGhIjKlMnOpQ, file kb-libraries.json", out)
+        self.assertTrue(out.startswith("我有知识库"))
+        self.assertEqual(run("init_library.py", "instructions", "--drive-folder", "x y", check=False).returncode, 2)
+        sys.path.insert(0, SCRIPTS)
+        import init_library as il
+        text, what = il.upsert_line("a\n我有知识库：生活（x）。\n", il.drive_line("1AbCdEfGhIjKlMnOpQ", "zh"))
+        self.assertEqual(what, "updated")
+        self.assertEqual(text.count("我有知识库"), 1)
 
     def test_upsert_line(self):
         sys.path.insert(0, SCRIPTS)

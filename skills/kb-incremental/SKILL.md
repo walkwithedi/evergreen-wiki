@@ -5,7 +5,7 @@ description: Maintains an evergreen knowledge base of Markdown files (Google Dri
 
 # Knowledge base intake, archive, health check and init
 
-Version: 1.2.0
+Version: 1.3.0
 
 ## Modes
 
@@ -185,8 +185,8 @@ Write everything to <work>/out/. Entity pages go to <work>/out/<entities_dir>/, 
 Readme sections are in params. In YAML mode the change section lists new entities and updated entity pages.
 
 Deliver by the library's delivery setting:
-- zip: python3 scripts/package.py zip <work>/out <work>/<label>_intake_YYYYMMDD.zip --library <work>/_kb.json --max-name-len <Table D>, then hand over that one zip, however few files it holds. End the delivery note with: upload the zip and its files to the library root (entity pages to the entities folder, not the readme), then say "archive" to move older versions. If _kb.json has an inbox entry, say instead to upload the zip as is to the inbox folder.
-- direct: the two rounds in references/backend-local.md (preview, confirm, deliver).
+- zip (only when _kb.json sets it, or has an inbox entry): python3 scripts/package.py zip <work>/out <work>/<label>_intake_YYYYMMDD.zip --library <work>/_kb.json --max-name-len <Table D>, then hand over that one zip, however few files it holds. End the delivery note with: upload the zip and its files to the library root (entity pages to the entities folder, not the readme), then say "archive" to move older versions. If _kb.json has an inbox entry, say instead to upload the zip as is to the inbox folder.
+- direct (the default): the two rounds in the backend file (references/backend-local.md or references/backend-gdrive.md): preview, confirm, deliver. Old versions move to the archive folder in the same step, so nothing is left for the user to upload or archive.
 
 After delivery, say in a few sentences what was processed, the trigger decision and anything that needs attention; list "Topics added this run (please review)" if any. With conversion on, include its line (references/convert.md). Do not repeat the readme.
 

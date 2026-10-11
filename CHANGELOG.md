@@ -2,7 +2,7 @@
 
 All three skills share one version number. To release, update this file, the "Version:" line of every SKILL.md and the plugin manifests together and merge to main; the release workflow then publishes v<version>.
 
-## 1.2.0
+## 1.3.0
 
 Uploads are converted to Markdown before intake.
 - kb-incremental: when _kb.json has convert.enabled, Check 1 first runs the new scripts/convert.py on the uploaded files and reads the converted text instead of the Word, Excel, PowerPoint, PDF or mail file, which saves tokens and time. A file the converter cannot handle well (conversion failed, a PDF with little text per page, a document that is mostly pictures) is read as the original; pictures, plain text and legacy formats are read as before. The step-4 hash still uses the original upload. Process in references/convert.md.
@@ -11,6 +11,13 @@ Uploads are converted to Markdown before intake.
 - New tools/doc2kb: the converter as a stand-alone tool (desktop dialogs, incremental cron mode, duplicate clean-up). Output labels and messages in English or Chinese (--lang, DOC2KB_LANG or the locale). Releases attach doc2kb-<version>.zip.
 - The converter lives in shared/scripts/doc2kb_core.py; sync_shared.py now copies shared files into tools as well as skills.
 - Converter behaviour: English picture references ("shown below", "see figure") count as describing a picture; batch runs print machine-readable STAT lines, which doc2kb.sh reads instead of matching messages; doc2kb.sh exits 3 on a first run without a time range; mail dates count as reliable in the date-filter list.
+
+## 1.2.0
+
+Fewer manual steps with Google Drive.
+- Drive libraries are delivered directly: after a preview and "confirm", the assistant moves each old version to the archive folder and writes the new files with the Drive connector. No zip to download, unpack and upload, and no separate "archive" step. New package.py subcommands remote-preview and remote-log plan the moves and write the run log. Libraries with an inbox entry (their own unpack script), or delivery set to zip, keep the zip.
+- The registry can live in Drive (kb-libraries.json in the first library's folder), kept up to date by init mode. claude.ai Project instructions need one line pointing to it, pasted once; later libraries need no pasting. A registry pasted as JSON still works.
+- Health checks no longer report kb-libraries.json as a stray file.
 
 ## 1.1.0
 

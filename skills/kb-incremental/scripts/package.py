@@ -15,6 +15,15 @@ Subcommands:
            Local backend, round 2 (after the user confirms): re-check every target, archive
            the old version (<stem><old_suffix><YYYYMMDDHHMMSS><ext>), copy the new one in,
            keep the readme in the archive folder and write a run log there.
+  remote-preview OUT --library KB_JSON --existing existing.json --plan plan.json
+           Drive backend, round 1: the same preview for a library this script cannot reach.
+           existing.json lists the copies already in the library with each output name:
+           [{"rel": "<name or entities_dir/name>", "id": "<file id>", "modified": "<time>"}].
+           The plan says, for each file, which copies move to the archive folder under which
+           name, and then which file to write; the assistant carries it out with the connector.
+  remote-log --plan plan.json --results results.json
+           Drive backend, round 2: print the run log (and its file name) from the results
+           {"<rel>": "ok" | "<error>"}, for the assistant to write into the archive folder.
 
 LIB is the library root (or its _kb.json); every name comes from its "names", the time
 stamps from its "timezone" and the file name limit from --max-name-len (Table D).
@@ -154,6 +163,97 @@ def cmd_preview(a):
     print(f"Plan written to {a.plan}. Nothing has changed yet.")
 
 
+def archive_names(stamp0, seq, base, old_suffix, count):
+    """Archive names for COUNT old copies of BASE, one second apart from stamp0 + seq."""
+    stem, ext = os.path.splitext(base)
+    out = []
+    for k in range(count):
+        stamp = (stamp0 + timedelta(seconds=seq + k)).strftime("%Y%m%d%H%M%S")
+        out.append(f"{stem}{old_suffix}{stamp}{ext}")
+    return out
+
+
+def cmd_remote_preview(a):
+    cfg = load_names(a.library)
+    names = cfg["names"]
+    files, errors = check_output(a.out, names, a.max_name_len)
+    try:
+        with open(a.existing, encoding="utf-8") as f:
+            existing = json.load(f)
+        if not isinstance(existing, list):
+            raise ValueError("existing must be a JSON list")
+    except (OSError, ValueError) as e:
+        errors.append(f"cannot read {a.existing}: {e}")
+        existing = []
+    for e in errors:
+        print(f"Error: {e}")
+    if errors:
+        print("Result: check failed, nothing planned")
+        sys.exit(3)
+    copies = {}
+    for c in existing:
+        copies.setdefault(c.get("rel"), []).append(c)
+    stamp0 = kbconf.now(cfg["timezone"]).replace(microsecond=0)
+    items, seq = [], 0
+    for r, p in files:
+        if r == names["readme"]:
+            continue
+        old = sorted(copies.get(r, []), key=lambda c: str(c.get("modified", "")))
+        names_for = archive_names(stamp0, seq, os.path.basename(r), names["old_suffix"], len(old))
+        seq += len(old)
+        items.append({"rel": r, "src": os.path.abspath(p), "folder": "entities" if "/" in r else "root",
+                      "archive": [{"id": c.get("id"), "archive_as": n} for c, n in zip(old, names_for)]})
+    plan = {"library": cfg.get("label") or "library", "backend": "gdrive",
+            "archive_dir": names["archive_dir"], "entities_dir": names["entities_dir"],
+            "readme": os.path.abspath(os.path.join(a.out, names["readme"])),
+            "timezone": cfg["timezone"], "log_prefix": names["run_log_prefix"],
+            "base_time": stamp0.strftime("%Y-%m-%d %H:%M:%S"), "items": items}
+    with open(a.plan, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(plan, f, ensure_ascii=False, indent=1)
+    new = [i for i in items if not i["archive"]]
+    upd = [i for i in items if i["archive"]]
+    print("=== Preview ===")
+    print(f"Library: {plan['library']} (Google Drive)")
+    print(f"New files: {len(new)}")
+    for i in new:
+        print(f"  + {i['rel']}")
+    print(f"New versions (old copy goes to {names['archive_dir']}/): {len(upd)}")
+    for i in upd:
+        for o in i["archive"]:
+            print(f"  ~ {i['rel']}  old -> {names['archive_dir']}/{o['archive_as']}")
+    print(f"Plan written to {a.plan}. Nothing has changed yet.")
+
+
+def cmd_remote_log(a):
+    try:
+        with open(a.plan, encoding="utf-8") as f:
+            plan = json.load(f)
+        with open(a.results, encoding="utf-8") as f:
+            results = json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        log.error("cannot read plan or results: %s", e)
+        sys.exit(2)
+    lines = ["=== Delivery ===", f"Library: {plan['library']} (Google Drive)", f"Time: {plan['base_time']}", ""]
+    ok = fail = 0
+    for i in plan["items"]:
+        res = results.get(i["rel"], "not done")
+        if res == "ok":
+            ok += 1
+            for o in i["archive"]:
+                lines.append(f"  archive | {i['rel']} -> {o['archive_as']}")
+            lines.append(f"  write   | {i['rel']}")
+        else:
+            fail += 1
+            lines.append(f"  failed  | {i['rel']} | {res}")
+    end = kbconf.now(plan["timezone"]).strftime("%Y%m%d_%H%M%S")
+    lines += ["", f"Written {ok}, failed {fail}.", "", "=== End ==="]
+    print("\n".join(lines))
+    print(f"Run log file name: {plan['log_prefix']}{end}.txt")
+    print(f"Readme file name: _delivery_{end}_README.txt")
+    if fail:
+        sys.exit(3)
+
+
 def cmd_deliver(a):
     try:
         with open(a.plan, encoding="utf-8") as f:
@@ -213,10 +313,15 @@ def main():
     p = sub.add_parser("preview"); p.add_argument("out"); p.add_argument("--library", required=True)
     p.add_argument("--plan", required=True); p.add_argument("--max-name-len", type=int, default=0)
     p = sub.add_parser("deliver"); p.add_argument("--plan", required=True)
+    p = sub.add_parser("remote-preview"); p.add_argument("out"); p.add_argument("--library", required=True)
+    p.add_argument("--existing", required=True); p.add_argument("--plan", required=True)
+    p.add_argument("--max-name-len", type=int, default=0)
+    p = sub.add_parser("remote-log"); p.add_argument("--plan", required=True); p.add_argument("--results", required=True)
     a = ap.parse_args()
     kbconf.setup_logging(a.log_level)
     log.info("subcommand: %s", a.cmd)
-    {"zip": cmd_zip, "preview": cmd_preview, "deliver": cmd_deliver}[a.cmd](a)
+    {"zip": cmd_zip, "preview": cmd_preview, "deliver": cmd_deliver,
+     "remote-preview": cmd_remote_preview, "remote-log": cmd_remote_log}[a.cmd](a)
 
 
 if __name__ == "__main__":
