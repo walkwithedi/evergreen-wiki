@@ -112,7 +112,7 @@ class ConverterTest(Tmp):
         self.assertIn("（来源：文档属性）", md)
         self.assertIn("[图 001：范围，见 images/report-zh/img_001.png]\n", md)
         self.assertIn("← 孤儿图（周围无文字描述）", md)
-        self.assertIn("> 注：本目录下另有 1 份内容相同的副本，已略去：sub/report-zh.docx", md)
+        self.assertIn("> 注：本目录下另有 1 份内容相同的副本，已略去：" + os.path.join("sub", "report-zh.docx"), md)
         for name in ("_知识库索引.md", "_批量处理报告.txt", "_图片清单.md"):
             self.assertTrue(os.path.isfile(os.path.join(out, name)), name)
         self.assertIn("建议优先人工查看", read(os.path.join(out, "_图片清单.md")))
