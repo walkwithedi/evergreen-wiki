@@ -2,6 +2,8 @@
 
 Thanks for helping. A few rules keep the skills reliable:
 
+0. Run `git config core.hooksPath .githooks` once after cloning. The pre-commit hook then runs scripts/run_checks.py (unit tests, repository checks, shared copies, personal-data scan) and stops a commit that fails any of them. Claude Code sessions run the same checks through .claude/settings.json: a baseline when a cloud session starts, and before every git commit Claude makes. CI runs them again on every pull request, and CodeQL (.github/workflows/codeql.yml) scans the Python scripts and workflows for bugs and security problems; findings show on the pull request and under Security > Code scanning.
+
 1. Edit shared files only under shared/, then run python3 scripts/sync_shared.py. CI fails when a copy is stale.
 2. Keep environment-specific tool names and paths in the backend and environment references; SKILL.md and other references use the abstract operations. scripts/check_repo.py enforces this.
 3. Scripts use only the Python standard library, run on Python 3.8+, log to stderr in the format used by the other scripts and accept --log-level.

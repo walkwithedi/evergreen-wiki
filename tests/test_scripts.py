@@ -391,5 +391,22 @@ class WizardTest(Tmp):
         self.assertIn("--target", p.stderr)
 
 
+class HookTest(unittest.TestCase):
+    def test_commit_detection(self):
+        sys.path.insert(0, os.path.join(ROOT, ".claude", "hooks"))
+        import pre_commit
+        for cmd in ("git commit -m x", "cd a && git -C sub commit -qam 'y'", "git -c user.name=t commit",
+                    "git add -A && git commit -F msg.txt"):
+            self.assertTrue(pre_commit.is_commit(cmd), cmd)
+        for cmd in ("git status", "git log --grep commit", "echo commit", "git commit-tree abc", ""):
+            self.assertFalse(pre_commit.is_commit(cmd), cmd)
+
+    def test_other_commands_pass(self):
+        p = subprocess.run([sys.executable, os.path.join(ROOT, ".claude", "hooks", "pre_commit.py")],
+                           input=json.dumps({"tool_name": "Bash", "tool_input": {"command": "ls"}}),
+                           capture_output=True, text=True)
+        self.assertEqual(p.returncode, 0)
+
+
 if __name__ == "__main__":
     unittest.main()
