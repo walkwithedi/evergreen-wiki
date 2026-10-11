@@ -398,7 +398,8 @@ def main():
     a = ap.parse_args()
     logging.basicConfig(level=a.log_level, format=LOG_FORMAT, stream=sys.stderr)
     if a.wizard or not (a.target or a.dest):
-        if not a.wizard and not sys.stdin.isatty():
+        # Both ends must be a terminal: on Windows the NUL device reports isatty() as true.
+        if not a.wizard and not (sys.stdin.isatty() and sys.stdout.isatty()):
             ap.error("give --target or --dest, or run without options in a terminal for interactive setup")
         if a.locale or a.link or a.force or a.dry_run:
             ap.error("--locale, --link, --force and --dry-run go with --target or --dest; the wizard asks instead")
