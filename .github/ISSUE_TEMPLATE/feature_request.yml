@@ -1,0 +1,28 @@
+name: Idea or improvement
+description: Something the skills should do, or do better
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What gets in the way today
+      description: The situation and what you would like to happen
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Your idea (optional)
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part
+      multiple: true
+      options:
+        - kb-note
+        - kb-query
+        - kb-incremental
+        - Setup and installer
+        - Presets
+        - Documentation
+        - Other
