@@ -5,7 +5,7 @@ description: Maintains an evergreen knowledge base of Markdown files (Google Dri
 
 # Knowledge base intake, archive, health check and init
 
-Version: 1.4.0
+Version: 1.5.0
 
 ## Modes
 
@@ -53,6 +53,8 @@ You file and judge; you do not advise, recommend or evaluate. These rules apply 
 ## Input checks
 
 Check 1: material is readable. Handle several items one by one, never merged. Read images and scans as text first; record unreadable parts as they are and log them as issues. Keep the path of each original upload (the file itself, not a converted copy) for the hash in step 4; pasted text has no original file and step 4 runs without --file.
+
+No material given: the user asks for intake but names no path and uploads or pastes nothing. For a local library where you can run commands, offer the desktop picker (references/pick-material.md); otherwise ask where the material is. When the user named a path or uploaded files, never open the picker.
 
 Conversion, before reading anything: when _kb.json convert.enabled is true (or the user asks for it in this request, and not when the user says not to convert this batch), convert the uploaded files with references/convert.md, which says which file to read for each item and what to do with the pictures in them. Off, or without Python: read the originals as before.
 

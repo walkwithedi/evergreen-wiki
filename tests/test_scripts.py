@@ -291,6 +291,60 @@ class PackageTest(Tmp):
         self.assertEqual(read(os.path.join(self.lib, "02_Health_Report_A.md")), "edited meanwhile, longer\n")
 
 
+@unittest.skipIf(os.name == "nt", "fake zenity is a shell script")
+class PickMaterialsTest(Tmp):
+    """pick_materials.py against a fake zenity that replays scripted answers."""
+
+    def pick(self, answers, display=True, zenity=True):
+        bin_dir = self.p("bin")
+        os.makedirs(bin_dir, exist_ok=True)
+        # each call takes the next "<exit code> <output>" line and logs its arguments
+        write(os.path.join(bin_dir, "zenity"),
+              "#!/bin/sh\n"
+              'n=$(cat "$ZDIR/n" 2>/dev/null || echo 0); n=$((n + 1)); echo $n > "$ZDIR/n"\n'
+              'echo "$*" >> "$ZDIR/calls"\n'
+              'line=$(sed -n "${n}p" "$ZDIR/answers")\n'
+              'printf \'%b\' "${line#* }"\n'
+              'exit "${line%% *}"\n')
+        os.chmod(os.path.join(bin_dir, "zenity"), 0o755)
+        write(self.p("answers"), "".join(a + "\n" for a in answers))
+        # without zenity, PATH holds only an empty folder, so a real zenity on the machine is not found
+        path = bin_dir + os.pathsep + "/usr/bin:/bin" if zenity else self.p("empty")
+        env = dict(os.environ, ZDIR=self.d, PATH=path)
+        env.pop("WAYLAND_DISPLAY", None)
+        if display:
+            env["DISPLAY"] = ":0"
+        else:
+            env.pop("DISPLAY", None)
+        p = subprocess.run([sys.executable, os.path.join(SCRIPTS, "pick_materials.py"), "--start", self.d,
+                            "--timeout", "7", "--language", "zh"],
+                           capture_output=True, text=True, encoding="utf-8", env=env)
+        calls = read(self.p("calls")).splitlines() if os.path.exists(self.p("calls")) else []
+        return p.returncode, p.stdout.splitlines(), calls
+
+    def test_folder(self):
+        rc, out, calls = self.pick(["0 folder\\n", "0 " + self.p("in") + "\\n"])
+        self.assertEqual((rc, out), (0, [self.p("in")]))
+        self.assertIn("--directory", calls[1])
+        self.assertIn("--timeout 7", calls[0])
+        self.assertIn("选择要入库的材料", calls[0])
+
+    def test_several_files(self):
+        rc, out, calls = self.pick(["0 files\\n", "0 /a b.docx\\n/c.pdf\\n"])
+        self.assertEqual((rc, out), (0, ["/a b.docx", "/c.pdf"]))
+        self.assertIn("--multiple", calls[1])
+        self.assertNotIn("--directory", calls[1])
+
+    def test_cancel_and_timeout(self):
+        self.assertEqual(self.pick(["1 "])[0], 4)
+        os.remove(self.p("n"))
+        self.assertEqual(self.pick(["0 folder\\n", "5 "])[0], 5)
+
+    def test_no_dialog_possible(self):
+        self.assertEqual(self.pick([], display=False)[:2], (3, []))
+        self.assertEqual(self.pick([], zenity=False)[:2], (3, []))
+
+
 class InitLibraryTest(Tmp):
     def test_write_matches_preset(self):
         root = self.p("kb", "life")
@@ -438,7 +492,7 @@ class WizardTest(Tmp):
         text = read(claude_md)
         self.assertTrue(text.startswith("# Mine\n"))
         self.assertEqual(text.count("I keep knowledge bases:"), 1)
-        self.assertIn("Work (team projects); Work (team projects, decisions, owners, specs).", text)
+        self.assertIn("Work (team projects); Work (work goals and plans, projects and tasks, meetings and decisions, policies and procedures, reports).", text)
 
     def test_cancel_writes_nothing(self):
         p = self.wizard(["2", "6", self.p("skills"), "n", "", "1", self.p("lib"), "", "n"])

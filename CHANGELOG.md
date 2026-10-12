@@ -2,6 +2,12 @@
 
 All three skills share one version number. To release, update this file, the "Version:" line of every SKILL.md and the plugin manifests together and merge to main; the release workflow then publishes v<version>.
 
+## 1.5.0
+
+Picking material on the desktop, and a general default scope for work libraries.
+- kb-incremental: when the user asks for intake without naming a path, uploading files or pasting text, and the library is a local folder, the new scripts/pick_materials.py asks whether to file a folder or files and opens the matching desktop chooser (zenity; files can be selected several at once). Without a graphical session or zenity, on cancel or after --timeout seconds it exits with a code that tells the assistant to ask for the path instead. Process in references/pick-material.md. A named path or an upload never opens the picker.
+- The suggested scope of a new work library is "work goals and plans, projects and tasks, meetings and decisions, policies and procedures, reports" (Chinese: 工作目标与计划、项目与事务、会议与决策、制度流程、报表等工作资料), in line with the 1.4.0 partitions. The installer and the manual-setup examples use the same wording. Existing libraries keep their scope.
+
 ## 1.4.0
 
 A general-purpose work preset, in English and Chinese.

@@ -46,8 +46,8 @@ LANGUAGES = ("en", "zh")
 PRESET_DEFAULTS = {
     "life": {"en": ("Life", "me and my family: IDs, health, insurance, money, home"),
              "zh": ("生活", "我和家人：证件、健康、保险、财务、住房")},
-    "work": {"en": ("Work", "team projects, decisions, owners, specs"),
-             "zh": ("工作", "团队项目、决策、负责人、规范")},
+    "work": {"en": ("Work", "work goals and plans, projects and tasks, meetings and decisions, policies and procedures, reports"),
+             "zh": ("工作", "工作目标与计划、项目与事务、会议与决策、制度流程、报表等工作资料")},
 }
 
 # The line that tells the assistant the libraries exist. The prefix is how an existing
