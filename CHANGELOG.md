@@ -4,6 +4,14 @@ All three skills share one version number. To release, update this file, the "Ve
 
 ## Unreleased
 
+## 1.8.0
+
+Filing a large folder in batches.
+- kb-incremental: intake of files or folders on disk first runs the new scripts/batch_plan.py, which lists the material per first-level subfolder (count, size, types), leaves out files already in the library by content hash, identical copies, archives and types intake cannot read, and cuts the rest into batches: one per subfolder, a large one split in file name order, loose files as one more. A batch closes at intake.batch_files files or intake.batch_mb megabytes (new _kb.json key, defaults 10 and 20). One batch: intake runs as before.
+- With more than one batch the user sees the plan and starts the run once; the batches are then filed and delivered in turn without further questions, with one progress line each. Step 5 and the spec rewrite for new topics and entities wait for one final step, which rewrites the summary files once (with the usual preview) and lists every item to review. Questions that would stop a batch take the conservative rule and go on the review list. Process in references/batches.md.
+- Progress is kept in the library root (names.batch_plan, default _intake-batches.json; underscore names are never sources) and moved to the archive folder when the run is finished. "Continue intake" picks up an open run in a new conversation; "finish intake" runs the final step early.
+- The local backend's preview rule counts the start of a batch run as the confirmation for its batch deliveries.
+
 ## 1.7.0
 
 Choosing the library folder on the desktop.

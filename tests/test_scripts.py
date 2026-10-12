@@ -368,6 +368,94 @@ class PickMaterialsTest(Tmp):
         self.assertIn("--filename " + os.path.expanduser("~") + os.sep, calls[1])
 
 
+class BatchPlanTest(Tmp):
+    def setUp(self):
+        super().setUp()
+        write(self.p("lib", "_kb.json"), json.dumps({"schema": 1, "intake": {"batch_files": 2}}))
+        write(self.p("known.docx"), "already filed")
+        h = run("index_tool.py", "hash", self.p("known.docx")).stdout.strip()
+        write(self.p("lib", "01_File-Index.md"), "| File name | Source file name | Source hash |\n| --- | --- | --- |\n"
+                                                 f"| 03_Projects_Report_Old.md | known.docx | {h} |\n")
+        write(self.p("lib", "03_Projects_Report_Old.md"), "never material")
+        for i in range(3):
+            write(self.p("mat", "Alpha", f"a{i}.docx"), f"alpha {i}")
+        write(self.p("mat", "Beta", "deep", "b.pdf"), "beta")
+        write(self.p("mat", "Beta", "again.docx"), "already filed")
+        write(self.p("mat", "Beta", "copy.pdf"), "alpha 0")
+        write(self.p("mat", "Beta", "pack.zip"), "zip")
+        write(self.p("mat", "Beta", "~$lock.docx"), "lock")
+        write(self.p("mat", "loose.txt"), "loose")
+        self.plan = self.p("lib", "_intake-batches.json")
+
+    def bp(self, *args, check=True):
+        return run("batch_plan.py", *args, "--plan", self.plan, check=check)
+
+    def make_plan(self, *extra):
+        return run("batch_plan.py", "plan", self.p("mat"), self.p("lib"), "--plan", self.plan,
+                   "--library-root", self.p("lib"), "--index", self.p("lib", "01_File-Index.md"), *extra)
+
+    def test_plan_groups_limits_and_exclusions(self):
+        out = self.make_plan().stdout
+        self.assertIn("left out, duplicates: 2", out)
+        self.assertIn("already in the library as 03_Projects_Report_Old.md", out)
+        self.assertIn("same content as mat/Alpha/a0.docx", out)
+        self.assertIn("archive: unpack it first", out)
+        self.assertNotIn("lock", out)
+        self.assertIn("batches: 4", out)
+        plan = json.loads(read(self.plan))
+        got = [(b["group"], b["part"], [f["rel"] for f in b["files"]]) for b in plan["batches"]]
+        self.assertEqual(got, [("mat/Alpha", "1/2", ["mat/Alpha/a0.docx", "mat/Alpha/a1.docx"]),
+                               ("mat/Alpha", "2/2", ["mat/Alpha/a2.docx"]),
+                               ("mat/Beta", "", ["mat/Beta/deep/b.pdf"]),
+                               ("mat/(loose files)", "", ["mat/loose.txt"])])
+        self.assertTrue(all(f["kind"] in ("convert", "text") for b in plan["batches"] for f in b["files"]))
+
+    def test_first_and_size_limit(self):
+        out = self.make_plan("--first", "Beta", "--batch-files", "5").stdout
+        self.assertIn("batch 1: mat/Beta |", out)
+        self.assertIn("batch 2: mat/Alpha |", out)
+
+    def test_single_batch_writes_nothing(self):
+        out = run("batch_plan.py", "plan", self.p("mat", "Alpha"), "--plan", self.plan, "--batch-files", "10").stdout
+        self.assertIn("one batch, no batching needed", out)
+        self.assertFalse(os.path.exists(self.plan))
+
+    def test_progress_and_resume(self):
+        self.make_plan()
+        nxt = self.bp("next").stdout
+        self.assertIn("batch: 1/4 | mat/Alpha part 1/2 | 2 files", nxt)
+        self.assertIn("file: " + self.p("mat", "Alpha", "a0.docx"), nxt)
+        self.bp("done", "--batch", "1", "--written", "2")
+        self.bp("skip", "--batch", "2")
+        self.bp("add", "--batch", "3", "--kind", "trigger", "--text", "status card item 4: new deadline",
+                "--file", "b.pdf")
+        self.bp("add", "--batch", "3", "--kind", "review", "--text", "renamed to distinguish")
+        p = run("batch_plan.py", "plan", self.p("mat"), "--plan", self.plan, check=False)
+        self.assertEqual(p.returncode, 3)
+        self.assertIn("a plan with pending batches exists", p.stdout)
+        status = self.bp("status").stdout
+        self.assertIn("batches: 4 | done 1 | skipped 1 | pending 2", status)
+        self.assertIn("next: batch 3 mat/Beta", status)
+        self.assertIn("batch 3 [b.pdf]: status card item 4: new deadline", status)
+        self.bp("done", "--batch", "3")
+        self.bp("done", "--batch", "4")
+        self.assertEqual(self.bp("next", check=False).returncode, 1)
+        fin = self.bp("finish").stdout
+        self.assertIn("renamed to distinguish", fin)
+        self.assertIn("final step: done", fin)
+        self.assertIn("result: archive the plan", fin)
+        self.assertNotIn("renamed to distinguish", self.bp("status").stdout)
+        self.assertEqual(run("batch_plan.py", "plan", self.p("mat"), "--plan", self.plan).returncode, 0)
+
+    def test_bad_input(self):
+        self.make_plan()
+        self.assertEqual(self.bp("done", "--batch", "9", check=False).returncode, 2)
+        self.assertEqual(run("batch_plan.py", "plan", self.p("nope"), "--plan", self.p("x.json"), check=False).returncode, 2)
+        problems = kbconf.validate({"schema": 1, "intake": {"batch_files": 0, "pages": 3}})
+        self.assertIn("intake.batch_files must be a whole number of 1 or more", problems)
+        self.assertIn("unknown intake key 'pages'", problems)
+
+
 class InitLibraryTest(Tmp):
     def test_write_matches_preset(self):
         root = self.p("kb", "life")

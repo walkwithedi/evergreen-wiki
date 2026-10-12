@@ -1,11 +1,11 @@
 ---
 name: kb-incremental
-description: Files material (Office, PDF, mail, pictures, text) into an evergreen Markdown knowledge base (Google Drive folder or local/Obsidian vault). Five modes. Intake - "file these", "add to the knowledge base", "intake", or uploaded material: files it by the library spec, removes duplicates, spots new versions, flags changed conclusions, updates the index, writes an intake note. Archive - "archive old versions", "clean up duplicates": moves old copies to the archive after a preview, never deletes. Health check - "check the knowledge base", "health check": reports stale, duplicate and missing files, changes nothing. Init and first-time guide - "get started with the knowledge base", "first time", "set up a knowledge base", "new library", "init": sets up or connects a library step by step. Quick-note filing - "file my quick notes", "notes are filed": files kb-note notes. Use it for any filing or library setup, even without these words. Not for questions (kb-query) or saving one note (kb-note).
+description: Files material (Office, PDF, mail, pictures, text) into an evergreen Markdown knowledge base (Google Drive folder or local/Obsidian vault). Five modes. Intake - "file these", "add to the knowledge base", "intake", "continue intake", or uploaded material: files it by the library spec, a large folder in batches after a plan, removes duplicates, spots new versions, flags changed conclusions, updates the index. Archive - "archive old versions", "clean up duplicates": moves old copies to the archive after a preview, never deletes. Health check - "check the knowledge base", "health check": reports stale, duplicate and missing files only. Init and first-time guide - "get started with the knowledge base", "first time", "set up a knowledge base", "new library", "init": sets up or connects a library step by step. Quick-note filing - "file my quick notes", "notes are filed": files kb-note notes. Use it for any filing or setup, even without these words. Not for questions (kb-query) or saving one note (kb-note).
 ---
 
 # Knowledge base intake, archive, health check and init
 
-Version: 1.7.0
+Version: 1.8.0
 
 ## Modes
 
@@ -13,6 +13,7 @@ Version: 1.7.0
 - Archive: after step 0, read references/archive.md and follow it instead of the five steps.
 - Health check: after step 0, read references/lint.md. Report only, change nothing.
 - Quick-note filing: read references/notes.md and follow its two rounds; its intake part still uses step 0 and the five steps.
+- Batch mode: intake of files or folders on disk that make more than one batch, or "continue intake" / "finish intake". After step 0 and Check 1, read references/batches.md: it plans the batches, runs steps 1 to 4 and delivery once per batch, and keeps step 5 and topic expansion's spec rewrite for one final step.
 - Init and getting started: read references/init.md and follow it (getting started looks at the environment first; the existing-library branch runs step 0 first; the new-library branch skips it).
 - One request asking for intake and archive: do the intake first. With delivery = direct there is nothing to archive afterwards. With delivery = zip, wait until the user confirms the upload, then run archive mode (or let the user's inbox script do it if _kb.json has an inbox entry).
 
@@ -55,6 +56,8 @@ You file and judge; you do not advise, recommend or evaluate. These rules apply 
 Check 1: material is readable. Handle several items one by one, never merged. Read images and scans as text first; record unreadable parts as they are and log them as issues. Keep the path of each original upload (the file itself, not a converted copy) for the hash in step 4; pasted text has no original file and step 4 runs without --file.
 
 No material given: the user asks for intake but names no path and uploads or pastes nothing. For a local library where you can run commands, open the desktop picker (references/pick-material.md, material); otherwise ask where the material is. When the user named a path or uploaded files, never open the picker.
+
+Many files: when the material is files or folders on disk and commands can run, plan the batches before reading any of it (references/batches.md). One batch: go on here as usual. More than one: follow batches.md.
 
 Conversion, before reading anything: when _kb.json convert.enabled is true (or the user asks for it in this request, and not when the user says not to convert this batch), convert the uploaded files with references/convert.md, which says which file to read for each item and what to do with the pictures in them. Off, or without Python: read the originals as before.
 
@@ -192,4 +195,4 @@ Deliver by the library's delivery setting:
 
 After delivery, say in a few sentences what was processed, the trigger decision and anything that needs attention; list "Topics added this run (please review)" if any. With conversion on, include its line (references/convert.md). Do not repeat the readme.
 
-Intake only creates files. It never deletes or moves existing library files, except the archive step of direct delivery and the second round of quick-note filing, both after the user confirms.
+Intake only creates files. It never deletes or moves existing library files, except the archive step of direct delivery and the second round of quick-note filing, both after the user confirms. Batch mode also writes and updates its progress file (names.batch_plan) in the library root and moves it to the archive folder when the run is finished (references/batches.md).
