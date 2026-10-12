@@ -2,7 +2,7 @@
 
 All three skills share one version number. To release, update this file, the "Version:" line of every SKILL.md and the plugin manifests together and merge to main; the release workflow then publishes v<version>.
 
-## Unreleased
+## 1.6.0
 
 doc2kb reads archives and parses identical files once; clearer skill descriptions.
 - Skill descriptions (English and Chinese) say in plain words what each skill does for the user, with example requests: kb-incremental lists what intake, archive, health check, init and quick-note filing each do; kb-query says each fact names its source file and what happens when nothing is found; kb-note says it only creates new files and reminds the user to file notes that pile up. Every trigger phrase is kept.
