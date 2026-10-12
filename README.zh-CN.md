@@ -31,6 +31,10 @@ python3 install.py
 
 习惯用插件的 Claude Code 用户：`/plugin marketplace add walkwithedi/evergreen-wiki`，再 `/plugin install evergreen-wiki@evergreen-wiki`，重启后说「开始使用知识库」。
 
+电脑不能联网时：在别处从 [Releases](../../releases) 下载 evergreen-wiki-v<版本>.zip，拷过去解压，在文件夹里运行 `python3 install.py`；只需要 Python 3.8 及以上，不用装别的。
+
+以后在同一文件夹里还可以运行：`python3 install.py backup`（备份）、`rollback`（回滚）、`move <库 id> --to <文件夹>`（移动知识库）、`uninstall`（卸载）。替换技能、注册表或指令文件前会先自动备份；知识库文件夹从不进备份，移动时逐个文件核对一致后才改注册表，卸载时除非逐个勾选，否则一律保留。详见 [docs/manual-setup.zh-CN.md](docs/manual-setup.zh-CN.md#6-备份回滚移动卸载)。
+
 ### 在 claude.ai 或 Claude App 里（Google Drive）
 
 1. 从 [Releases](../../releases) 下载带 -zh 的 kb-note、kb-query、kb-incremental 三个 zip，在设置的 Skills 页面逐个上传。
