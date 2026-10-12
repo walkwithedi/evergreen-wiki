@@ -2,8 +2,12 @@
 
 All three skills share one version number. To release, update this file, the "Version:" line of every SKILL.md and the plugin manifests together and merge to main; the release workflow then publishes v<version>.
 
-## Unreleased
+## 1.9.0
 
+Backup, rollback, moving a library and uninstall in the installer.
+- install.py backup, rollback, move and uninstall (kb_manage.py): backup copies the installed skills, the instructions files holding the knowledge-base line, the registry and the install record; rollback restores one and backs up the present state first; move copies a registered local library and its material folder, compares every file (size and SHA-256) and only then points the registry to the new place, refusing while a batch intake is unfinished; uninstall removes the skills, the line, the registry, the install record and the backups, and deletes a library folder only when it is picked and the confirmation word typed. Messages in English and Chinese. Details in docs/manual-setup.md, section 6.
+- The installer records where it wrote (~/.config/evergreen-wiki/state.json) and backs up the present state before it replaces skills, adds to a registry or writes the knowledge-base line.
+- README: offline installation from the release zip.
 - kb-incremental: the description lists "finish intake" (「结束入库」) with the other intake phrases, so the request starts the skill on its own.
 
 ## 1.8.0

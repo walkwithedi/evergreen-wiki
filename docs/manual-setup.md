@@ -66,3 +66,14 @@ Without it, questions that do not sound personal (for example "what is the payme
 ## 5. Use it
 
 "note this", "file these" with attachments, or just ask.
+
+## 6. Back up, roll back, move, uninstall
+
+Run these from the evergreen-wiki folder. Each one shows what it will do and asks before it changes anything; add `--lang zh` for Chinese messages.
+
+- `python3 install.py backup [--note TEXT]` copies the installed skills, every instructions file that holds the knowledge-base line, the registry and the install record. The installer does the same on its own before it replaces skills, adds to a registry or writes the line.
+- `python3 install.py rollback [--id ID]` restores one backup. The state before the restore is backed up first, so a rollback can be undone the same way.
+- `python3 install.py move <library id> --to <folder>` moves a registered local library into that folder, keeping its folder name; a material folder next to it (`<library>-inbox` or `<library>-待整理`) moves with it. The folders are copied, then compared file by file (size and SHA-256, empty folders and symbolic links included); only when everything matches does the registry point to the new place. Otherwise the copy is removed and nothing else changes. It refuses while a batch intake is unfinished, when the new place is inside the library, is not empty or is registered to another library, or when the disk is too small. Deleting the original folders is offered last, off by default and only after typing `delete`; they are compared once more first. Quit your agent before moving and restart it afterwards; in Obsidian, open the new folder.
+- `python3 install.py uninstall` removes the three skills from every folder the installer used, the knowledge-base line (the rest of each file stays; a file left empty is deleted), the registry with every library in it, and the install record with all backups. Library folders stay unless you choose to delete them, are asked one at a time (default no) and type `delete`. Only folders with `_kb.json` or a `00_` spec file are offered; symbolic links, the root, your home folder and folders holding it, this program or an agent's settings never are. A plugin install is removed with `/plugin`.
+
+The install record and backups live in `~/.config/evergreen-wiki/` (`%APPDATA%\evergreen-wiki` on Windows; `XDG_CONFIG_HOME` moves it). Library folders are never part of a backup: a rollback after a move restores only the registry entry, so roll back past a move only while the original folder still exists.

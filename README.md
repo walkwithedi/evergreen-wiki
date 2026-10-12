@@ -41,6 +41,10 @@ The installer asks for your language and agent, installs the three skills, sets 
 
 Claude Code users who prefer the plugin: `/plugin marketplace add walkwithedi/evergreen-wiki`, then `/plugin install evergreen-wiki@evergreen-wiki`, restart, and say "get started with the knowledge base".
 
+No network on the computer? Download evergreen-wiki-v<version>.zip from [Releases](../../releases) elsewhere, copy it over, unzip it and run `python3 install.py` in the folder; it needs Python 3.8 or later and nothing else.
+
+Later, from the same folder: `python3 install.py backup`, `rollback`, `move <library id> --to <folder>` and `uninstall`. Replacing skills, a registry or an instructions file is backed up first; library folders are never part of a backup, a move changes the registry only after every copied file matches, and uninstall keeps them unless you pick each one. See [docs/manual-setup.md](docs/manual-setup.md#6-back-up-roll-back-move-uninstall).
+
 ### In claude.ai or the Claude apps (Google Drive)
 
 1. Download the kb-note, kb-query and kb-incremental zips from [Releases](../../releases) (the -zh zips for Chinese trigger phrases) and upload each in Settings > Capabilities > Skills.

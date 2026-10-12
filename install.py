@@ -15,6 +15,14 @@ Usage:
 Options: --locale zh (Chinese descriptions), --link (symlink instead of copy, for development),
 --force (replace an existing install), --dry-run, --wizard (interactive even without a terminal).
 
+Afterwards (details in kb_manage.py):
+  python3 install.py backup                   back up the skills, the knowledge-base line and the registry
+  python3 install.py rollback                 restore a backup
+  python3 install.py move ID --to FOLDER      move a registered local library to another folder
+  python3 install.py uninstall                remove what this installer set up; library folders stay
+                                              unless you pick them
+Replacing skills, a registry or an instructions file backs up the present state first.
+
 Claude Code users can also install as a plugin:  /plugin marketplace add walkwithedi/evergreen-wiki
 claude.ai users upload the zips from the Releases page in Settings > Capabilities > Skills.
 Folder locations change between agent versions; check your agent's documentation if a
@@ -27,6 +35,8 @@ import os
 import re
 import shutil
 import sys
+
+import kb_manage
 
 log = logging.getLogger("install")
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s.%(funcName)s:%(lineno)d - %(message)s"
@@ -91,6 +101,9 @@ INSTRUCTION_FILES = {
     "codex": (os.path.join(HOME, ".codex", "AGENTS.md"), False),
     "opencode": (os.path.join(HOME, ".config", "opencode", "AGENTS.md"), False),
 }
+# Where backup and uninstall look besides the folders this installer recorded.
+MANAGE_DEFAULTS = {"skill_dirs": [p for p, _ in TARGETS.values()],
+                   "instruction_files": [p for p, _ in INSTRUCTION_FILES.values()]}
 
 MSG = {
     "en": {
@@ -231,12 +244,15 @@ def install_skills(q, m, target, dest_root, lang):
         return
     present = [n for n in SKILLS if os.path.lexists(os.path.join(dest_root, n))]
     force = bool(present) and q.yes(m["replace"].format(names=", ".join(present)))
+    if force:
+        kb_manage.backup_once(MANAGE_DEFAULTS, "before installing skills", lang, [dest_root])
     opts = argparse.Namespace(force=force, dry_run=False, link=False)
     desc = None
     if lang != "en":
         with open(os.path.join(ROOT, "locales", lang, "descriptions.json"), encoding="utf-8") as f:
             desc = json.load(f)
     done = sum(install_one(n, dest_root, opts, desc) for n in SKILLS)
+    kb_manage.record(skills_dir=dest_root)
     print(f"installed {done} of {len(SKILLS)} skills in {dest_root}")
 
 
@@ -337,6 +353,7 @@ def setup_library(q, m, il, lang):
             return None
         if ans.isdigit() and 1 <= int(ans) <= len(m["items"]):
             root = edit_item(q, m, il, s, root, int(ans))
+    kb_manage.backup_once(MANAGE_DEFAULTS, "before setting up a library", lang)
     il.create_library(root, s)
     reg = il.add_to_registry(reg_path, entry, lang)
     print(m["written"].format(root=root, path=reg_path))
@@ -358,7 +375,9 @@ def add_instructions_line(q, m, il, target, reg, lang):
     if what == "unchanged":
         return
     if q.yes(m["line_ok"]):
+        kb_manage.backup_once(MANAGE_DEFAULTS, "before writing the knowledge-base line", lang)
         il.update_instructions_file(path, line)
+        kb_manage.record(instructions=path)
     else:
         print(m["skipped_line"])
 
@@ -390,7 +409,10 @@ def wizard():
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Install evergreen-wiki skills")
+    if len(sys.argv) > 1 and sys.argv[1] in kb_manage.COMMANDS:
+        sys.exit(kb_manage.main(sys.argv[1:], Asker, MANAGE_DEFAULTS))
+    ap = argparse.ArgumentParser(description="Install evergreen-wiki skills",
+                                 epilog="Also: install.py {backup,rollback,move,uninstall} -h")
     g = ap.add_mutually_exclusive_group()
     g.add_argument("--target", choices=sorted(TARGETS))
     g.add_argument("--dest")
@@ -423,7 +445,12 @@ def main():
     if a.locale:
         with open(os.path.join(ROOT, "locales", a.locale, "descriptions.json"), encoding="utf-8") as f:
             desc = json.load(f)
+    if a.force and not a.dry_run and any(os.path.lexists(os.path.join(dest_root, n)) for n in SKILLS):
+        kb_manage.backup_once(MANAGE_DEFAULTS, "before installing skills",
+                              "zh" if (a.locale or "").startswith("zh") else "en", [dest_root])
     done = sum(install_one(n, dest_root, a, desc) for n in SKILLS)
+    if not a.dry_run:
+        kb_manage.record(skills_dir=dest_root)
     print(f"{'would install' if a.dry_run else 'installed'} {done} of {len(SKILLS)} skills in {dest_root}")
     if done:
         print("next: restart your agent and say \"get started with the knowledge base\", "
