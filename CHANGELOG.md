@@ -2,6 +2,12 @@
 
 All three skills share one version number. To release, update this file, the "Version:" line of every SKILL.md and the plugin manifests together and merge to main; the release workflow then publishes v<version>.
 
+## 1.10.0
+
+The installer in dialogs.
+- tools/desktop-setup: a menu with zenity dialogs for the installer and install.py backup, rollback, move and uninstall, started by double-clicking evergreen-wiki-setup.desktop on a Linux desktop. It puts dialogs behind the installer's own ask, yes and choose calls, so the questions, previews and checks are the same; text a step prints appears in the next dialog. Folder questions offer the suggested folder or a folder chooser. Without zenity or a graphical session it asks in the terminal. English and Chinese.
+- install.py: the question asker can be replaced (wizard(asker, lang)); folder questions are marked so a dialog asker can show a folder chooser.
+
 ## 1.9.0
 
 Backup, rollback, moving a library and uninstall in the installer.

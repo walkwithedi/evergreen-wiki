@@ -14,6 +14,8 @@
 
 独立工具 [tools/doc2kb](tools/doc2kb/README.zh-CN.md) 是同一个转换器：在 Linux 桌面或定时任务里把整个目录的文档增量转换成带索引的 Markdown 知识库，每次发版随附 `doc2kb-<版本>.zip`。
 
+[tools/desktop-setup](tools/desktop-setup/README.zh-CN.md) 在 Linux 桌面上用菜单和弹窗运行安装程序及其备份、回滚、移动、卸载命令，适合不用终端的人，随 evergreen-wiki 的 zip 一起发布。
+
 中文口令需要安装中文变体：claude.ai 上传 Releases 中带 -zh 的 zip；终端里运行 `python3 install.py`，第一题选中文即可。
 
 ## 快速上手
