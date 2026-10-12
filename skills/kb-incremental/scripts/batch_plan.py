@@ -113,8 +113,8 @@ def scan(paths, library_root):
                 if is_junk(f) or full in seen or not os.path.isfile(full):
                     continue
                 seen.add(full)
-                rel = os.path.relpath(full, p)
-                parts = rel.split(os.sep)
+                rel = os.path.relpath(full, p).replace(os.sep, "/")  # same plan text on every system
+                parts = rel.split("/")
                 group = f"{base}/{parts[0]}" if len(parts) > 1 else f"{base}/{LOOSE}"
                 found.append((group, f"{base}/{rel}", full))
     return found
