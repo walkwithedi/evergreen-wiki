@@ -52,7 +52,7 @@ class DesktopSetupTest(unittest.TestCase):
         os.makedirs(self.p("home", ".claude"))
         write(self.p("home", ".claude", "CLAUDE.md"), "# Mine\n")
         write(self.p("bin", "zenity"), FAKE_ZENITY)
-        os.chmod(self.p("bin", "zenity"), 0o755)
+        os.chmod(self.p("bin", "zenity"), 0o700)
         self.env = dict(os.environ, HOME=self.home, XDG_CONFIG_HOME=self.p("home", ".config"),
                         PYTHONIOENCODING="utf-8", DISPLAY=":0", ZENITY_LOG=self.p("log"),
                         ZENITY_ANSWERS=self.p("answers"), PATH=self.p("bin") + os.pathsep + os.environ["PATH"])
