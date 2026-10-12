@@ -312,6 +312,23 @@ class InitLibraryTest(Tmp):
         for d in ("archive_dir", "notes_dir", "entities_dir"):
             self.assertTrue(os.path.isdir(os.path.join(root, names[d])))
 
+    def test_work_preset_follows_language(self):
+        for lang, heading, field, index in (("zh", "表 A（Table A）：分区与主题", "entities:", "条目数：0"),
+                                            ("en", "Table A: partitions and topics", "entities:", "Entries: 0")):
+            root = self.p("kb", "work-" + lang)
+            run("init_library.py", "write", "--root", root, "--preset", "work", "--language", lang,
+                "--timezone", "UTC", "--scope", "x", "--date", "2026-10-10")
+            names = kbconf.load_library(root)["names"]
+            spec = read(os.path.join(root, names["spec"]))
+            self.assertIn(heading, spec)
+            self.assertIn(field, spec)
+            self.assertNotIn("systems", spec)
+            self.assertNotIn("{{", spec)
+            self.assertIn(index, read(os.path.join(root, names["index"])))
+            for k in kbconf.SUMMARY_KEYS:
+                self.assertNotIn("{{", read(os.path.join(root, names[k])))
+            self.assertNotIn("{{", read(os.path.join(root, kbconf.PARAMS_FILE)))
+
     def test_refuses_existing_library(self):
         root = self.p("lib")
         write(os.path.join(root, "notes.md"), "mine\n")

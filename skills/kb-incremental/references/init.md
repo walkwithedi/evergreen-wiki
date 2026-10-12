@@ -3,7 +3,7 @@
 Trigger: "get started with the knowledge base", "first time", "set up a knowledge base", "new library", "init", "complete the settings". Also entered when kb-query or kb-note found no registry and the user accepted the offer to set one up.
 Result: the library root holds _kb.json, _kb-params.md, the spec and the empty summary files, the library is in the registry, and the assistant's always-read instructions say the library exists.
 
-Presets live in assets/presets/<name>/: _kb.json, _kb-params.md, 00_Spec.md and summary/ (empty summary files). Available: life and work. For a blank start, take the closer one and remove the topics the user does not want. Placeholders {{DATE}}, {{HEADING_LIMIT}} and {{FILENAME_LIMIT}} are filled when writing.
+Presets live in assets/presets/<name>/: _kb.json, _kb-params.md, 00_Spec.md and summary/ (empty summary files). A preset may also have <language>/ with translated _kb-params.md, 00_Spec.md and summary/, used for a library in that language (work has zh/). Available: life and work. For a blank start, take the closer one and remove the topics the user does not want. Placeholders {{DATE}}, {{HEADING_LIMIT}} and {{FILENAME_LIMIT}} are filled when writing.
 
 scripts/init_library.py holds the shared definition of a new library: the suggested label, id and scope per preset and language, the files and folders to create, the registry entry and the instructions line. The interactive installer (install.py) uses the same script, so a library made either way looks the same. Use it whenever Python runs; without Python, do its job by hand as described at each step and say "not script-checked" in the report.
 

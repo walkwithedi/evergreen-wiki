@@ -15,8 +15,8 @@ None by default.
 ## Step 1: dates and output fields
 
 Document date: the file's last-modified time to the minute. If unavailable, a date stated in the body, marked "date from body". Neither: "date not in material"; never use today's date instead.
-Type: from Table A if it lists types; otherwise the material's actual form (minutes, design, plan, list, table, report, reference).
-Short title: the period for recurring material (daily, weekly, monthly reports and statistics); the reporting party for one template filled by several parties ("-Payments"); a distinguishing word for parallel material.
+Type: from Table A if it lists types; otherwise the material's actual form (minutes, plan, proposal, report, list, table, guide, reference).
+Short title: the period for recurring material (daily, weekly, monthly reports and statistics); the reporting party for one template filled by several parties ("-Finance"); a distinguishing word for parallel material.
 
 Output (fixed):
   Material: <source file name>
@@ -30,7 +30,7 @@ With an expansion, put the line "Expansion: partition XX gets topic "…" (reaso
 
 ## Fallback partition
 
-09 (Reference and frameworks). Wording precedent: Table A lists each partition's topics as one running description; append a short phrase at the end of the description, with examples in brackets if useful, such as "office logistics (parking, building access)".
+09 (Reference and templates). Wording precedent: Table A lists each partition's topics as one running description; append a short phrase at the end of the description, with examples in brackets if useful, such as "office logistics (parking, building access)".
 
 ## Step 2: extra cleaning
 
@@ -38,7 +38,7 @@ None.
 
 ## Step 3: close-reading list
 
-Solution designs, review minutes, decision records, feedback dispositions, core process diagrams, ownership and handover documents, and anything with key numbers (data volumes, capacity, node counts, resource specifications, amounts, dates, thresholds).
+Plans and proposals, review minutes, decision records, feedback dispositions, policies and procedures, responsibility and handover documents, and anything with key numbers (quantities, amounts, deadlines, standards, thresholds).
 
 ## Step 4: additions
 
@@ -46,11 +46,11 @@ Weakly related material is judged against the spec's scope clause, not against t
 
 ## Step 5: five trigger classes
 
-Values: data volume, capacity, node counts, resource specifications, amount limits, thresholds
-Ownership: owning team, data ownership, responsibility boundaries, lead team
-Terms: official terms, system identifiers, role names, organisation names changed or added
-Milestones: go-live dates, release batches, delivery dates
-Approvals: initiation, review, resource requests moving forward, sent back or paused
+Values: quantities, amounts and budgets, standards, limits, thresholds
+Ownership: responsible department or person in a role, division of work, responsibility boundaries, lead party
+Terms: official terms, names of projects, products or systems, role names, organisation names changed or added
+Milestones: start, completion and delivery dates, deadlines, phase changes
+Approvals: applications, reviews and requests moving forward, sent back or paused
 
 Output: all five classes, four lines each, twenty lines in all:
   <class>
@@ -59,19 +59,19 @@ Output: all five classes, four lines each, twenty lines in all:
     Consistent: <yes / no / not applicable>
     Decision: <trigger / no trigger>
 
-Process data never triggers: daily progress, test pass rates, ticket counts and similar rolling numbers.
+Process data never triggers: daily progress, completion percentages, item counts and similar rolling numbers.
 New information you cannot match to a status-card quote goes to open decisions instead.
 The third overall decision is "open decisions only": rewrite only the open-decisions list. On a trigger rewrite the status card and change log.
 
 ## Metadata
 
-YAML mode. Field order as in spec section 8. Entity field: systems (filter with Table F, then map with Table E). Core entities: Table E rows with core = yes.
+YAML mode. Field order as in spec section 8. Entity field: entities (filter with Table F, then map with Table E). Core entities: Table E rows with core = yes.
 
 ## Text-mode header (only if the library switches metadata to text)
 
   Document date: YYYY-MM-DD HH:MM
   Partition | topic | type:
-  Systems:
+  Entities:
   Keywords:
   Status: <current / in doubt>
   Source file:
@@ -80,7 +80,7 @@ YAML mode. Field order as in spec section 8. Entity field: systems (filter with 
 
 ## Issue categories
 
-A person's or system's name written inconsistently; an unusual document date; two opposite statements of one principle; one number under two definitions.
+A name of a person, department or project written inconsistently; an unusual document date; two opposite statements of one principle; one number under two definitions.
 
 ## Readme (four sections)
 

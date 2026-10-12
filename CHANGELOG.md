@@ -2,6 +2,14 @@
 
 All three skills share one version number. To release, update this file, the "Version:" line of every SKILL.md and the plugin manifests together and merge to main; the release workflow then publishes v<version>.
 
+## 1.4.0
+
+A general-purpose work preset, in English and Chinese.
+- Work preset partitions suit any kind of office work: 02 Goals and plans, 03 Projects and tasks, 04 Proposals and deliverables, 05 Meetings and decisions, 06 Policies and procedures, 07 Organisation and roles, 08 Data and reports, 09 Reference and templates (fallback).
+- Entity types are project, department or team, organisation, system or product, other; the front-matter entity field is entities (entities_note) instead of systems. The close-reading list, the five trigger classes and the issue categories use general wording. The spec says that entities accumulate as material is filed.
+- A preset may carry translated text files in <preset>/<language>/; init_library.py and install.py use them for a library in that language and fall back to the English files. The work preset has a Chinese translation (zh/): spec, params and summary files, with YAML keys and file names unchanged.
+- Existing libraries keep their own spec; only new libraries get the new preset.
+
 ## 1.3.0
 
 Uploads are converted to Markdown before intake.
