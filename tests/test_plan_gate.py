@@ -72,7 +72,7 @@ class OtherTools(unittest.TestCase):
 class Flow(unittest.TestCase):
     def setUp(self):
         self.home = tempfile.mkdtemp(prefix="plan_gate_home_")
-        self.env = dict(os.environ, HOME=self.home, PYTHONIOENCODING="utf-8")
+        self.env = dict(os.environ, HOME=self.home, USERPROFILE=self.home, PYTHONIOENCODING="utf-8")
 
     def run_hook(self, data):
         p = subprocess.run([sys.executable, SCRIPT], input=json.dumps(data), capture_output=True,

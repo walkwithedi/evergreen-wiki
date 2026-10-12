@@ -61,8 +61,12 @@ def temp_roots():
 def is_temp(path):
     if not path:
         return False
-    path = os.path.realpath(os.path.expanduser(path))
-    return any(path == r or path.startswith(r.rstrip("/") + "/") for r in temp_roots())
+    path = os.path.normcase(os.path.realpath(os.path.expanduser(path)))
+    for root in temp_roots():
+        root = os.path.normcase(root)
+        if path == root or path.startswith(root.rstrip(os.sep) + os.sep):
+            return True
+    return False
 
 
 def mark_path(session_id):
