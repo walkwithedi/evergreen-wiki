@@ -85,6 +85,15 @@ class DesktopSetupTest(unittest.TestCase):
         self.assertIn("Restart your agent", shown)  # the closing words of the wizard are shown at the end
         self.assertEqual(calls[-1][1], "--list")  # the menu comes back after the setup
 
+    def test_preselected_agent_and_preset(self):
+        p, calls = self.dialogs(["0 setup", "0", "0", "0 default", "0 team projects", "0 ", "0", "0 quit"],
+                                "--agent", "claude-code", "--preset", "work")
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertTrue(os.path.isfile(self.p("home", "kb", "work", "_kb.json")))
+        shown = "\n".join(" ".join(c) for c in calls)
+        self.assertNotIn("Which agent", shown)
+        self.assertNotIn("Which kind of library", shown)
+
     def test_cancel_writes_nothing(self):
         p, calls = self.dialogs(["0 setup", "0 claude-code", "1", "1", "1"])
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)

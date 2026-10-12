@@ -8,7 +8,7 @@ The [quick start](../README.md#quick-start) does all of this for you: `python3 i
 
 - Claude Code: `/plugin marketplace add walkwithedi/evergreen-wiki`, then `/plugin install evergreen-wiki@evergreen-wiki`.
 - claude.ai or the Claude apps: download the kb-note, kb-query and kb-incremental zips from [Releases](../../../releases) and upload each in Settings > Capabilities > Skills (Chinese trigger phrases: the -zh zips).
-- Other agents that read Agent Skills: `python3 install.py --target agents` (or `--target gemini`, `opencode`, `codex`, `claude-code`, or `--dest <folder>`); add `--locale zh` for Chinese trigger phrases, `--force` to replace an existing install, `--dry-run` to see what would happen.
+- Other agents that read Agent Skills: `python3 install.py --target agents` (or `--target gemini`, `opencode`, `codex`, `claude-code`, or `--dest <folder>`); add `--locale zh` for Chinese trigger phrases, `--descriptions <file>` for your own descriptions (one line per skill, in the shape of `locales/zh/descriptions.json`), `--force` to replace an existing install, `--dry-run` to see what would happen. The guided setup (`python3 install.py`) takes `--agent <target>` and `--preset life|work` to skip those questions, and `--descriptions` as well. Given a folder that already holds a library (`_kb.json` or a `00_` spec file), it registers the folder as it is, without changing a file, after a preview; then tell your agent "init <label>" to complete the settings from the library's own spec.
 
 ## 2. Create a library
 
