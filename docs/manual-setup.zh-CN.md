@@ -38,7 +38,7 @@ claude.ai 上由首次引导把注册表存进 Drive（第一个库文件夹里�
 在助手每次都会读的指令里（CLAUDE.md、AGENTS.md、GEMINI.md 或 claude.ai 项目指令）加一行：
 
 ```text
-我有知识库：生活（我和家人：证件、健康、保险、财务、住房）；工作（团队项目、决策、负责人、规范）。相关问题先用 kb-query 查知识库，再查代码或凭记忆回答；要记录用 kb-note。
+我有知识库：生活（我和家人：证件、健康、保险、财务、住房）；工作（工作目标与计划、项目与事务、会议与决策、制度流程、报表等工作资料）。相关问题先用 kb-query 查知识库，再查代码或凭记忆回答；要记录用 kb-note。
 ```
 
 不加的话，听起来不像私人事务的问题（如「支付接口限流是多少」）可能会被当作代码或常识问题直接回答。`init_library.py instructions --file <文件> --apply` 会按注册表写入或更新这一行，文件其余内容不动。各助手对应的文件见[英文版](manual-setup.md#4-tell-your-assistant-the-libraries-exist)的表格。

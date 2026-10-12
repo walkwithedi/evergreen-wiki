@@ -34,7 +34,7 @@ A registry is a small JSON file listing each library and what belongs in it:
   "libraries": [
     {"id": "life", "label": "Life", "scope": "me and my family: IDs, health, insurance, money, home",
      "backend": {"type": "local", "root": "~/Documents/life-kb"}},
-    {"id": "work", "label": "Work", "scope": "team projects, decisions, owners, specs",
+    {"id": "work", "label": "Work", "scope": "work goals and plans, projects and tasks, meetings and decisions, policies and procedures, reports",
      "backend": {"type": "gdrive", "root": "<drive folder id>"}}
   ]
 }
@@ -51,7 +51,7 @@ The scope matters: it is how the assistant decides which library a note or quest
 Add one line to the instructions it always reads (CLAUDE.md, AGENTS.md, GEMINI.md, or claude.ai Project instructions):
 
 ```text
-I keep knowledge bases: Life (me and my family: IDs, health, insurance, money, home); Work (team projects, decisions, owners, specs). For questions about these, use kb-query before searching code or answering from memory; to save something, use kb-note.
+I keep knowledge bases: Life (me and my family: IDs, health, insurance, money, home); Work (work goals and plans, projects and tasks, meetings and decisions, policies and procedures, reports). For questions about these, use kb-query before searching code or answering from memory; to save something, use kb-note.
 ```
 
 Without it, questions that do not sound personal (for example "what is the payments API rate limit?") may be answered from code or general knowledge instead of your library. `init_library.py instructions --file <file> --apply` writes or updates this line from the registry, leaving the rest of the file alone.
