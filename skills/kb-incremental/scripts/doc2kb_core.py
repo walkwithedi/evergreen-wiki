@@ -39,6 +39,8 @@ import shutil
 import struct
 import subprocess
 import sys
+import tarfile
+import tempfile
 import zipfile
 from xml.etree import ElementTree as ET
 
@@ -312,11 +314,11 @@ LABELS.update({
     'rep_skipped_hint': ('\nTo process them again, add --force or delete the md files.\n\n',
                          '\n如需重新处理，请加 --force 或删除对应 md 文件。\n\n'),
     'rep_dups': ('Duplicate files (same text, one kept)', '重复文件（正文内容相同，只保留一份）'),
-    'rep_dups_note': ('%d groups, %d left out. Duplicates are files whose extracted text is identical;\n'
-                      'the one with the newest document time is kept. Source files are not changed.\n'
-                      'To keep every copy, run with -D.\n\n',
-                      '共 %d 组，略去 %d 份。判定依据是「提取出的正文相同」，\n'
-                      '保留其中文档时间最新的一份。源文件未做任何改动。\n'
+    'rep_dups_note': ('%d groups, %d left out. Files with identical bytes are parsed once; files whose\n'
+                      'extracted text is identical are kept once, the one with the newest document time.\n'
+                      'Source files and archives are not changed. To keep every copy, run with -D.\n\n',
+                      '共 %d 组，略去 %d 份。字节完全相同的文件只解析一份；「提取出的正文相同」的\n'
+                      '只保留文档时间最新的一份。源文件与压缩包未做任何改动。\n'
                       '如需保留全部副本，运行时加 -D 参数。\n\n'),
     'rep_group': ('  group %d:\n', '  第 %d 组：\n'),
     'rep_keep': ('    kept     → %s (%s)\n', '    保留 → %s（%s）\n'),
@@ -371,6 +373,17 @@ LABELS.update({
     'none_files': ('no file to process', '没有可处理的文件'),
     'files_done': ('Done. Output folder: %s', '完成。输出目录: %s'),
     'files_counts': ('  done %d, failed %d', '  成功 %d 份，失败 %d 份'),
+    'skip_dup': ('[%d/%d] same file as %s, not parsed again: %s', '[%d/%d] 与 %s 完全相同，不再解析: %s'),
+    # archives
+    'arc_bad': ('archive damaged or not readable: %s', '压缩包损坏或无法读取：%s'),
+    'arc_unsupported': ('%s archives need a tool outside the standard library; extract it and run again',
+                        '%s 压缩包需另装工具才能解开，请先解压后再运行'),
+    'arc_encrypted': ('encrypted inside the archive, cannot open', '压缩包内文件已加密，无法打开'),
+    'arc_too_big': ('larger than %s unpacked, not opened', '解压后超过 %s，未打开'),
+    'arc_total': ('the archive holds more than %s of documents; this and later ones not opened',
+                  '压缩包内文档合计超过 %s，本文件及之后的未打开'),
+    'arc_deep': ('archives nested more than %d deep are not opened', '压缩包嵌套超过 %d 层，未再展开'),
+    'arc_missing': ('member not found in the archive', '压缩包内找不到该文件'),
 })
 
 # Marks that later steps look for in converted text; both languages are recognised.
@@ -1826,12 +1839,16 @@ def drop_known_entries(entries, known, md_dir, img_root):
 def dedup_entries(entries, md_dir, img_root, report, merge=False):
     """Within one run: entries with the same content fingerprint keep one copy, the one with
     the newest document time (ties: first relative path, so results are reproducible).
+    Copies with identical bytes were left out before parsing (byte_dups on an entry, see
+    add_byte_duplicates); they join the group of the entry that stands for them.
     Only the output changes, never the source files. Returns (kept entries, duplicate groups)."""
     groups = {}
     for e in entries:
         if e['stat']['status'] not in (OK, SKIPPED):
             continue
         fp = e.get('fingerprint')
+        if not fp and e.get('byte_dups'):
+            fp = 'rel:' + e['rel']      # output kept from an earlier run: no fingerprint
         if not fp:
             continue
         groups.setdefault(fp, []).append(e)
@@ -1840,7 +1857,7 @@ def dedup_entries(entries, md_dir, img_root, report, merge=False):
     dropped = set()
 
     for fp, members in groups.items():
-        if len(members) < 2:
+        if len(members) < 2 and not members[0].get('byte_dups'):
             continue
         members.sort(key=lambda e: (e['stat'].get('doc_mtime') or '', ),
                      reverse=True)
@@ -1850,13 +1867,20 @@ def dedup_entries(entries, md_dir, img_root, report, merge=False):
         same_time.sort(key=lambda e: e['rel'])
         keeper = same_time[0]
         others = [m for m in members if m is not keeper]
-
-        dup_groups.append({'keeper': keeper, 'others': others})
         for o in others:
             dropped.add(id(o))
             _remove_entry_outputs(o, md_dir, img_root)
+        # copies never parsed: report lines only
+        others += [{'rel': r, 'stat': {'doc_mtime': m['stat'].get('doc_mtime', '')}}
+                   for m in members for r in m.get('byte_dups', [])]
+        others.sort(key=lambda o: o['rel'])
 
-        # the kept copy says where the others were
+        dup_groups.append({'keeper': keeper, 'others': others})
+        report.log(T('dup_log', keeper['rel'], len(others)))
+
+        # the kept copy says where the others were; output from an earlier run is left alone
+        if keeper['stat']['status'] != OK:
+            continue
         note = T('dup_note', len(others), T('list_sep').join(o['rel'] for o in others))
         if merge:
             keeper['body'] = _insert_after_header(keeper.get('body', ''), note)
@@ -1869,7 +1893,6 @@ def dedup_entries(entries, md_dir, img_root, report, merge=False):
                     f.write(_insert_after_header(txt, note))
             except OSError:
                 pass  # the note is only a hint; the copy stays without it
-        report.log(T('dup_log', keeper['rel'], len(others)))
 
     kept = [e for e in entries if id(e) not in dropped]
     return kept, dup_groups
@@ -2048,11 +2071,46 @@ SUPPORTED_EXT = ('.docx', '.pptx', '.xlsx', '.xlsm', '.pdf', '.eml')
 LEGACY_EXT = ('.doc', '.xls', '.ppt', '.msg')
 
 
-def scan_dir(root, recursive=True, since=None, time_basis='doc'):
+def _date_filter(items, since, time_basis, cache):
+    """Split items into (kept, excluded by date); sets mtime / mtime_src on each."""
+    kept, filtered = [], []
+    for it in items:
+        try:
+            mt, msrc = item_modified(it, cache, time_basis, since)
+        except ArchiveError as e:
+            it.update(_error_item(it['rel'], it['path'], it['ext'], T('arc_bad', e)))
+            it.pop('arc', None)
+            mt, msrc = item_modified(it, cache, time_basis, since)
+        it['mtime'] = mt
+        it['mtime_src'] = msrc
+        # mt is 'YYYY-MM-DD HH:MM'; since compares by day or by minute
+        if not mt or mt[:len(since)] < since:
+            filtered.append(it)
+        else:
+            kept.append(it)
+    return kept, filtered
+
+
+def scan_dir(root, recursive=True, since=None, time_basis='doc', cache=None):
     """Walk a folder; returns (supported files, legacy files, files excluded by date).
-    Each item is a dict: path / rel / size / ext.
+    Each item is a dict: path / rel / size / ext. Documents inside zip and tar archives
+    are listed as rel = "archive/path inside" with arc set (see expand_archive); an archive
+    or member that cannot be read is an item with error set.
     since: 'YYYY-MM-DD' or 'YYYY-MM-DD HH:MM'; only documents changed then or later are kept.
-    Hidden folders, lock files and this tool's own output folders are skipped."""
+    Hidden folders, lock files and this tool's own output folders are skipped.
+    cache: the ArchiveCache that unpacks members; without one a private one is used and
+    cleaned up before returning."""
+    own_cache = cache is None
+    if own_cache:
+        cache = ArchiveCache()
+    try:
+        return _scan_dir(root, recursive, since, time_basis, cache)
+    finally:
+        if own_cache:
+            cache.cleanup()
+
+
+def _scan_dir(root, recursive, since, time_basis, cache):
     ok, legacy, filtered = [], [], []
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames
@@ -2071,21 +2129,23 @@ def scan_dir(root, recursive=True, since=None, time_basis='doc'):
                 continue
             item = {'path': full, 'rel': fs_text(rel),
                     'size': size, 'ext': ext}
-            if ext in SUPPORTED_EXT:
-                if since:
-                    if time_basis == 'newest':
-                        mt, msrc = detect_modified(full)
-                    else:
-                        mt, msrc = read_doc_modified(full)
-                    item['mtime'] = mt
-                    item['mtime_src'] = msrc
-                    # mt is 'YYYY-MM-DD HH:MM'; since compares by day or by minute
-                    if not mt or mt[:len(since)] < since:
-                        filtered.append(item)
-                        continue
-                ok.append(item)
+            kind = archive_kind(fn)
+            if kind in ('zip', 'tar'):
+                found, old = expand_archive(full, fs_text(rel), cache)
+                legacy.extend(old)
+            elif kind == 'other':
+                found = [_error_item(fs_text(rel), full, ext, T('arc_unsupported', ext))]
+            elif ext in SUPPORTED_EXT:
+                found = [item]
             elif ext in LEGACY_EXT:
                 legacy.append(item)
+                continue
+            else:
+                continue
+            if since:
+                found, out = _date_filter(found, since, time_basis, cache)
+                filtered.extend(out)
+            ok.extend(found)
         if not recursive:
             break
     ok.sort(key=lambda x: x['rel'])
@@ -2116,6 +2176,378 @@ def count_gaps(md):
 
 def count_orphans(md):
     return sum(md.count(m) for m in ORPHAN_MARKS)
+
+
+# ================================================================ archives
+
+ZIP_EXT = ('.zip',)
+TAR_EXT = ('.tar', '.tar.gz', '.tgz', '.tar.bz2', '.tbz2', '.tbz', '.tar.xz', '.txz')
+OTHER_ARCHIVE_EXT = ('.7z', '.rar')
+ARC_MAX_DEPTH = 3                    # an archive inside an archive inside an archive
+ARC_MAX_MEMBER = 512 * 1024 * 1024   # one document or nested archive, unpacked
+ARC_MAX_TOTAL = 2 * 1024 * 1024 * 1024   # everything taken from one archive, unpacked
+
+
+class ArchiveError(Exception):
+    pass
+
+
+def archive_kind(name):
+    """'zip', 'tar', 'other' (a format the standard library cannot open) or None."""
+    n = (name or '').lower()
+    if n.endswith(ZIP_EXT):
+        return 'zip'
+    if n.endswith(TAR_EXT):
+        return 'tar'
+    if n.endswith(OTHER_ARCHIVE_EXT):
+        return 'other'
+    return None
+
+
+def _zip_member_name(info):
+    """A zip member name as text. Without the UTF-8 flag the name was decoded as cp437;
+    archives made on Chinese Windows store GBK there, so the raw bytes are decoded again."""
+    name = info.filename
+    if info.flag_bits & 0x800:
+        return name
+    try:
+        raw = name.encode('cp437')
+    except UnicodeEncodeError:
+        return name
+    for enc in ('utf-8', 'gbk', 'gb18030'):
+        try:
+            return raw.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return name
+
+
+def clean_member_name(name):
+    """A member path that cannot leave its archive: no absolute paths, drive letters, "." or ".."."""
+    parts = [p for p in fs_text(name).replace('\\', '/').split('/') if p not in ('', '.', '..')]
+    if parts and re.match(r'^[A-Za-z]:$', parts[0]):
+        parts = parts[1:]
+    return '/'.join(parts)
+
+
+def _member_hidden(name):
+    parts = name.split('/')
+    return any(p.startswith('.') or p == '__MACOSX' for p in parts) or \
+        parts[-1].startswith('~$')
+
+
+class ArchiveCache:
+    """Unpacks archive members into one private temporary folder, on demand and once each.
+    Nothing is written next to the archives; cleanup() removes the folder.
+    A member is addressed as (path of the outermost archive, (member key, ...)): one key per
+    level, the last one the document itself."""
+
+    def __init__(self):
+        self._tmp = None
+        self._n = 0
+        self._local = {}      # (outer, keys) -> unpacked file
+        self._lists = {}      # unpacked or outer archive path -> member list
+
+    def cleanup(self):
+        if self._tmp:
+            shutil.rmtree(self._tmp, ignore_errors=True)
+            self._tmp = None
+        self._local.clear()
+        self._lists.clear()
+
+    def _new_dir(self):
+        if not self._tmp:
+            self._tmp = tempfile.mkdtemp(prefix='doc2kb-arc-')
+        self._n += 1
+        d = os.path.join(self._tmp, str(self._n))
+        os.mkdir(d)
+        return d
+
+    def members(self, path, kind):
+        """The regular files in an archive: dicts with key, name (cleaned), size, mtime,
+        encrypted. Folders, links and devices are left out. Raises ArchiveError."""
+        if path in self._lists:
+            return self._lists[path]
+        out = []
+        try:
+            if kind == 'zip':
+                with zipfile.ZipFile(path) as zf:
+                    for info in zf.infolist():
+                        if info.is_dir():
+                            continue
+                        mode = (info.external_attr >> 16) & 0o170000
+                        if mode and mode != 0o100000:
+                            continue      # symbolic link or other special file
+                        try:
+                            mt = datetime.datetime(*info.date_time).timestamp()
+                        except (ValueError, OverflowError):
+                            mt = None
+                        out.append({'key': info.filename,
+                                    'name': clean_member_name(_zip_member_name(info)),
+                                    'size': info.file_size, 'mtime': mt,
+                                    'encrypted': bool(info.flag_bits & 0x1)})
+            else:
+                with tarfile.open(path, 'r:*') as tf:
+                    for m in tf.getmembers():
+                        if not m.isfile():
+                            continue
+                        out.append({'key': m.name, 'name': clean_member_name(m.name),
+                                    'size': m.size, 'mtime': m.mtime, 'encrypted': False})
+        except (zipfile.BadZipFile, tarfile.TarError, OSError, EOFError,
+                ValueError, NotImplementedError) as e:
+            raise ArchiveError(str(e) or e.__class__.__name__)
+        self._lists[path] = out
+        return out
+
+    def _write(self, src, dest, limit):
+        n = 0
+        with open(dest, 'wb') as f:
+            while True:
+                buf = src.read(1024 * 1024)
+                if not buf:
+                    break
+                n += len(buf)
+                if n > limit:
+                    raise ArchiveError(T('arc_too_big', human_size(limit)))
+                f.write(buf)
+
+    def _dest(self, m):
+        base = m['name'].rsplit('/', 1)[-1] or 'member'
+        if len(base.encode('utf-8', 'replace')) > 200:
+            stem, ext = os.path.splitext(base)
+            base = safe_name(stem) + ext
+        return os.path.join(self._new_dir(), base)
+
+    def _unpack(self, path, kind, wanted):
+        """Unpack the members of one archive whose keys are in wanted ({key: cache key}).
+        A tar archive is read once from start to end for all of them."""
+        lst = {m['key']: m for m in self.members(path, kind)}
+        try:
+            if kind == 'zip':
+                with zipfile.ZipFile(path) as zf:
+                    for key, ck in wanted.items():
+                        m = lst[key]
+                        dest = self._dest(m)
+                        with zf.open(key) as src:
+                            self._write(src, dest, ARC_MAX_MEMBER)
+                        self._done(ck, dest, m)
+            else:
+                with tarfile.open(path, 'r:*') as tf:
+                    for ti in tf:
+                        ck = wanted.get(ti.name)
+                        if ck is None or not ti.isfile() or ck in self._local:
+                            continue
+                        dest = self._dest(lst[ti.name])
+                        src = tf.extractfile(ti)
+                        self._write(src, dest, ARC_MAX_MEMBER)
+                        self._done(ck, dest, lst[ti.name])
+        except ArchiveError:
+            raise
+        except (zipfile.BadZipFile, tarfile.TarError, OSError, EOFError, KeyError,
+                ValueError, NotImplementedError, RuntimeError) as e:
+            # RuntimeError: an encrypted zip member without a password
+            raise ArchiveError(str(e) or e.__class__.__name__)
+
+    def _done(self, ck, dest, m):
+        if m.get('mtime'):
+            try:
+                os.utime(dest, (m['mtime'], m['mtime']))
+            except (OSError, OverflowError, ValueError):
+                pass  # keeps the unpack time; only the fallback document time is affected
+        self._local[ck] = dest
+
+    def local(self, outer, keys):
+        """The unpacked file of a member (nested archives on the way are unpacked too)."""
+        ck = (outer, tuple(keys))
+        if ck in self._local:
+            return self._local[ck]
+        parent = outer if len(keys) == 1 else self.local(outer, keys[:-1])
+        kind = archive_kind(keys[-2] if len(keys) > 1 else outer)
+        wanted = {keys[-1]: ck}
+        if kind == 'tar':
+            # one pass for every document and nested archive of this tar
+            total = 0
+            for m in self.members(parent, kind):
+                if m['size'] > ARC_MAX_MEMBER or not _wanted_member(m['name']):
+                    continue
+                total += m['size']
+                if total > ARC_MAX_TOTAL:
+                    break
+                wanted.setdefault(m['key'], (outer, tuple(keys[:-1]) + (m['key'],)))
+        self._unpack(parent, kind, wanted)
+        if ck not in self._local:
+            raise ArchiveError(T('arc_missing'))
+        return self._local[ck]
+
+
+def _wanted_member(name):
+    ext = os.path.splitext(name)[1].lower()
+    return not _member_hidden(name) and (
+        ext in SUPPORTED_EXT or archive_kind(name) in ('zip', 'tar'))
+
+
+def _error_item(rel, path, ext, note):
+    """An archive or member that cannot be read; processed as a failure with this note."""
+    return {'path': path, 'rel': rel, 'size': 0, 'ext': ext, 'error': note}
+
+
+def expand_archive(outer, rel, cache, keys=(), depth=1):
+    """The documents inside an archive as scan items (path / rel / size / ext / arc).
+    rel is the archive's relative path; members get rel + '/' + their path in the archive.
+    Returns (supported items, legacy items); unreadable parts come back as error items."""
+    ok, legacy = [], []
+    kind = archive_kind(keys[-1] if keys else outer)
+    try:
+        local = cache.local(outer, keys) if keys else outer
+        members = cache.members(local, kind)
+    except ArchiveError as e:
+        return [_error_item(rel, outer, '.' + kind, T('arc_bad', e))], []
+    total = 0
+    for m in sorted(members, key=lambda x: x['name']):
+        name = m['name']
+        if not name or _member_hidden(name):
+            continue
+        mrel = rel + '/' + name
+        ext = os.path.splitext(name)[1].lower()
+        sub = archive_kind(name)
+        if ext in LEGACY_EXT:
+            legacy.append({'path': outer, 'rel': mrel, 'size': m['size'], 'ext': ext})
+            continue
+        if sub == 'other':
+            ok.append(_error_item(mrel, outer, ext, T('arc_unsupported', ext)))
+            continue
+        if ext not in SUPPORTED_EXT and sub is None:
+            continue
+        if m['encrypted']:
+            ok.append(_error_item(mrel, outer, ext, T('arc_encrypted')))
+            continue
+        if m['size'] > ARC_MAX_MEMBER:
+            ok.append(_error_item(mrel, outer, ext, T('arc_too_big', human_size(ARC_MAX_MEMBER))))
+            continue
+        total += m['size']
+        if total > ARC_MAX_TOTAL:
+            ok.append(_error_item(mrel, outer, ext, T('arc_total', human_size(ARC_MAX_TOTAL))))
+            continue
+        if sub:
+            if depth >= ARC_MAX_DEPTH:
+                ok.append(_error_item(mrel, outer, ext, T('arc_deep', ARC_MAX_DEPTH)))
+                continue
+            o, l = expand_archive(outer, mrel, cache, keys + (m['key'],), depth + 1)
+            ok.extend(o)
+            legacy.extend(l)
+            continue
+        ok.append({'path': outer, 'rel': mrel, 'size': m['size'], 'ext': ext,
+                   'arc': (outer, keys + (m['key'],))})
+    return ok, legacy
+
+
+def item_source(it, cache):
+    """The file to parse for a scan item: the file itself, or the unpacked archive member."""
+    if it.get('arc'):
+        return cache.local(*it['arc'])
+    return it['path']
+
+
+def item_modified(it, cache, time_basis='doc', since=None):
+    """(time, source) of a scan item for the date filter. For an archive member the 'newest'
+    basis also counts the archive's own file times; when those are already older than since
+    the member is not unpacked (a member cannot be newer than the archive that holds it)."""
+    if not it.get('arc') or it.get('error'):
+        if time_basis == 'newest':
+            return detect_modified(it['path'])
+        return read_doc_modified(it['path'])
+    outer_t = ''
+    if time_basis == 'newest':
+        outer_t, _ = detect_modified(it['arc'][0])
+        if since and outer_t and outer_t[:len(since)] < since:
+            return outer_t, 'newest'
+    mt, msrc = read_doc_modified(cache.local(*it['arc']))
+    if time_basis == 'newest':
+        return max(mt, outer_t), 'newest'
+    return mt, msrc
+
+
+def sha256_file(path):
+    h = hashlib.sha256()
+    with open(path, 'rb') as f:
+        while True:
+            buf = f.read(1024 * 1024)
+            if not buf:
+                break
+            h.update(buf)
+    return h.hexdigest()
+
+
+def byte_duplicates(items, cache, keep_first=None):
+    """Files with identical bytes, found before parsing: only one of each group is parsed.
+    The copy kept: one keep_first(item) marks (its output exists already), then one outside
+    any archive, then the first relative path. Returns {kept rel: [left-out items]}."""
+    groups = {}
+    for it in items:
+        if it.get('error'):
+            continue
+        try:
+            digest = sha256_file(item_source(it, cache))
+        except (OSError, ArchiveError):
+            continue    # read again when processed; its failure is reported there
+        groups.setdefault(digest, []).append(it)
+    dups = {}
+    for members in groups.values():
+        if len(members) < 2:
+            continue
+        members.sort(key=lambda x: (0 if keep_first and keep_first(x) else 1,
+                                    1 if x.get('arc') else 0, x['rel']))
+        dups[members[0]['rel']] = members[1:]
+    return dups
+
+
+def failed_entry(rel, src, base, note):
+    """A report entry for a file that failed without being parsed."""
+    return {
+        'rel': rel,
+        'stat': {'src': src, 'md': base + '.md', 'chars': 0, 'tables': 0, 'imgs': 0,
+                 'orphans': 0, 'gaps': 0, 'status': FAILED, 'note': note,
+                 'doc_mtime': '', 'mtime_src': '', 'img_dir': ''},
+        'summary': '', 'headings': [], 'truncated': False, 'manifest': [],
+        'img_ref': '', 'body': '', 'fingerprint': '', 'text_fp': '',
+        'log': [T('log_source', rel), note], 'warnings': [],
+    }
+
+
+def add_byte_duplicates(entries, dups):
+    """Attach the copies left out before parsing to the entry of the copy kept. When the kept
+    copy failed, the copies get the same failure (their bytes are the same)."""
+    extra = []
+    for e in entries:
+        others = dups.get(e['rel'])
+        if not others:
+            continue
+        if e['stat']['status'] == FAILED:
+            for o in others:
+                extra.append(failed_entry(o['rel'], o['path'], '', e['stat']['note']))
+        else:
+            e['byte_dups'] = [o['rel'] for o in others]
+    return entries + extra
+
+
+def base_names(items):
+    """md file stems for scan items, numbered when names repeat. Files outside archives are
+    numbered first (in item order), so a new archive does not rename existing output."""
+    used, out = {}, [None] * len(items)
+    order = sorted(range(len(items)),
+                   key=lambda i: (1 if items[i].get('arc') or items[i].get('error') else 0, i))
+    for i in order:
+        it = items[i]
+        name = it['rel'].replace('\\', '/').rsplit('/', 1)[-1] \
+            if it.get('arc') or it.get('error') else os.path.basename(it['path'])
+        stem = safe_name(os.path.splitext(name)[0])
+        if stem in used:
+            used[stem] += 1
+            out[i] = '%s_%d' % (stem, used[stem])
+        else:
+            used[stem] = 1
+            out[i] = stem
+    return out
 
 
 # ================================================================ one document
@@ -2591,6 +3023,14 @@ def _kept_entry(src, rel, rel_dir, base, md_path, img_root):
 
 
 def run_batch(args):
+    cache = ArchiveCache()
+    try:
+        return _run_batch(args, cache)
+    finally:
+        cache.cleanup()
+
+
+def _run_batch(args, cache):
     src_root = os.path.abspath(args.batch)
     if not os.path.isdir(src_root):
         log.error('%s', T('no_folder', src_root))
@@ -2603,7 +3043,8 @@ def run_batch(args):
     files, legacy, filtered = scan_dir(src_root,
                                        recursive=not args.no_recursive,
                                        since=since,
-                                       time_basis=getattr(args, 'time_basis', 'doc'))
+                                       time_basis=getattr(args, 'time_basis', 'doc'),
+                                       cache=cache)
 
     # scan only: a tab-separated list for the desktop dialogs
     if args.scan_only:
@@ -2645,27 +3086,45 @@ def run_batch(args):
 
     ts = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
     entries, skipped = [], []
-    used_names = {}
+
+    # same names get a number; counted over every file, so names stay stable between runs
+    bases = base_names(files)
+    by_rel = {it['rel']: b for it, b in zip(files, bases)}
+
+    def output_exists(it):
+        return os.path.exists(os.path.join(md_dir, by_rel[it['rel']] + '.md')) \
+            and not args.force and not merge
+
+    # identical bytes: only one copy is parsed
+    dups = {}
+    if not getattr(args, 'no_dedup', False):
+        dups = byte_duplicates(files, cache, keep_first=output_exists)
+    dup_of = {o['rel']: k for k, others in dups.items() for o in others}
 
     total = len(files)
-    for i, it in enumerate(files, 1):
-        src = it['path']
+    for i, (it, base) in enumerate(zip(files, bases), 1):
         rel = it['rel']
         rel_dir = os.path.dirname(rel)
-        stem = safe_name(os.path.splitext(os.path.basename(src))[0])
 
-        # same names get a number
-        if stem in used_names:
-            used_names[stem] += 1
-            base = '%s_%d' % (stem, used_names[stem])
-        else:
-            used_names[stem] = 1
-            base = stem
+        if rel in dup_of:
+            print(T('skip_dup', i, total, dup_of[rel], fs_text(rel)), flush=True)
+            continue
+
+        if it.get('error'):
+            print('[%d/%d] %s' % (i, total, fs_text(rel)), flush=True)
+            entries.append(failed_entry(rel, it['path'], base, it['error']))
+            continue
+        try:
+            src = item_source(it, cache)
+        except ArchiveError as e:
+            print('[%d/%d] %s' % (i, total, fs_text(rel)), flush=True)
+            entries.append(failed_entry(rel, it['path'], base, T('arc_bad', e)))
+            continue
 
         md_path = os.path.join(md_dir, base + '.md')
 
         # incremental: an existing output is kept (not in merged mode, which rewrites everything)
-        if os.path.exists(md_path) and not args.force and not merge:
+        if output_exists(it):
             skipped.append(rel)
             print(T('skip_exists', i, total, fs_text(rel)), flush=True)
             try:
@@ -2676,7 +3135,8 @@ def run_batch(args):
 
         print('[%d/%d] %s' % (i, total, fs_text(rel)), flush=True)
         report = Report()
-        report.log(T('log_source', fs_text(src)))
+        report.log(T('log_source', fs_text(
+            os.path.join(src_root, rel) if it.get('arc') else src)))
         report.log(T('log_output', base + '.md'))
         report.log('')
 
@@ -2729,6 +3189,7 @@ def run_batch(args):
 
     dup_groups = []
     if not getattr(args, 'no_dedup', False):
+        entries = add_byte_duplicates(entries, dups)
         entries, dup_groups = dedup_entries(entries, md_dir, img_root, Report(), merge=merge)
 
     # across runs: text already in the fingerprint file is not written again (incremental mode)
@@ -2792,9 +3253,17 @@ def run_batch(args):
 # ================================================================ named files
 
 def run_files(args):
-    """Process one or more named files.
+    """Process one or more named files; a zip or tar archive stands for the documents in it.
     Merged mode: one md named after the folder of the first file.
     Otherwise one md per document."""
+    cache = ArchiveCache()
+    try:
+        return _run_files(args, cache)
+    finally:
+        cache.cleanup()
+
+
+def _run_files(args, cache):
     paths = []
     if args.files:
         with open(args.files, encoding='utf-8') as f:
@@ -2810,28 +3279,37 @@ def run_files(args):
         log.error('%s', T('bad_date', since))
         return 2
 
-    valid, filtered = [], []
+    items = []
     for p in paths:
         if not os.path.isfile(p):
             log.error('%s', T('file_missing', p))
             continue
         ext = os.path.splitext(p)[1].lower()
+        name = fs_text(os.path.basename(p))
+        kind = archive_kind(p)
+        if kind in ('zip', 'tar'):
+            found, old = expand_archive(os.path.abspath(p), name, cache)
+            for it in old:
+                log.warning('%s', T('skip_legacy', it['rel']))
+            items.extend(found)
+            continue
+        if kind == 'other':
+            log.warning('%s', T('arc_unsupported', ext))
+            continue
         if ext in LEGACY_EXT:
             log.warning('%s', T('skip_legacy', p))
             continue
         if ext not in SUPPORTED_EXT:
             log.warning('%s', T('skip_unsupported', p))
             continue
-        if since:
-            if getattr(args, 'time_basis', 'doc') == 'newest':
-                mt, msrc = detect_modified(p)
-            else:
-                mt, msrc = read_doc_modified(p)
-            if not mt or mt[:len(since)] < since:
-                filtered.append({'rel': os.path.basename(p), 'mtime': mt,
-                                 'mtime_src': msrc})
-                continue
-        valid.append(os.path.abspath(p))
+        items.append({'path': os.path.abspath(p), 'rel': name,
+                      'size': os.path.getsize(p), 'ext': ext})
+
+    filtered = []
+    if since:
+        items, filtered = _date_filter(items, since,
+                                       getattr(args, 'time_basis', 'doc'), cache)
+    valid = [it['path'] for it in items]
 
     if not valid:
         if filtered:
@@ -2854,21 +3332,31 @@ def run_files(args):
     img_root = os.path.join(md_dir, 'images')
 
     entries = []
-    used_names = {}
-    total = len(valid)
+    bases = base_names(items)
+    dups = {}
+    if not getattr(args, 'no_dedup', False):
+        dups = byte_duplicates(items, cache)
+    dup_of = {o['rel']: k for k, others in dups.items() for o in others}
+    total = len(items)
 
-    for i, src in enumerate(valid, 1):
-        stem = safe_name(os.path.splitext(os.path.basename(src))[0])
-        if stem in used_names:
-            used_names[stem] += 1
-            base = '%s_%d' % (stem, used_names[stem])
-        else:
-            used_names[stem] = 1
-            base = stem
+    for i, (it, base) in enumerate(zip(items, bases), 1):
+        rel = it['rel']
+        if rel in dup_of:
+            print(T('skip_dup', i, total, dup_of[rel], rel), flush=True)
+            continue
+        print('[%d/%d] %s' % (i, total, rel), flush=True)
+        if it.get('error'):
+            entries.append(failed_entry(rel, it['path'], base, it['error']))
+            continue
+        try:
+            src = item_source(it, cache)
+        except ArchiveError as e:
+            entries.append(failed_entry(rel, it['path'], base, T('arc_bad', e)))
+            continue
 
-        print('[%d/%d] %s' % (i, total, fs_text(os.path.basename(src))), flush=True)
         report = Report()
-        report.log(T('log_source', fs_text(src)))
+        report.log(T('log_source', fs_text(
+            os.path.join(os.path.dirname(it['path']), rel) if it.get('arc') else src)))
         report.log(T('log_output', base + '.md'))
         report.log('')
 
@@ -2881,7 +3369,7 @@ def run_files(args):
             summary, headings, truncated = extract_outline(md)
 
         entries.append({
-            'rel': os.path.basename(src), 'stat': stat, 'summary': summary,
+            'rel': rel, 'stat': stat, 'summary': summary,
             'headings': headings, 'truncated': truncated,
             'manifest': manifest if md else [],
             'img_ref': 'images/' + safe_component(base),
@@ -2900,6 +3388,7 @@ def run_files(args):
 
     dup_groups = []
     if not getattr(args, 'no_dedup', False):
+        entries = add_byte_duplicates(entries, dups)
         entries, dup_groups = dedup_entries(entries, md_dir, img_root, Report(), merge=merge)
 
     ts_end = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
@@ -2951,7 +3440,9 @@ def main(argv=None):
             pass  # a stream that cannot be reconfigured keeps its encoding
 
     ap = argparse.ArgumentParser(description='Convert Office, PDF and mail files to Markdown for a knowledge base.')
-    ap.add_argument('input', nargs='?', help='input file (.docx/.xlsx/.pptx/.pdf/.eml)')
+    ap.add_argument('input', nargs='?',
+                    help='input file (.docx/.xlsx/.pptx/.pdf/.eml, or a .zip/.tar[.gz|.bz2|.xz] '
+                         'archive holding them)')
     ap.add_argument('-o', '--outdir', default=None, help='output folder')
     ap.add_argument('--lang', choices=LANGS, default=default_lang(),
                     help='language of labels in the output (default: environment variable DOC2KB_LANG, else en)')
@@ -2976,7 +3467,8 @@ def main(argv=None):
     ap.add_argument('--only', metavar='FILE', default=None,
                     help='batch mode: process only the relative paths listed in this file')
     ap.add_argument('-D', '--no-dedup', action='store_true',
-                    help='keep every copy (by default files with the same text are kept once)')
+                    help='keep every copy (by default files with the same bytes or the same text '
+                         'are kept once)')
     ap.add_argument('--time-basis', choices=['doc', 'newest'], default='doc',
                     help='what --since compares: doc = the document\'s own time (default); '
                          'newest = the latest of file system and document times, '

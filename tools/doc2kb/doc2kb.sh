@@ -12,6 +12,10 @@
 #        The dialogs also need zenity; the command-line mode does not.
 #        Run it with bash, not sh.
 #
+# Archives: documents inside .zip and .tar (.tar.gz, .tar.bz2, .tar.xz) files are processed
+# as if the archive were a folder ("pack.zip/a/x.docx"). Members are unpacked into a
+# private temporary folder only, never next to the archive.
+#
 # Language: messages and output labels are Chinese when DOC2KB_LANG=zh or the locale
 # (LC_ALL, LC_MESSAGES, LANG) starts with zh, English otherwise. DOC2KB_LANG=en forces English.
 #
@@ -319,10 +323,20 @@ fi
 # watermark and missing from the scan, so they are added here; the core does not
 # date-filter files named with --only.
 RETRY_LIST="$OUT/.doc2kb_watch_retry"
+# src_exists REL: the file is still there; for a document inside an archive
+# ("pack.zip/a/x.docx") the archive holding it counts
+src_exists() {
+    local p="$1"
+    while [ -n "$p" ] && [ "$p" != "." ]; do
+        [ -f "$SRC/$p" ] && return 0
+        case "$p" in */*) p="${p%/*}" ;; *) return 1 ;; esac
+    done
+    return 1
+}
 MAX_TRIES=3
 if [ -s "$RETRY_LIST" ]; then
     while IFS=$'\t' read -r rrel _; do
-        [ -n "$rrel" ] && [ -f "$SRC/$rrel" ] && printf '%s\n' "$rrel"
+        [ -n "$rrel" ] && src_exists "$rrel" && printf '%s\n' "$rrel"
     done < "$RETRY_LIST" >> "$ONLY_LIST"
     sort -u -o "$ONLY_LIST" "$ONLY_LIST"
 fi
@@ -496,7 +510,7 @@ MODE=$(zenity --list --radiolist \
 [ $? -ne 0 ] && exit 0
 [ -z "$MODE" ] && exit 0
 
-FILTER="$(t "Office / PDF / mail" "Office / PDF / 邮件") | *.docx *.xlsx *.xlsm *.pptx *.pdf *.eml *.DOCX *.XLSX *.PPTX *.PDF *.EML"
+FILTER="$(t "Office / PDF / mail / archives" "Office / PDF / 邮件 / 压缩包") | *.docx *.xlsx *.xlsm *.pptx *.pdf *.eml *.DOCX *.XLSX *.PPTX *.PDF *.EML *.zip *.ZIP *.tar *.tgz *.tar.gz *.tbz2 *.tar.bz2 *.txz *.tar.xz"
 
 # ================================================================
 #                        incremental tasks
