@@ -52,6 +52,7 @@ DEFAULT_NAMES = {
     "snapshot_prefix": "snapshot_",
     "readme": "README.txt",
     "run_log_prefix": "_run-log_",
+    "batch_plan": "_intake-batches.json",
     "note_marker": "Quick note:",
     "assistant_label": "Assistant",
     "user_label": "User",
@@ -70,6 +71,10 @@ FALLBACK_LIMITS = (90, 120)
 CONVERT_DEFAULTS = {"enabled": False, "image_limit": 10, "min_pdf_chars_per_page": 200,
                     "min_chars_per_image": 100}
 
+# Intake of many files at once (kb-incremental scripts/batch_plan.py): a batch closes at
+# batch_files files or batch_mb megabytes; more than one batch turns batch mode on.
+INTAKE_DEFAULTS = {"batch_files": 10, "batch_mb": 20}
+
 DEFAULTS = {
     "schema": SCHEMA,
     "label": "",
@@ -81,6 +86,7 @@ DEFAULTS = {
     "partitions": {"max": 9, "topic_start": 2, "fallback": ""},
     "delivery": "",
     "convert": CONVERT_DEFAULTS,
+    "intake": INTAKE_DEFAULTS,
     "names": {},
 }
 KNOWN_KEYS = set(DEFAULTS) | {"backend", "inbox", "notes"}
@@ -248,6 +254,7 @@ def validate(raw):
     if raw.get("delivery", "") not in ("", "zip", "direct"):
         problems.append("delivery must be zip or direct")
     problems += check_convert(raw.get("convert", {}))
+    problems += check_intake(raw.get("intake", {}))
     part = raw.get("partitions", {})
     mx, ts = part.get("max", 9), part.get("topic_start", 2)
     if not (isinstance(mx, int) and isinstance(ts, int) and 0 < ts <= mx <= 99):
@@ -274,6 +281,18 @@ def check_convert(conv):
             problems.append("convert.enabled must be true or false")
         elif k != "enabled" and not (isinstance(v, int) and not isinstance(v, bool) and v >= 0):
             problems.append(f"convert.{k} must be a whole number of 0 or more")
+    return problems
+
+
+def check_intake(intake):
+    if not isinstance(intake, dict):
+        return ["intake must be an object such as {\"batch_files\": 10}"]
+    problems = []
+    for k, v in intake.items():
+        if k not in INTAKE_DEFAULTS:
+            problems.append(f"unknown intake key {k!r}")
+        elif not (isinstance(v, int) and not isinstance(v, bool) and v >= 1):
+            problems.append(f"intake.{k} must be a whole number of 1 or more")
     return problems
 
 

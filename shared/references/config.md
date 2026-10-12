@@ -66,6 +66,7 @@ The spec is the source of every rule about partitions, topics, terms and thresho
   "partitions": {"max": 10, "topic_start": 2, "fallback": "06"},
   "delivery": "",
   "convert": {"enabled": true, "image_limit": 10},
+  "intake": {"batch_files": 10, "batch_mb": 20},
   "names": {}
 }
 ```
@@ -77,6 +78,7 @@ The spec is the source of every rule about partitions, topics, terms and thresho
 - partitions: highest partition number, first topic partition (00 and 01 hold summary files), and the fallback partition for new topics.
 - delivery: direct or zip. Empty means direct: the assistant writes the files into the library after you confirm a preview, and archives the old versions at the same time. A Drive library with an inbox entry (its own unpack script) defaults to zip.
 - convert: kb-incremental turns uploaded Office, PDF and mail files into Markdown with a script before reading them (fewer tokens, faster). enabled: true or false (false when the key is missing; new libraries from a preset start with true). image_limit: pictures in one batch that are read without asking (default 10); over it the user decides once for the batch. min_pdf_chars_per_page (default 200) and min_chars_per_image (default 100): below these a file is read as the original instead (a scan, or a document that is mostly pictures).
+- intake: kb-incremental files many files in batches (references/batches.md in kb-incremental). A batch closes at batch_files files (default 10) or batch_mb megabytes (default 20); material that makes more than one batch is planned first and filed batch by batch. Lower them when one batch takes too long.
 - names: overrides for any default name below. Leave out the keys you do not change.
 
 ### Names
@@ -97,6 +99,7 @@ The spec is the source of every rule about partitions, topics, terms and thresho
 | snapshot_prefix | snapshot_ | temporary snapshots, never used as sources |
 | readme | README.txt | the readme that comes with each delivery |
 | run_log_prefix | _run-log_ | run log file name prefix (archive mode and direct delivery) |
+| batch_plan | _intake-batches.json | progress file of a batch intake run, in the library root until the run is finished |
 | note_marker | Quick note: | first line of each quick note inside a filed batch |
 | assistant_label, user_label | Assistant, User | speaker labels in quick notes |
 
@@ -106,4 +109,4 @@ In kb-incremental, scripts/kbconf.py prints the resolved configuration: python3 
 
 ### Ignored files
 
-Every search and every read of knowledge files skips: the archive folder; names that start with an underscore (run logs, _kb.json, _kb-params.md, an inbox configuration file); names that start with snapshot_prefix; names that contain old_suffix followed by a time stamp.
+Every search and every read of knowledge files skips: the archive folder; names that start with an underscore (run logs, _kb.json, _kb-params.md, an inbox configuration file, the batch progress file); names that start with snapshot_prefix; names that contain old_suffix followed by a time stamp.

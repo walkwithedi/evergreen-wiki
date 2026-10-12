@@ -22,7 +22,7 @@ The library is a folder on disk; backend.root in the registry is its path (~ all
 1. Stay inside the library root. Never touch files outside it.
 2. Searches cover the root folder only, not subfolders, so the archive folder is excluded; read the entities or notes folder only when a step says so.
 3. Never delete a file. Older versions are moved to the archive folder.
-4. Before any write or move that is not a brand-new file, show a preview and wait for the user to confirm.
+4. Before any write or move that is not a brand-new file, show a preview and wait for the user to confirm. A batch intake run is confirmed once, for all its batches, when the user starts it (references/batches.md in kb-incremental); its progress file is updated without asking.
 5. Keep line endings as LF and encoding as UTF-8.
 
 ## Delivery (delivery = direct)

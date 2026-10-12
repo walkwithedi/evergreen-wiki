@@ -22,6 +22,8 @@ A knowledge base an assistant maintains goes stale or drifts unless the rules ar
 
 Uploads are converted to Markdown before intake (Word, Excel, PowerPoint, PDF, mail), so the assistant reads text instead of binary files: fewer tokens, faster runs. Files the converter cannot handle well (scans, documents that are mostly pictures) are read as originals, and when a batch holds many pictures you decide whether they are read. Each library turns this on or off in `_kb.json`; new libraries start with it on.
 
+A large folder is filed in batches. The assistant first counts the material (files per subfolder, types, sizes, what is already in the library) and shows a plan; after you start it, it files one subfolder or a few files at a time and prints a progress line after each batch, then rewrites the summary files once at the end and lists everything left for you to review. Progress is saved in the library, so you can stop between batches and say "continue intake" later, in a new conversation. The batch size is set in `_kb.json` (`intake`).
+
 The full reasoning is in [docs/methodology.md](docs/methodology.md).
 
 ## Quick start
