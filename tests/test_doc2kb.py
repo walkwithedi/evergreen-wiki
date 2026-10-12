@@ -37,6 +37,11 @@ def read(path):
         return f.read()
 
 
+def read_bytes(path):
+    with open(path, "rb") as f:
+        return f.read()
+
+
 def stats(out):
     return {m.group(1): int(m.group(2)) for m in re.finditer(r"^STAT\t(\w+)\t(\d+)$", out, re.M)}
 
@@ -177,6 +182,143 @@ class ConverterTest(Tmp):
                 f"# Title\n\nBody\n\n[Image 001: s, {anchor} images/a/img_001.png]\n"
             merged = f"## Title\n\nBody\n\n[Image 001: s, {anchor} images/b/c/img_001.png]\n"
             self.assertEqual(core.text_fingerprint(single), core.text_fingerprint(merged))
+
+
+class ArchiveTest(Tmp):
+    """Archives read like folders, and identical files parsed once."""
+
+    def build(self):
+        import io
+        import tarfile
+        import zipfile
+        src = self.p("src")
+        os.makedirs(src)
+        report = read_bytes(fx.docx(os.path.join(src, "report.docx"), english=True))
+        book = read_bytes(fx.xlsx(self.p("book.xlsx"), english=True))
+        slides = read_bytes(fx.pptx(self.p("slides.pptx"), english=True))
+        inner = io.BytesIO()
+        with zipfile.ZipFile(inner, "w") as z:
+            z.writestr("deep/slides.pptx", slides)
+        pack = os.path.join(src, "pack.zip")
+        with zipfile.ZipFile(pack, "w") as z:
+            z.writestr("a/report.docx", report)          # same bytes as the file outside
+            z.writestr("../../escape.xlsx", book)         # must not leave the temporary folder
+            z.writestr("inner.zip", inner.getvalue())
+            z.writestr("old.doc", b"\xd0\xcf\x11\xe0")
+            z.writestr("__MACOSX/._x.docx", b"junk")
+            z.writestr("notes.7z", b"7z")
+            z.writestr("locked.docx", b"x")
+            z.writestr("ABCD.pptx", read_bytes(fx.pptx(self.p("zh.pptx"))))
+        # a name stored as GBK without the UTF-8 flag, the way Chinese Windows writes it
+        raw = read_bytes(pack).replace(b"ABCD.pptx", "报告".encode("gbk") + b".pptx")
+        # mark locked.docx encrypted (zipfile cannot write encrypted members)
+        name = b"locked.docx"
+        for sig, flag_at, name_at in ((b"PK\x03\x04", 6, 30), (b"PK\x01\x02", 8, 46)):
+            i = raw.find(sig)
+            while i >= 0:
+                if raw[i + name_at:i + name_at + len(name)] == name:
+                    raw = raw[:i + flag_at] + bytes([raw[i + flag_at] | 1]) + raw[i + flag_at + 1:]
+                i = raw.find(sig, i + 4)
+        with open(pack, "wb") as f:
+            f.write(raw)
+        with tarfile.open(os.path.join(src, "b.tar.gz"), "w:gz") as t:
+            for name, data in (("x/book.xlsx", book), ("x/slides2.pptx", slides)):
+                ti = tarfile.TarInfo(name)
+                ti.size = len(data)
+                ti.mtime = 1700000000
+                t.addfile(ti, io.BytesIO(data))
+        with open(os.path.join(src, "broken.zip"), "wb") as f:
+            f.write(b"not a zip")
+        return src
+
+    def arc_tmp(self):
+        import tempfile as tf
+        return {n for n in os.listdir(tf.gettempdir()) if n.startswith("doc2kb-arc-")}
+
+    def test_batch(self):
+        src = self.build()
+        before = self.arc_tmp()
+        p = run([sys.executable, CORE, "--batch", src, "--scan-only"])
+        for rel in ("pack.zip/a/report.docx", "pack.zip/inner.zip/deep/slides.pptx", "pack.zip/escape.xlsx",
+                    "pack.zip/报告.pptx", "b.tar.gz/x/book.xlsx", "broken.zip"):
+            self.assertIn("OK\t" + rel + "\t", p.stdout)
+        self.assertIn("LEGACY\tpack.zip/old.doc", p.stdout)
+        self.assertNotIn("__MACOSX", p.stdout)
+
+        out = self.p("out")
+        p = run([sys.executable, CORE, "--batch", src, "-o", out, "--no-images"])
+        s = stats(p.stdout)
+        self.assertEqual((s["new"], s["dup"], s["legacy"]), (4, 3, 1))
+        self.assertIn("not parsed again: pack.zip/a/report.docx", p.stdout)
+        # the copy outside the archive is kept and keeps its plain name
+        self.assertIn("pack.zip/a/report.docx", read(os.path.join(out, "report.md")))
+        self.assertTrue(os.path.isfile(os.path.join(out, "报告.md")))
+        report = read(os.path.join(out, "_batch-report.txt"))
+        self.assertIn("kept     → b.tar.gz/x/book.xlsx", report)
+        self.assertIn("left out   pack.zip/escape.xlsx", report)
+        self.assertIn("left out   pack.zip/inner.zip/deep/slides.pptx", report)
+        for reason in ("archive damaged or not readable", ".7z archives need a tool",
+                       "encrypted inside the archive"):
+            self.assertIn(reason, report)
+        failed = set(re.findall(r"^FAILED\t(.*)$", p.stdout, re.M))
+        self.assertEqual(failed, {"broken.zip", "pack.zip/notes.7z", "pack.zip/locked.docx"})
+        self.assertIn("| b.tar.gz/x/slides2.pptx |", read(os.path.join(out, "_kb-index.md")))
+        self.assertFalse(os.path.exists(self.p("escape.xlsx")))
+        self.assertEqual(self.arc_tmp(), before)
+
+        # second run: existing output is kept, the archive copies are still left out
+        p = run([sys.executable, CORE, "--batch", src, "-o", out, "--no-images"])
+        s = stats(p.stdout)
+        self.assertEqual((s["new"], s["kept"], s["dup"]), (0, 4, 3))
+
+        # -D keeps every copy
+        p = run([sys.executable, CORE, "--batch", src, "-o", self.p("all"), "--no-images", "-D"])
+        self.assertEqual(stats(p.stdout)["new"], 7)
+
+    def test_named_archive_and_only(self):
+        src = self.build()
+        p = run([sys.executable, CORE, os.path.join(src, "b.tar.gz"), "-o", self.p("o1"), "--no-images"])
+        self.assertEqual(stats(p.stdout)["new"], 2)
+        self.assertIn("| b.tar.gz/x/book.xlsx |", read(self.p("o1", "_kb-index.md")))
+        only = self.p("only.txt")
+        with open(only, "w", encoding="utf-8") as f:
+            f.write("pack.zip/inner.zip/deep/slides.pptx\n")
+        p = run([sys.executable, CORE, "--batch", src, "-o", self.p("o2"), "--only", only, "--no-images"])
+        self.assertEqual(stats(p.stdout)["new"], 1)
+        self.assertTrue(os.path.isfile(self.p("o2", "slides.md")))
+        # members carry the time stored in the archive; the date filter uses it
+        p = run([sys.executable, CORE, "--batch", src, "--scan-only", "--since", "2026-01-06"])
+        self.assertIn("FILTERED\tb.tar.gz/x/slides2.pptx", p.stdout)
+        self.assertIn("OK\tb.tar.gz/x/book.xlsx", p.stdout)
+
+    def test_limits(self):
+        import io
+        import zipfile
+        data = read_bytes(fx.xlsx(self.p("book.xlsx"), english=True))
+        for level in range(4):      # four archives deep
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, "w") as z:
+                z.writestr("big.xlsx" if level == 0 else "l%d.zip" % level, data)
+                if level == 0:
+                    z.writestr("small.xlsx", data[:10])
+            data = buf.getvalue()
+        os.makedirs(self.p("src"))
+        with open(self.p("src", "top.zip"), "wb") as f:
+            f.write(data)
+        ok, _, _ = core.scan_dir(self.p("src"))
+        self.assertEqual([it["rel"] for it in ok], ["top.zip/l3.zip/l2.zip/l1.zip"])
+        self.assertIn("nested more than 3", ok[0]["error"])
+        old = core.ARC_MAX_MEMBER
+        core.ARC_MAX_MEMBER = 100
+        try:
+            inner = zipfile.ZipFile(io.BytesIO(data)).read("l3.zip")
+            with open(self.p("src", "top.zip"), "wb") as f:
+                f.write(inner)
+            ok, _, _ = core.scan_dir(self.p("src"))
+        finally:
+            core.ARC_MAX_MEMBER = old
+        self.assertEqual(len(ok), 1)
+        self.assertIn("larger than", ok[0]["error"])
 
 
 class DedupToolTest(Tmp):

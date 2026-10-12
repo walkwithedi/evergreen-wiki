@@ -70,6 +70,30 @@ as `.msg`). They do not crash the run: they are recognised, skipped, and listed 
 > structure that is costly to parse for little gain. Detect the real type from the file's **magic number**,
 > not only its extension: users rename old files to new extensions.
 
+### 3.1a Archives
+
+Material often arrives packed. Archives the standard library can read (zip; tar, also gzip, bzip2 or xz
+compressed) are read **like folders**: each supported document inside is a scan item whose path is the
+archive's path followed by the path inside it (`pack.zip/a/report.docx`). That path is used everywhere a
+file path is: the scan list, dialog selection, the "only these files" list, incremental bookkeeping, the
+index and the report. An archive named directly on the command line stands for its documents.
+
+- **Nested archives** are opened too, up to 3 levels.
+- **Nothing is unpacked in place.** Members are copied into one private temporary folder, which is removed
+  when the run ends. The member's stored path is never used to build a file path (a name with `..`, an
+  absolute path or a drive letter cannot leave the folder); folders, links and devices are left out.
+- **Size limits** guard against archives that unpack to enormous sizes: one member at most 512 MB unpacked,
+  the documents of one archive at most 2 GB together. Members over a limit are not opened.
+- **Not readable**: encrypted members, damaged archives, archives over the limits and formats that need a
+  third-party tool (`.7z`, `.rar`) are listed as failed with the reason; the rest of the archive and the
+  batch go on. Legacy formats inside an archive go to "need a new format first" as usual.
+- **Names**: zip files made on Chinese Windows store GBK names without the UTF-8 flag; decode them as GBK
+  so the paths are readable. Hidden entries and the `__MACOSX` folder are skipped, like hidden files.
+- **Times**: a member's file system time is its time stored in the archive. For change detection
+  (section 6.3) a member also counts as changed when the archive file itself changed.
+- **Output names** follow the member's file name. Files outside archives get their names first, so a new
+  archive with a same-named document does not rename existing output.
+
 ### 3.2 Word processing documents
 
 Extract:
@@ -186,8 +210,17 @@ The same document often exists in several places (backup folders, archive folder
 Filing them all fills the knowledge base with repetition, wastes context and makes the assistant hit the
 same material again and again.
 
-**Rule**: duplicates are files whose **extracted text** is identical, not whose bytes are. That catches
-"same content, different bytes" (saved again, properties changed, packed with other settings).
+**Two steps**, both before anything is written:
+
+1. **Identical bytes, before parsing.** Hash every file (archive members included). Of a group with the same
+   hash only one copy is parsed; the others are not parsed at all. Copy kept: one whose output already
+   exists from an earlier run (so incremental runs keep their files), else one outside any archive, else
+   the first relative path. When the kept copy fails, its identical copies are listed as failed with the
+   same reason.
+2. **Identical text, after parsing**, as below.
+
+**Rule** for step 2: duplicates are files whose **extracted text** is identical, not whose bytes are. That
+catches "same content, different bytes" (saved again, properties changed, packed with other settings).
 
 The fingerprint must **normalise location information**, or no duplicate is ever found: each picture
 anchor holds the copy's own mirrored path (`images/a/x/img_001.png` against `images/b/x/img_001.png`),
@@ -206,16 +239,17 @@ recovered, and the tool must not take that risk).
 **Comparison range**: in full runs, the files of this run only. Incremental runs also compare with text
 already filed (see "Across runs" in 6.3).
 
-**Traces** (both required):
+**Traces** (both required, the same for both steps; a group lists the copies of both kinds):
 
 - the report lists each group: the copy kept and the copies left out, with their times
 - the kept copy's text starts with "N more copies with the same content were left out: <paths>", so an
   assistant reading it knows the material exists in several places
 
-**Switch**: on by default, with an option to keep every copy.
+**Switch**: on by default, with an option to keep every copy (it turns off both steps).
 
-**Known cost**: the decision comes after parsing, so duplicates are still parsed in full and only not
-written. That is inherent in judging by the text: without parsing there is no text to compare.
+**Known cost**: step 2 decides after parsing, so copies with different bytes are still parsed in full and
+only not written. That is inherent in judging by the text: without parsing there is no text to compare.
+Step 1 removes that cost for plain copies, which are the common case.
 
 ### 3.9 PDF
 
@@ -545,6 +579,12 @@ missing, what to install, or which alternative to use) instead of failing halfwa
     headings normalised); the newest is kept; the same text with a different number of pictures is **not**
     a duplicate; the left-out copies' md and picture folders are removed; the report and the kept copy both
     record it; with the switch off every copy is kept
+6c. Identical bytes: a copy (also one inside an archive) is not parsed; the copy outside the archive is
+    kept; the report and the kept copy record it like a text duplicate
+6d. Archives: documents in zip and tar.gz archives and in a zip inside a zip are converted with paths like
+    `pack.zip/inner.zip/x.pptx`; a member named `../../x.xlsx` is written nowhere outside the temporary
+    folder; GBK zip names are readable; encrypted members, damaged archives and `.7z` are listed as failed
+    with a reason; no temporary files remain after the run
 7. Legacy binary formats: no crash, listed under "need a new format first"
 8. Damaged or encrypted files: no crash, listed as failed, other files unaffected
 

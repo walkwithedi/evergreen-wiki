@@ -2,6 +2,13 @@
 
 All three skills share one version number. To release, update this file, the "Version:" line of every SKILL.md and the plugin manifests together and merge to main; the release workflow then publishes v<version>.
 
+## Unreleased
+
+doc2kb reads archives and parses identical files once; clearer skill descriptions.
+- Skill descriptions (English and Chinese) say in plain words what each skill does for the user, with example requests: kb-incremental lists what intake, archive, health check, init and quick-note filing each do; kb-query says each fact names its source file and what happens when nothing is found; kb-note says it only creates new files and reminds the user to file notes that pile up. Every trigger phrase is kept.
+- Documents inside .zip and .tar (.tar.gz, .tar.bz2, .tar.xz) archives, and archives inside them up to 3 levels, are converted as if the archive were a folder; their paths read pack.zip/a/report.docx in the scan, index and report and work with --only and incremental tasks. An archive can be named directly. Members are unpacked into a private temporary folder that is removed when the run ends; member paths cannot leave it, and size limits (512 MB per member, 2 GB per archive) stop runaway archives. Encrypted members, damaged archives and .7z/.rar are listed as failed with the reason. GBK zip names are decoded.
+- Files with identical bytes (archive members included) are parsed once, before the text comparison: the copy whose output exists is kept first, then one outside any archive, then the first path. They are listed with the text duplicates in the report and the kept copy's note; -D turns both off.
+
 ## 1.5.0
 
 Picking material on the desktop, and a general default scope for work libraries.
