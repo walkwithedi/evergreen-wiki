@@ -2,6 +2,11 @@
 
 All three skills share one version number. To release, update this file, the "Version:" line of every SKILL.md and the plugin manifests together and merge to main; the release workflow then publishes v<version>.
 
+## Unreleased
+
+- README (English and Chinese): a section on how the pieces fit together (skills, library folders, registry, instructions line), what each release download is for and which path to take in which situation; a quick-start path for a Linux desktop without a terminal.
+- Every release's notes end with the same download guide (docs/release-downloads.md, version filled in).
+
 ## 1.11.0
 
 Existing libraries and preset answers in the installer.
