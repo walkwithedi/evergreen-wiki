@@ -24,7 +24,7 @@ Before the first step, read references/config.md and references/environment.md o
 
 Libraries share one process. Picking the wrong one writes material into the wrong library and archives the wrong files, so decide explicitly:
 
-1. Load the registry (references/config.md). If a library ID, label, folder ID or path is named in the request or the project instructions, use that library.
+1. Load the registry (references/config.md). If a library ID, label, folder ID or path is named in the request or the project instructions, use that library. No registry, or no library in it: follow references/config.md (init mode; for a local library the folder is chosen in a desktop chooser, not typed).
 2. Otherwise match the material against each library's scope. If exactly one fits, propose it in one line and continue only when the user agrees or the request already made it clear; if none or several fit, ask in one sentence which library to use. Never default.
 3. Read the backend file for that library (references/backend-gdrive.md or references/backend-local.md), then read _kb.json and _kb-params.md from the library root. A missing _kb.json or _kb-params.md: stop and offer init mode (existing-library branch).
 4. Write the first line of the reply: Library: <label>. From here on, search and write only inside that library.
@@ -54,7 +54,7 @@ You file and judge; you do not advise, recommend or evaluate. These rules apply 
 
 Check 1: material is readable. Handle several items one by one, never merged. Read images and scans as text first; record unreadable parts as they are and log them as issues. Keep the path of each original upload (the file itself, not a converted copy) for the hash in step 4; pasted text has no original file and step 4 runs without --file.
 
-No material given: the user asks for intake but names no path and uploads or pastes nothing. For a local library where you can run commands, offer the desktop picker (references/pick-material.md); otherwise ask where the material is. When the user named a path or uploaded files, never open the picker.
+No material given: the user asks for intake but names no path and uploads or pastes nothing. For a local library where you can run commands, open the desktop picker (references/pick-material.md, material); otherwise ask where the material is. When the user named a path or uploaded files, never open the picker.
 
 Conversion, before reading anything: when _kb.json convert.enabled is true (or the user asks for it in this request, and not when the user says not to convert this batch), convert the uploaded files with references/convert.md, which says which file to read for each item and what to do with the pictures in them. Off, or without Python: read the originals as before.
 

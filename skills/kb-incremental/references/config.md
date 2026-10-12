@@ -16,6 +16,7 @@ Look for the registry in this order and use the first one found:
 If none exists, nothing is set up yet. Never guess a folder ID or path. Offer setup once, in one line, then go on:
 - kb-query: a question unrelated to any knowledge base is answered normally, without the offer. A question meant for the knowledge base: say it is not set up yet and offer: "No knowledge base is set up yet. Set one up now? Three questions, a preview, nothing written before you confirm."
 - kb-note: show the finished note in the reply so nothing is lost, then make the same offer; once the library exists, offer to save the note there.
+- kb-incremental (intake or setup asked for): the user already wants a library, so go straight to init mode (references/init.md in kb-incremental). Where local files can be written and commands run, do not ask for the library path in words: open the folder chooser first (references/pick-material.md in kb-incremental, library folder).
 - If the user agrees, follow the getting-started part of kb-incremental init mode (references/init.md in kb-incremental). If not, do not offer again in this conversation.
 
 ```json

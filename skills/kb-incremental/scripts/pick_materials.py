@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-"""Let the user pick the material for intake in a desktop dialog (local libraries).
+"""Let the user pick intake material or a library folder in a desktop dialog (local libraries).
 
-Used when the user asks for intake without naming a path or uploading files. A first
-dialog asks whether to pick a folder or files; the second is the matching file chooser
-(files: several at once). The dialogs come from zenity and need a graphical session.
+Material (default): used when the user asks for intake without naming a path or uploading
+files. A first dialog asks whether to pick a folder or files; the second is the matching
+file chooser (files: several at once). With --library-root it opens in the material folder
+next to the library (<library>-待整理 or <library>-inbox) when one exists.
+Library (--library): used when no library is registered or a new library needs a place. One
+folder chooser; the assistant then checks the folder and goes on with init mode.
+The dialogs come from zenity and need a graphical session.
 
 stdout: one chosen path per line (a folder, or each file).
 Exit codes:
@@ -12,7 +16,8 @@ Exit codes:
   4  the user cancelled: ask whether to go on, and for the path if so
   5  no answer within --timeout seconds: ask the user for the path
 stderr: log lines.
-Usage: python3 pick_materials.py [--start DIR] [--timeout 100] [--language en|zh]
+Usage: python3 pick_materials.py [--library | --library-root DIR] [--start DIR] [--timeout 100]
+                                 [--language en|zh]
 Keep --timeout below the agent's limit for a shell command.
 """
 import argparse
@@ -30,10 +35,14 @@ NO_DIALOG, CANCELLED, TIMED_OUT = 3, 4, 5
 ZENITY_TIMEOUT = 5  # zenity's exit code when --timeout runs out
 TEXT = {
     "en": {"title": "Choose material for the knowledge base", "ask": "What do you want to file?",
-           "col": "Choice", "folder": "A folder (everything in it)", "files": "Files (select several with Ctrl)"},
+           "col": "Choice", "folder": "A folder (everything in it)", "files": "Files (select several with Ctrl)",
+           "library": "Choose the knowledge base folder (an existing library, or an empty folder for a new one)"},
     "zh": {"title": "选择要入库的材料", "ask": "要入库的是什么？",
-           "col": "选项", "folder": "一个文件夹（其中的全部文件）", "files": "文件（按住 Ctrl 可多选）"},
+           "col": "选项", "folder": "一个文件夹（其中的全部文件）", "files": "文件（按住 Ctrl 可多选）",
+           "library": "选择知识库文件夹（已有的库，或用来新建库的空文件夹）"},
 }
+# material folders kept next to a library, tried in this order
+MATERIAL_SUFFIXES = ("-待整理", "-inbox")
 
 
 def language(arg):
@@ -64,6 +73,26 @@ def zenity(args, timeout):
     return p.returncode, p.stdout
 
 
+def material_start(library_root):
+    """The material folder next to a library, if one exists."""
+    root = os.path.abspath(os.path.expanduser(library_root)).rstrip(os.sep)
+    for suffix in MATERIAL_SUFFIXES:
+        if os.path.isdir(root + suffix):
+            return root + suffix
+    return None
+
+
+def choose_folder(start, title, timeout):
+    rc, out = zenity(["--file-selection", "--directory", "--title", title,
+                      "--filename", os.path.join(start, "")], timeout)
+    if rc == ZENITY_TIMEOUT:
+        return TIMED_OUT, []
+    if rc != 0:
+        return CANCELLED, []
+    paths = [p for p in out.splitlines() if p.strip()][:1]
+    return (0, paths) if paths else (CANCELLED, [])
+
+
 def pick(start, timeout, lang):
     t = TEXT[lang]
     rc, out = zenity(["--list", "--radiolist", "--title", t["title"], "--text", t["ask"],
@@ -91,7 +120,10 @@ def pick(start, timeout, lang):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--start", default=os.path.expanduser("~"), help="folder the chooser opens in (default: home)")
+    mode = ap.add_mutually_exclusive_group()
+    mode.add_argument("--library", action="store_true", help="choose a library folder instead of material")
+    mode.add_argument("--library-root", help="the library being filled: open in the material folder next to it")
+    ap.add_argument("--start", help="folder the chooser opens in (default: home)")
     ap.add_argument("--timeout", type=int, default=100, help="seconds to wait for each dialog (default 100)")
     ap.add_argument("--language", help="en or zh (default: from the locale)")
     kbconf.add_log_args(ap)
@@ -99,7 +131,13 @@ def main():
     kbconf.setup_logging(a.log_level)
     if not dialog_possible():
         return NO_DIALOG
-    rc, paths = pick(os.path.abspath(os.path.expanduser(a.start)), max(1, a.timeout), language(a.language))
+    start = a.start or (a.library_root and material_start(a.library_root)) or "~"
+    start = os.path.abspath(os.path.expanduser(start))
+    timeout, lang = max(1, a.timeout), language(a.language)
+    if a.library:
+        rc, paths = choose_folder(start, TEXT[lang]["library"], timeout)
+    else:
+        rc, paths = pick(start, timeout, lang)
     for p in paths:
         print(p)
     log.info("result %d, %d path(s)", rc, len(paths))

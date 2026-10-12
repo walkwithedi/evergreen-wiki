@@ -36,7 +36,7 @@ For a user who has just installed the skills, or says it is the first time. Keep
 ## Round 1: questions (new library)
 
 Three questions, one at a time, each with a suggested answer:
-1. Where. Suggest the backend the environment supports: local folder when local files can be written (a path; an Obsidian vault works; suggest ~/kb/<preset>), Google Drive when only a Drive tool is available (a folder link or ID; the folder must exist and be empty). Both available: ask which, suggesting local. Neither: stop and say what is missing (references/environment.md).
+1. Where. Suggest the backend the environment supports: local folder when local files can be written (a path; an Obsidian vault works; suggest ~/kb/<preset>; where commands run, let the user choose the folder with the chooser in references/pick-material.md, library folder, and ask in words only when it cannot open; a folder chosen there before this question answers it), Google Drive when only a Drive tool is available (a folder link or ID; the folder must exist and be empty). Both available: ask which, suggesting local. Neither: stop and say what is missing (references/environment.md).
 2. Preset: life (me and my family: IDs, health, insurance, money, home) or work (work goals and plans, projects and tasks, meetings and decisions, policies and procedures, reports). One line each; the partition table appears in the preview.
 3. Scope: one sentence saying what belongs in the library, suggested from python3 scripts/init_library.py defaults --preset <preset> --language <language>. Explain that it decides which library each request goes to.
 
