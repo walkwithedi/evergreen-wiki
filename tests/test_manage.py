@@ -8,7 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from unittest import mock
+import unittest.mock as mock
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -85,6 +85,7 @@ class ManageTest(unittest.TestCase):
         self.assertEqual(len(new), 1)
         safety = new.pop()
         p = self.manage(["rollback", "--id", safety], ["y"])
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         self.assertEqual(read(self.skill), "changed\n")
         self.assertFalse(os.path.exists(self.registry))
 
@@ -103,6 +104,7 @@ class ManageTest(unittest.TestCase):
         self.assertIn("backup: the present state is saved as", p.stdout)
         self.assertIn("name: kb-note", read(self.skill))
         p = self.manage(["rollback"], ["", "y"])
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         self.assertEqual(read(self.skill), "local edit\n")
 
     def test_move_with_material_folder(self):
@@ -192,14 +194,16 @@ class ManageTest(unittest.TestCase):
         reg["libraries"] += [{"id": "home", "label": "Home", "scope": "s", "backend": {"type": "local", "root": "~"}},
                              {"id": "plain", "label": "Plain", "scope": "s",
                               "backend": {"type": "local", "root": plain}}]
-        if hasattr(os, "symlink"):
-            link = self.p("home", "link")
-            try:
-                os.symlink(self.lib, link)
-                reg["libraries"].append({"id": "link", "label": "Link", "scope": "s",
-                                         "backend": {"type": "local", "root": link}})
-            except OSError:
-                pass
+        linked = False
+        link = self.p("home", "link")
+        try:
+            os.symlink(self.lib, link)
+            linked = True
+        except OSError as e:  # no right to create links (Windows without developer mode)
+            print(f"symbolic link case left out: {e}", file=sys.stderr)
+        if linked:
+            reg["libraries"].append({"id": "link", "label": "Link", "scope": "s",
+                                     "backend": {"type": "local", "root": link}})
         write(self.registry, json.dumps(reg))
         # only the real library is offered: one question for it, then the plain confirmation
         p = self.manage(["uninstall"], ["y", "n", "y"])
@@ -207,6 +211,8 @@ class ManageTest(unittest.TestCase):
         self.assertEqual(p.stdout.count("Delete "), 1)
         self.assertIn("not offered: Home", p.stdout)
         self.assertIn("not offered: Plain", p.stdout)
+        if linked:
+            self.assertIn("not offered: Link", p.stdout)
         self.assertTrue(os.path.isdir(self.lib))
         self.assertTrue(os.path.isfile(os.path.join(plain, "a.md")))
 

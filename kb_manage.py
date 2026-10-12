@@ -460,10 +460,13 @@ def tree_size(root):
 
 
 def human(size):
-    for unit in ("B", "KB", "MB", "GB"):
-        if size < 1024 or unit == "GB":
-            return f"{size:.0f} {unit}" if unit == "B" else f"{size:.1f} {unit}"
+    if size < 1024:
+        return f"{size} B"
+    for unit in ("KB", "MB"):
         size /= 1024.0
+        if size < 1024:
+            return f"{size:.1f} {unit}"
+    return f"{size / 1024.0:.1f} GB"
 
 
 def free_space(path):
@@ -720,9 +723,9 @@ def cmd_uninstall(a, q, m, defaults):
         if os.path.lexists(p):
             drop(p)
     try:
-        os.rmdir(os.path.dirname(reg))  # only when the registry was the last thing in its folder
+        os.rmdir(os.path.dirname(reg))
     except OSError:
-        pass
+        log.info("kept %s: other files are in it", os.path.dirname(reg))
     print(m["un_failed"].format(n=failed) if failed else m["un_done"])
     return 1 if failed else 0
 
