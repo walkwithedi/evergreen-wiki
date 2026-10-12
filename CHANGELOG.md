@@ -4,7 +4,11 @@ All three skills share one version number. To release, update this file, the "Ve
 
 ## Unreleased
 
-doc2kb reads archives and parses identical files once; clearer skill descriptions.
+## 1.6.0
+
+Choosing the library folder on the desktop; doc2kb reads archives and parses identical files once; clearer skill descriptions.
+- kb-incremental: when a local library folder is needed and the user has not named one (no registry or no library in it while the user asks for intake or setup, or question 1 of init mode), scripts/pick_materials.py --library opens a folder chooser instead of asking for the path in words. A folder with _kb.json or a spec goes to the existing-library branch, an empty one to the new-library branch; the init preview and "confirm" still come before anything is written. Without a dialog, on cancel or timeout the assistant asks for the path as before. Process in references/pick-material.md; references/config.md, references/init.md and step 0 point to it.
+- The material chooser takes --library-root and opens in the material folder next to the library (<library>-待整理 or <library>-inbox) when one exists, else in the home folder.
 - Skill descriptions (English and Chinese) say in plain words what each skill does for the user, with example requests: kb-incremental lists what intake, archive, health check, init and quick-note filing each do; kb-query says each fact names its source file and what happens when nothing is found; kb-note says it only creates new files and reminds the user to file notes that pile up. Every trigger phrase is kept.
 - Documents inside .zip and .tar (.tar.gz, .tar.bz2, .tar.xz) archives, and archives inside them up to 3 levels, are converted as if the archive were a folder; their paths read pack.zip/a/report.docx in the scan, index and report and work with --only and incremental tasks. An archive can be named directly. Members are unpacked into a private temporary folder that is removed when the run ends; member paths cannot leave it, and size limits (512 MB per member, 2 GB per archive) stop runaway archives. Encrypted members, damaged archives and .7z/.rar are listed as failed with the reason. GBK zip names are decoded.
 - Files with identical bytes (archive members included) are parsed once, before the text comparison: the copy whose output exists is kept first, then one outside any archive, then the first path. They are listed with the text duplicates in the report and the kept copy's note; -D turns both off.

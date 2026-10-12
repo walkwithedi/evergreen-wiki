@@ -295,7 +295,7 @@ class PackageTest(Tmp):
 class PickMaterialsTest(Tmp):
     """pick_materials.py against a fake zenity that replays scripted answers."""
 
-    def pick(self, answers, display=True, zenity=True):
+    def pick(self, answers, display=True, zenity=True, args=None):
         bin_dir = self.p("bin")
         os.makedirs(bin_dir, exist_ok=True)
         # each call takes the next "<exit code> <output>" line and logs its arguments
@@ -316,8 +316,9 @@ class PickMaterialsTest(Tmp):
             env["DISPLAY"] = ":0"
         else:
             env.pop("DISPLAY", None)
-        p = subprocess.run([sys.executable, os.path.join(SCRIPTS, "pick_materials.py"), "--start", self.d,
-                            "--timeout", "7", "--language", "zh"],
+        args = ["--start", self.d] if args is None else args
+        p = subprocess.run([sys.executable, os.path.join(SCRIPTS, "pick_materials.py"),
+                            "--timeout", "7", "--language", "zh"] + args,
                            capture_output=True, text=True, encoding="utf-8", env=env)
         calls = read(self.p("calls")).splitlines() if os.path.exists(self.p("calls")) else []
         return p.returncode, p.stdout.splitlines(), calls
@@ -343,6 +344,28 @@ class PickMaterialsTest(Tmp):
     def test_no_dialog_possible(self):
         self.assertEqual(self.pick([], display=False)[:2], (3, []))
         self.assertEqual(self.pick([], zenity=False)[:2], (3, []))
+        self.assertEqual(self.pick([], display=False, args=["--library"])[:2], (3, []))
+
+    def test_library_folder(self):
+        rc, out, calls = self.pick(["0 " + self.p("kb") + "\\n"], args=["--library", "--start", self.d])
+        self.assertEqual((rc, out), (0, [self.p("kb")]))
+        self.assertEqual(len(calls), 1)
+        self.assertIn("--directory", calls[0])
+        self.assertIn("选择知识库文件夹", calls[0])
+        os.remove(self.p("n"))
+        self.assertEqual(self.pick(["1 "], args=["--library"])[0], 4)
+        os.remove(self.p("n"))
+        self.assertEqual(self.pick(["5 "], args=["--library"])[0], 5)
+
+    def test_starts_in_material_folder_next_to_library(self):
+        lib = self.p("kb")
+        os.makedirs(lib + "-待整理")
+        _, _, calls = self.pick(["0 folder\\n", "0 " + lib + "-待整理\\n"], args=["--library-root", lib])
+        self.assertIn("--filename " + lib + "-待整理" + os.sep, calls[1])
+        os.remove(self.p("n"))
+        os.remove(self.p("calls"))
+        _, _, calls = self.pick(["0 folder\\n", "0 /x\\n"], args=["--library-root", self.p("other")])
+        self.assertIn("--filename " + os.path.expanduser("~") + os.sep, calls[1])
 
 
 class InitLibraryTest(Tmp):
