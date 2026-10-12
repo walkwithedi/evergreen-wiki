@@ -306,7 +306,7 @@ class PickMaterialsTest(Tmp):
               'line=$(sed -n "${n}p" "$ZDIR/answers")\n'
               'printf \'%b\' "${line#* }"\n'
               'exit "${line%% *}"\n')
-        os.chmod(os.path.join(bin_dir, "zenity"), 0o755)
+        os.chmod(os.path.join(bin_dir, "zenity"), 0o700)
         write(self.p("answers"), "".join(a + "\n" for a in answers))
         # without zenity, PATH holds only an empty folder, so a real zenity on the machine is not found
         path = bin_dir + os.pathsep + "/usr/bin:/bin" if zenity else self.p("empty")
