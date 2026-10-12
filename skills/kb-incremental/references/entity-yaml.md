@@ -8,8 +8,8 @@ The file starts with ---, then one property per line, then ---, a blank line, th
 - Dates (document date, event date, file date): ISO without quotes, such as 2026-09-20T14:09 or 2026-09-20. A date that cannot be found: leave the whole line out and say so in the delivery note.
 - partition: "07" (quoted, keeps the leading zero). topic, type, status, sensitivity, source file name, source path: quoted strings.
 - source characters, source images: numbers, unquoted.
-- Entity fields (whatever the spec lists, for example systems, or people and organizations) and keywords: lists, such as ["[[Payments Gateway]]", "[[Project Atlas]]", "unregistered wording"].
-- Empty entity field: write [] and add a line "<field>_note" that keeps the source wording, such as systems_note: "none".
+- Entity fields (whatever the spec lists, for example entities, or systems, people and organizations) and keywords: lists, such as ["[[Payments Gateway]]", "[[Project Atlas]]", "unregistered wording"].
+- Empty entity field: write [] and add a line "<field>_note" that keeps the source wording, such as entities_note: "none".
 - size: "large" only when the file reaches the Table D large-file threshold; otherwise leave the line out.
 - Escape double quotes and backslashes inside strings. Building the front matter with a short script avoids mistakes.
 

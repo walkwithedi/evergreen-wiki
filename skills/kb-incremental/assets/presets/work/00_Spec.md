@@ -9,21 +9,21 @@ Each partition lists its topics as one running description. New topics are appen
 
 00 Spec and status card: fixed files only (the spec and the status card).
 01 Indexes and logs: fixed files only (file index, open decisions, change log, glossary).
-02 Strategy and goals: goals and OKRs; roadmaps; strategy memos; budgets and funding.
-03 Projects: project plans; status reports; milestones and release plans; retrospectives.
-04 Architecture and design: solution designs; design reviews; architecture decision records; capacity and sizing.
-05 Meetings and decisions: minutes; decision logs; review feedback and how it was handled.
-06 Operations: runbooks and procedures; incident reviews; on-call and duty rosters; change records.
-07 Ownership and organisation: team responsibilities; ownership and handover of systems and data; roles (never personal data).
-08 Data and metrics: metric definitions; recurring reports; dashboard snapshots.
-09 Reference and frameworks: standards and policies; external references; templates; fallback for new topics.
+02 Goals and plans: annual and phase goals; work plans; budgets and funding.
+03 Projects and tasks: project plans; progress and weekly reports; milestones; task records; retrospectives.
+04 Proposals and deliverables: proposals and designs; research and analysis; deliverables; review comments.
+05 Meetings and decisions: minutes; decision logs; feedback and how it was handled.
+06 Policies and procedures: rules and policies; procedures and how-to guides; frequently asked questions.
+07 Organisation and roles: department and role responsibilities; division of work and handovers; contact points by role (never personal data).
+08 Data and reports: metric definitions; recurring reports; statistics.
+09 Reference and templates: external standards and policies; reference material; templates; fallback for new topics.
 
-Type list: free; use the material's actual form (minutes, design, plan, list, table, report, reference, decision record).
+Type list: free; use the material's actual form (minutes, plan, proposal, report, list, table, guide, reference, decision record).
 
 2. Table B: term fixes
 
 Original | Fixed | Note
-No entries yet. When a system, team or term is written inconsistently and the owner confirms the standard form, add it here.
+No entries yet. When a name, department or term is written inconsistently and the owner confirms the standard form, add it here.
 
 3. Table C: open issues
 
@@ -42,21 +42,21 @@ Large file threshold (bytes) | 1000000
 Name | Type | Aliases | Core | Note
 No entries yet.
 
-Types: system, project, team, organisation, other.
-Only names in Table E may be written as links. A new entity met during intake may be registered in the same run and listed in the readme for review; until registered it stays plain text.
+Types: project, department or team, organisation, system or product, other.
+Only names in Table E may be written as links. Entities accumulate as material is filed: a new entity met during intake may be registered in the same run and listed in the readme for review; until registered it stays plain text.
 Separate aliases with semicolons. Mark the few entities that deserve a maintained overview as core = yes.
 
 6. Table F: value filters
 
 Empty-value forms | Noise values | Maintenance
-none; n/a; not applicable; - | placeholders, SQL keywords, ticket codes, generic words such as "system" or "platform" | add new noise wording found during intake; this counts as a spec change
+none; n/a; not applicable; - | placeholders, SQL keywords, ticket codes, generic words such as "system", "platform" or "department" | add new noise wording found during intake; this counts as a spec change
 
 7. Naming
 
 Topic files: <partition>_<topic>_<type>_<short title>.md, with spaces inside each part written as hyphens. No date in the name: the same name means the same document in successive versions, and older versions are archived.
 Embed what tells similar material apart in the short title:
 (1) Recurring material (weekly reports, monthly metrics): the period, as in 08_Recurring-reports_report_2026-W41.md.
-(2) One template filled by several parties: the party, as in 03_Status-reports_report_2026-09-Payments.md.
+(2) One template filled by several parties: the party, as in 03_Status-reports_report_2026-09-Finance.md.
 (3) Similar topics with different content: a distinguishing word.
 Summary files have fixed names; see _kb.json names.
 Entity pages live in the entities folder, named after the entity.
@@ -69,8 +69,8 @@ document_date: YYYY-MM-DDTHH:MM (unquoted)
 partition: "05"
 topic: "Minutes"
 type: "minutes"
-systems: ["[[Payments Gateway]]"] (Table E names as quoted links; after Table F filtering)
-systems_note: "…" (only when wording was filtered or empty)
+entities: ["[[Project Atlas]]"] (Table E names as quoted links; after Table F filtering)
+entities_note: "…" (only when wording was filtered or empty)
 keywords: ["…"] (Table E names as links, others plain)
 status: "current"
 size: "large" (only at the Table D large file threshold)

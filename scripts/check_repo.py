@@ -104,7 +104,13 @@ def check_libraries():
         for f in ("_kb-params.md", "00_Spec.md"):
             if not os.path.isfile(os.path.join(d, f)):
                 bad(f"{rel}: missing {f}")
-    for d in presets:
+    # translated presets (<preset>/<language>/) replace the text files, so they need the same set
+    translated = [t for d in presets for t in glob.glob(os.path.join(d, "*")) if os.path.isdir(t)
+                  and os.path.basename(t) != "summary"]
+    for d in translated:
+        if not os.path.isfile(os.path.join(d, "_kb-params.md")):
+            bad(f"{os.path.relpath(d, ROOT)}: missing _kb-params.md")
+    for d in presets + translated:
         spec = read(os.path.join(d, "00_Spec.md"))
         for ph in ("{{DATE}}", "{{HEADING_LIMIT}}", "{{FILENAME_LIMIT}}"):
             if ph not in spec:

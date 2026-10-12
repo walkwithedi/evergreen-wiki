@@ -135,6 +135,13 @@ def load_preset_kb(preset):
     return kbconf.load_json(os.path.join(PRESETS_DIR, preset, kbconf.KB_JSON))
 
 
+def preset_file(preset, language, *rel):
+    """A preset text file in the library language: <preset>/<language>/... when the preset
+    has that translation, else the English file in <preset>/. _kb.json is shared."""
+    local = os.path.join(PRESETS_DIR, preset, lang_key(language), *rel)
+    return local if os.path.isfile(local) else os.path.join(PRESETS_DIR, preset, *rel)
+
+
 def settings(a):
     """Fill missing options from defaults; returns a plain dict."""
     d = defaults(a.preset, a.language)
@@ -184,13 +191,15 @@ def build_files(s):
             text = text.replace(k, v)
         return text
 
-    src = os.path.join(PRESETS_DIR, s["preset"])
+    def src(*rel):
+        return preset_file(s["preset"], s["language"], *rel)
+
     files = [(kbconf.KB_JSON, json.dumps(kb, ensure_ascii=False, indent=2) + "\n"),
-             (kbconf.PARAMS_FILE, filled(os.path.join(src, kbconf.PARAMS_FILE))),
-             (names["spec"], filled(os.path.join(src, kbconf.DEFAULT_NAMES["spec"])))]
+             (kbconf.PARAMS_FILE, filled(src(kbconf.PARAMS_FILE))),
+             (names["spec"], filled(src(kbconf.DEFAULT_NAMES["spec"])))]
     for k in kbconf.SUMMARY_KEYS:
         if k != "spec":
-            files.append((names[k], filled(os.path.join(src, "summary", kbconf.DEFAULT_NAMES[k]))))
+            files.append((names[k], filled(src("summary", kbconf.DEFAULT_NAMES[k]))))
     folders = [names["archive_dir"], names["notes_dir"]]
     if kb.get("metadata", "yaml") == "yaml":
         folders.append(names["entities_dir"])
