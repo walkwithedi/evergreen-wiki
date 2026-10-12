@@ -4,6 +4,8 @@ All three skills share one version number. To release, update this file, the "Ve
 
 ## Unreleased
 
+- kb-incremental: the description lists "finish intake" (「结束入库」) with the other intake phrases, so the request starts the skill on its own.
+
 ## 1.8.0
 
 Filing a large folder in batches.
