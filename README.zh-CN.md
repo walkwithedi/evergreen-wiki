@@ -12,15 +12,53 @@
 
 文件夹里材料多时分批入库。助手先清点（各子目录的文件数、类型、大小、哪些已在库中），给出分批计划；你确认开始后，按子目录逐批处理，每批完成报一行进度，全部完成后一次性重写汇总文件，并列出需要你审阅的事项。进度保存在库里，可以在两批之间停下，以后新开对话说「继续入库」接着做。每批大小在 `_kb.json` 的 `intake` 里设置。
 
-独立工具 [tools/doc2kb](tools/doc2kb/README.zh-CN.md) 是同一个转换器：在 Linux 桌面或定时任务里把整个目录的文档增量转换成带索引的 Markdown 知识库，每次发版随附 `doc2kb-<版本>.zip`。
+## 整体结构与下载
 
-[tools/desktop-setup](tools/desktop-setup/README.zh-CN.md) 在 Linux 桌面上用菜单和弹窗运行安装程序及其备份、回滚、移动、卸载命令，适合不用终端的人，随 evergreen-wiki 的 zip 一起发布。
+由四部分组成，都是放在你电脑或 Google Drive 里的普通文件：
+
+- 技能（kb-note、kb-query、kb-incremental）：助手加载的说明和脚本，具体工作由它们完成。
+- 知识库：一个 Markdown 文件夹，里面有配置（`_kb.json`）、规范、状态卡和文件索引。可以有多个，比如一个生活库、一个工作库。
+- 注册表（`kb-libraries.json`）：登记你有哪些知识库，以及每个库的 id、名称、范围和位置。技能靠它决定每次请求用哪个库。
+- 助手每次都会读的指令文件（CLAUDE.md、AGENTS.md、GEMINI.md 或项目指令）里的一行：告诉助手你有知识库，让它先查库，再凭记忆回答。
+
+```text
+你 --提问--> 助手 --读取--> 指令里的一行（「我有知识库：……」）
+               |
+               +-- 技能（kb-query、kb-note、kb-incremental）
+                     +-- 注册表 kb-libraries.json：用哪个库、在哪里
+                     +-- 知识库文件夹：Markdown 文件、状态卡、文件索引
+```
+
+安装程序 `install.py` 负责把这些装好，以后还能备份、回滚、移动知识库和卸载。[tools/desktop-setup](tools/desktop-setup/README.zh-CN.md) 在 Linux 桌面上用弹窗完成同样的步骤。[tools/doc2kb](tools/doc2kb/README.zh-CN.md) 是独立的文档转换器，在桌面或定时任务里把整个目录的文档增量转换成带索引的 Markdown。
+
+### 下载哪个文件
+
+[Releases](../../releases) 页面上每个版本都带这些文件：
+
+| 文件 | 是什么 | 用途 |
+| --- | --- | --- |
+| `kb-note-<版本>.zip`、`kb-query-<版本>.zip`、`kb-incremental-<版本>.zip` | 每个一个技能，英文口令 | 上传到 claude.ai 或 Claude App |
+| 同名但以 `-zh.zip` 结尾 | 同样的技能，中文口令 | 同上，中文用户用这三个 |
+| `evergreen-wiki-v<版本>.zip` | 完整仓库：技能、带备份/回滚/移动/卸载命令的 `install.py`、tools/desktop-setup、tools/doc2kb、示例知识库和文档 | 没有 git 时给终端助手安装、电脑不能联网时安装，或用 Linux 桌面工具安装 |
+| `doc2kb-v<版本>.zip` | 只有文档转换器 | 只想把文档目录转成 Markdown，不装技能 |
+
+### 按情况选择
+
+| 你的情况 | 怎么做 |
+| --- | --- |
+| 用 claude.ai 或 Claude App，知识库放 Google Drive | 上传三个带 -zh 的技能 zip，见[在 claude.ai 或 Claude App 里](#在-claudeai-或-claude-app-里google-drive) |
+| 用 Claude Code | 插件或安装程序，见[在终端里](#在终端里claude-codecodexgemini-cliopencode) |
+| 用 Codex、Gemini CLI、OpenCode 等支持 Agent Skills 的助手 | 安装程序，见[在终端里](#在终端里claude-codecodexgemini-cliopencode) |
+| 电脑不能联网 | 把 `evergreen-wiki-v<版本>.zip` 拷过去，再用安装程序或桌面工具 |
+| Linux 桌面，不用终端 | `evergreen-wiki-v<版本>.zip`，再用弹窗，见[在 Linux 桌面上](#在-linux-桌面上不用终端) |
+| 只想把文档转成 Markdown | `doc2kb-v<版本>.zip`，见 [tools/doc2kb](tools/doc2kb/README.zh-CN.md) |
+| 想先试试 | 虚构的[示例知识库](examples/) |
 
 中文口令需要安装中文变体：claude.ai 上传 Releases 中带 -zh 的 zip；终端里运行 `python3 install.py`，第一题选中文即可。
 
 ## 快速上手
 
-按你使用助手的地方选一条路径。两条路径都只问三个问题（建哪类库、放在哪里、收什么内容），写入前先给预览，确认后才写。
+按你使用助手的地方选一条路径。每条路径都只问三个问题（建哪类库、放在哪里、收什么内容），写入前先给预览，确认后才写。
 
 ### 在终端里（Claude Code、Codex、Gemini CLI、OpenCode）
 
@@ -36,6 +74,14 @@ python3 install.py
 电脑不能联网时：在别处从 [Releases](../../releases) 下载 evergreen-wiki-v<版本>.zip，拷过去解压，在文件夹里运行 `python3 install.py`；只需要 Python 3.8 及以上，不用装别的。
 
 以后在同一文件夹里还可以运行：`python3 install.py backup`（备份）、`rollback`（回滚）、`move <库 id> --to <文件夹>`（移动知识库）、`uninstall`（卸载）。替换技能、注册表或指令文件前会先自动备份；知识库文件夹从不进备份，移动时逐个文件核对一致后才改注册表，卸载时除非逐个勾选，否则一律保留。详见 [docs/manual-setup.zh-CN.md](docs/manual-setup.zh-CN.md#6-备份回滚移动卸载)。
+
+### 在 Linux 桌面上（不用终端）
+
+1. 从 [Releases](../../releases) 下载 `evergreen-wiki-v<版本>.zip` 并解压。
+2. 在 `tools/desktop-setup` 里双击 `evergreen-wiki-setup.desktop`（知识库设置）；第一次双击时选信任并启动。
+3. 在菜单里选「安装与建库」：选助手、装技能、建知识库，并告诉助手你有这个库。备份、回滚、移动知识库和卸载也在同一个菜单里。
+
+需要 Python 3.8 及以上；弹窗需要 zenity，没有时在终端窗口里问答。详见 [tools/desktop-setup](tools/desktop-setup/README.zh-CN.md)。
 
 ### 在 claude.ai 或 Claude App 里（Google Drive）
 

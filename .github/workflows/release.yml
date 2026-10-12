@@ -68,6 +68,8 @@ jobs:
           TAG: ${{ steps.decide.outputs.tag }}
         run: |
           awk "/^## ${TAG#v}/{f=1;next} /^## /{f=0} f" CHANGELOG.md > notes.md
+          # the same download guide under every release, with this version filled in
+          { echo; sed "s/<version>/${TAG#v}/g" docs/release-downloads.md; } >> notes.md
           if gh release view "$TAG" >/dev/null 2>&1; then
             # Already there (published on the web): attach the zips, fill in empty notes.
             gh release upload "$TAG" dist/*.zip --clobber

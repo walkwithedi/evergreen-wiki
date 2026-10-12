@@ -26,9 +26,51 @@ A large folder is filed in batches. The assistant first counts the material (fil
 
 The full reasoning is in [docs/methodology.md](docs/methodology.md).
 
+## How it fits together
+
+Four pieces, all plain files on your computer or in Google Drive:
+
+- The skills (kb-note, kb-query, kb-incremental): instructions and scripts your agent loads. They do the work.
+- A library: a folder of Markdown files with its settings (`_kb.json`), spec, status card and file index. You can keep several, for example one for life and one for work.
+- The registry (`kb-libraries.json`): the list of your libraries, with each one's id, label, scope and place. The skills read it to choose the library for a request.
+- One line in the instructions your agent always reads (CLAUDE.md, AGENTS.md, GEMINI.md or Project instructions). It says the libraries exist, so the agent consults them before answering from memory.
+
+```text
+you --ask--> agent --reads--> instructions line ("I keep knowledge bases: ...")
+               |
+               +-- skill (kb-query, kb-note, kb-incremental)
+                     +-- registry kb-libraries.json: which library, and where
+                     +-- library folder: Markdown files, status card, file index
+```
+
+The installer (`install.py`) puts these in place and later backs them up, rolls back, moves a library or uninstalls. [tools/desktop-setup](tools/desktop-setup/) shows the same steps as dialogs on a Linux desktop. [tools/doc2kb](tools/doc2kb/) converts whole folders of documents to Markdown on its own.
+
+### Which download
+
+Every release on the [Releases](../../releases) page carries these files:
+
+| File | What it is | Use it for |
+| --- | --- | --- |
+| `kb-note-<version>.zip`, `kb-query-<version>.zip`, `kb-incremental-<version>.zip` | one skill each, English trigger phrases | uploading the skills to claude.ai or the Claude apps |
+| the same names ending in `-zh.zip` | the same skills with Chinese trigger phrases | the same, in Chinese |
+| `evergreen-wiki-v<version>.zip` | the whole repository: skills, `install.py` with its backup, rollback, move and uninstall commands, tools/desktop-setup, tools/doc2kb, the sample library and the docs | installing for a terminal agent without git, on a computer without network, or from the Linux desktop tool |
+| `doc2kb-v<version>.zip` | the document converter alone | converting folders of documents to Markdown without the skills |
+
+### Which path
+
+| Your situation | What to do |
+| --- | --- |
+| claude.ai or the Claude apps, library in Google Drive | upload the three skill zips: [In claude.ai or the Claude apps](#in-claudeai-or-the-claude-apps-google-drive) |
+| Claude Code | the plugin or the installer: [In a terminal](#in-a-terminal-claude-code-codex-gemini-cli-opencode) |
+| Codex, Gemini CLI, OpenCode or another agent that reads Agent Skills | the installer: [In a terminal](#in-a-terminal-claude-code-codex-gemini-cli-opencode) |
+| A computer without network | copy `evergreen-wiki-v<version>.zip` over, then the installer or the desktop tool |
+| A Linux desktop, no terminal | `evergreen-wiki-v<version>.zip`, then the dialogs: [On a Linux desktop](#on-a-linux-desktop-without-a-terminal) |
+| Only converting documents to Markdown | `doc2kb-v<version>.zip`: [tools/doc2kb](tools/doc2kb/) |
+| Trying it first | the fictional [sample library](examples/) |
+
 ## Quick start
 
-Pick the path that matches where you use your assistant. Either way you answer three questions (which kind of library, where it lives, what belongs in it), see a preview, and nothing is written until you confirm.
+Pick the path that matches where you use your assistant. Every path asks three questions (which kind of library, where it lives, what belongs in it), shows a preview, and writes nothing until you confirm.
 
 ### In a terminal (Claude Code, Codex, Gemini CLI, OpenCode)
 
@@ -44,6 +86,14 @@ Claude Code users who prefer the plugin: `/plugin marketplace add walkwithedi/ev
 No network on the computer? Download evergreen-wiki-v<version>.zip from [Releases](../../releases) elsewhere, copy it over, unzip it and run `python3 install.py` in the folder; it needs Python 3.8 or later and nothing else.
 
 Later, from the same folder: `python3 install.py backup`, `rollback`, `move <library id> --to <folder>` and `uninstall`. Replacing skills, a registry or an instructions file is backed up first; library folders are never part of a backup, a move changes the registry only after every copied file matches, and uninstall keeps them unless you pick each one. See [docs/manual-setup.md](docs/manual-setup.md#6-back-up-roll-back-move-uninstall).
+
+### On a Linux desktop, without a terminal
+
+1. Download `evergreen-wiki-v<version>.zip` from [Releases](../../releases) and unzip it.
+2. In `tools/desktop-setup`, double-click `evergreen-wiki-setup.desktop` (Knowledge base setup); the first time, choose to trust and launch it.
+3. In the menu, choose Set up: pick your agent, install the skills, set up a library and let the agent know about it. The same menu backs up, rolls back, moves a library and uninstalls.
+
+It needs Python 3.8 or later and zenity for the dialogs (without zenity it asks in the terminal window). Details in [tools/desktop-setup](tools/desktop-setup/).
 
 ### In claude.ai or the Claude apps (Google Drive)
 
