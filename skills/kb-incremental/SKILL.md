@@ -5,7 +5,7 @@ description: Files material (Office, PDF, mail, pictures, text) into an evergree
 
 # Knowledge base intake, archive, health check and init
 
-Version: 1.9.0
+Version: 1.10.0
 
 ## Modes
 

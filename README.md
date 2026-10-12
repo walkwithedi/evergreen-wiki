@@ -98,6 +98,8 @@ Scripts need Python 3.8+ and nothing outside the standard library. Without Pytho
 
 [tools/doc2kb](tools/doc2kb/) is the converter as a stand-alone tool: it turns whole folders of Office files, PDFs and mail into one Markdown knowledge base with an index, from a Linux desktop dialog or a cron job, incrementally. Each release attaches it as `doc2kb-<version>.zip`.
 
+[tools/desktop-setup](tools/desktop-setup/) runs the installer and its backup, rollback, move and uninstall commands as a menu with dialogs on a Linux desktop, for people who do not use a terminal; it comes with the evergreen-wiki zip.
+
 ## Development
 
 ```bash

@@ -189,12 +189,14 @@ MSG = {
 
 
 class Asker:
-    """Reads answers from stdin; works with a terminal and with piped input (tests)."""
+    """Reads answers from stdin; works with a terminal and with piped input (tests).
+    tools/desktop-setup puts dialogs behind the same three methods."""
 
     def __init__(self, lang="en"):
         self.m = MSG[lang]
 
-    def ask(self, prompt, default=""):
+    def ask(self, prompt, default="", kind=None):
+        """kind="folder" marks a folder path; a dialog asker shows a folder chooser for it."""
         shown = f"{prompt} [{default}]: " if default else f"{prompt}: "
         try:
             ans = input(shown)
@@ -231,7 +233,7 @@ def choose_dest(q, m):
     opts.append(("other", m["other"]))
     target = q.choose(m["agent"], opts, default)
     if target == "other":
-        return None, os.path.abspath(os.path.expanduser(q.ask(m["folder"])))
+        return None, os.path.abspath(os.path.expanduser(q.ask(m["folder"], kind="folder")))
     if not TARGETS[target][1]:
         print(m["unverified"])
     return target, TARGETS[target][0]
@@ -267,7 +269,7 @@ def free_id(base, taken):
 
 def ask_root(q, m, il, default):
     while True:
-        root = os.path.abspath(os.path.expanduser(q.ask(m["q_root"], default)))
+        root = os.path.abspath(os.path.expanduser(q.ask(m["q_root"], default, kind="folder")))
         try:
             il.check_root(root)
             return root
@@ -382,15 +384,17 @@ def add_instructions_line(q, m, il, target, reg, lang):
         print(m["skipped_line"])
 
 
-def wizard():
+def wizard(asker=Asker, lang=None):
+    """asker(lang) returns the object that asks the questions; lang skips the language question."""
     sys.path.insert(0, os.path.join(ROOT, "skills", "kb-incremental", "scripts"))
     import init_library as il
     il.kbconf.utf8_stdio()
     try:
-        lang = Asker("en").choose("Language / 语言", [("zh", "中文"), ("en", "English")], il.detect_language())
+        lang = lang or asker("en").choose("Language / 语言", [("zh", "中文"), ("en", "English")],
+                                          il.detect_language())
     except KeyboardInterrupt:
         sys.exit(1)
-    q = Asker(lang)
+    q = asker(lang)
     m = MSG[lang]
     try:
         target, dest_root = choose_dest(q, m)
