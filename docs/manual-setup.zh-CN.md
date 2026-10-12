@@ -8,7 +8,7 @@
 
 - Claude Code：`/plugin marketplace add walkwithedi/evergreen-wiki`，然后 `/plugin install evergreen-wiki@evergreen-wiki`。
 - claude.ai 或 Claude App：从 [Releases](../../../releases) 下载带 -zh 的 kb-note、kb-query、kb-incremental 三个 zip，在设置的 Skills 页面逐个上传。
-- 其他支持 Agent Skills 的助手：`python3 install.py --target agents --locale zh`（也可用 `--target gemini`、`opencode`、`codex`、`claude-code` 或 `--dest <文件夹>`）；`--force` 替换已安装的版本，`--dry-run` 只预览。
+- 其他支持 Agent Skills 的助手：`python3 install.py --target agents --locale zh`（也可用 `--target gemini`、`opencode`、`codex`、`claude-code` 或 `--dest <文件夹>`）；`--descriptions <文件>` 用自己的技能描述（每个技能一行，格式同 `locales/zh/descriptions.json`），`--force` 替换已安装的版本，`--dry-run` 只预览。安装向导（`python3 install.py`）可用 `--agent <目标>` 和 `--preset life|work` 免答这两题，也可用 `--descriptions`。向导里选到已有知识库的文件夹（含 `_kb.json` 或 `00_` 开头的规范文件）时，先给预览，再按原样登记，不改动任何文件；之后对助手说「初始化 <库名>」，由助手按库内规范补齐配置。
 
 ## 2. 建库
 

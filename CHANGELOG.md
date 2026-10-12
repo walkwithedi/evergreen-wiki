@@ -2,6 +2,12 @@
 
 All three skills share one version number. To release, update this file, the "Version:" line of every SKILL.md and the plugin manifests together and merge to main; the release workflow then publishes v<version>.
 
+## 1.11.0
+
+Existing libraries and preset answers in the installer.
+- install.py wizard: a folder that already holds a library (_kb.json or a 00_ spec file) is registered as it is after a preview (folder, label from its _kb.json, id, scope), without changing a file; the user then says "init <label>" to complete its settings. Answering 1 at the preview chooses another folder. A folder with only loose Markdown is still refused.
+- install.py: --descriptions FILE installs the skills with descriptions from a file in the shape of locales/*/descriptions.json (checked: one line of at most 1024 characters per skill); --agent and --preset life|work answer those wizard questions in advance. tools/desktop-setup takes the same three options for Set up.
+
 ## 1.10.0
 
 The installer in dialogs.

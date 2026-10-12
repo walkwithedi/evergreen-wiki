@@ -5,7 +5,9 @@ uninstall commands for people who do not use a terminal.
   python3 desktop_setup.py                 a menu: set up (skills, a library, the knowledge-base line),
                                            back up, roll back, move a library, uninstall
 Options: --ui zenity|tty (default: dialogs when zenity and a graphical session are there, else
-questions in the terminal; EVERGREEN_SETUP_UI sets the same), --lang en|zh, --log-level.
+questions in the terminal; EVERGREEN_SETUP_UI sets the same), --lang en|zh, --log-level; for set up,
+--agent and --preset life|work answer those questions in advance and --descriptions FILE replaces the
+skill descriptions (as install.py).
 
 The questions, previews and checks are the ones of install.py and kb_manage.py: this file only puts
 dialogs behind the same ask, yes and choose calls. What those print is collected and shown in the next
@@ -192,10 +194,10 @@ def move(q, m, asker, lang):
     kb_manage.main(["move", lib_id, "--to", parent, "--lang", lang], asker, install.MANAGE_DEFAULTS)
 
 
-def run_action(action, q, m, asker, lang):
+def run_action(action, q, m, asker, lang, a):
     if action == "setup":
         try:
-            install.wizard(asker, lang)
+            install.wizard(asker, lang, a.agent, a.preset, a.descriptions)
         except SystemExit:  # the wizard exits after printing why
             log.info("setup ended early")
     elif action == "move":
@@ -208,10 +210,18 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--ui", choices=["zenity", "tty"], default=os.environ.get("EVERGREEN_SETUP_UI") or None)
     ap.add_argument("--lang", choices=sorted(MSG))
+    ap.add_argument("--agent", choices=sorted(install.TARGETS))
+    ap.add_argument("--preset", choices=["life", "work"])
+    ap.add_argument("--descriptions", metavar="FILE")
     ap.add_argument("--log-level", default=os.environ.get("LOG_LEVEL", "WARNING").upper(),
                     choices=["DEBUG", "INFO", "WARNING", "ERROR"])
     a = ap.parse_args()
     logging.basicConfig(level=a.log_level, format=LOG_FORMAT, stream=sys.stderr)
+    if a.descriptions:
+        try:
+            install.load_descriptions(a.descriptions)
+        except (OSError, ValueError) as e:
+            ap.error(str(e))
     il = kb_manage.init_library()
     il.kbconf.utf8_stdio()
     lang = a.lang or il.detect_language()
@@ -233,7 +243,7 @@ def main():
         if action == "quit":
             break
         try:
-            run_action(action, q, m, asker, lang)
+            run_action(action, q, m, asker, lang, a)
         except KeyboardInterrupt:
             print(install.MSG[lang]["cancelled"])
         if capture:

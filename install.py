@@ -12,8 +12,10 @@ Usage:
   python3 install.py --target opencode        ~/.config/opencode/skills
   python3 install.py --target codex           ~/.codex/skills
   python3 install.py --dest /some/skills/dir  any folder
-Options: --locale zh (Chinese descriptions), --link (symlink instead of copy, for development),
---force (replace an existing install), --dry-run, --wizard (interactive even without a terminal).
+Options: --locale zh (Chinese descriptions), --descriptions FILE (your own descriptions, in the shape of
+locales/*/descriptions.json), --link (symlink instead of copy, for development), --force (replace an
+existing install), --dry-run, --wizard (interactive even without a terminal); for the wizard, --agent
+and --preset life|work answer those questions in advance.
 
 Afterwards (details in kb_manage.py):
   python3 install.py backup                   back up the skills, the knowledge-base line and the registry
@@ -144,6 +146,10 @@ MSG = {
                   '"file these" with a document attached'],
         "later": "No library set up. To set one up later, run this again or tell your agent: \"get started with the knowledge base\".",
         "bad": "Not valid: {err}",
+        "existing": "{root} already holds a library. It can be registered as it is; nothing in the folder changes.",
+        "existing_items": ["Folder", "Label", "Id", "Scope"],
+        "existing_next": "After registering, tell your agent \"init {label}\" to complete its settings from its own spec.",
+        "registered_only": "Library {root} registered in {path} as it is.",
         "yes": "Y/n", "no": "y/N",
     },
     "zh": {
@@ -183,6 +189,10 @@ MSG = {
         "tries": ["「记一下：牙医复查定在三月」", "「这个月有什么到期的？」", "附上一份文件说「增量整理」"],
         "later": "暂未建库。以后要建库，重新运行本向导，或对助手说「开始使用知识库」。",
         "bad": "无效：{err}",
+        "existing": "{root} 里已经有知识库，可以按原样登记，不改动文件夹里的任何文件。",
+        "existing_items": ["文件夹", "名称", "id", "范围"],
+        "existing_next": "登记后对助手说「初始化 {label}」，由助手按库内规范补齐配置。",
+        "registered_only": "已把 {root} 按原样登记到 {path}。",
         "yes": "Y/n", "no": "y/N",
     },
 }
@@ -225,7 +235,11 @@ class Asker:
                 return ans
 
 
-def choose_dest(q, m):
+def choose_dest(q, m, agent=None):
+    if agent:
+        if not TARGETS[agent][1]:
+            print(m["unverified"])
+        return agent, TARGETS[agent][0]
     found = [t for t in AGENT_ORDER if os.path.isdir(AGENT_HOMES[t])]
     default = found[0] if found else "agents"
     opts = [(t, f"{AGENT_NAMES[t]}  ({TARGETS[t][0]}){'  - ' + m['found'] if t in found else ''}")
@@ -239,7 +253,18 @@ def choose_dest(q, m):
     return target, TARGETS[target][0]
 
 
-def install_skills(q, m, target, dest_root, lang):
+def load_descriptions(path):
+    """A descriptions file: {"kb-note": "...", ...}, one line each, the shape of locales/*/descriptions.json."""
+    with open(os.path.expanduser(path), encoding="utf-8") as f:
+        desc = json.load(f)
+    bad = [n for n in SKILLS if not (isinstance(desc, dict) and isinstance(desc.get(n), str) and desc[n].strip()
+                                     and "\n" not in desc[n] and len(desc[n]) <= 1024)]
+    if bad:
+        raise ValueError(f"{path}: needs one line of at most 1024 characters for {', '.join(bad)}")
+    return desc
+
+
+def install_skills(q, m, target, dest_root, lang, descriptions=None):
     if target == "claude-code":
         print(m["plugin_note"])
     if not q.yes(m["install"].format(dest=dest_root)):
@@ -250,7 +275,9 @@ def install_skills(q, m, target, dest_root, lang):
         kb_manage.backup_once(MANAGE_DEFAULTS, "before installing skills", lang, [dest_root])
     opts = argparse.Namespace(force=force, dry_run=False, link=False)
     desc = None
-    if lang != "en":
+    if descriptions:
+        desc = load_descriptions(descriptions)
+    elif lang != "en":
         with open(os.path.join(ROOT, "locales", lang, "descriptions.json"), encoding="utf-8") as f:
             desc = json.load(f)
     done = sum(install_one(n, dest_root, opts, desc) for n in SKILLS)
@@ -268,13 +295,58 @@ def free_id(base, taken):
 
 
 def ask_root(q, m, il, default):
+    """Returns (folder, True when it already holds a library)."""
     while True:
         root = os.path.abspath(os.path.expanduser(q.ask(m["q_root"], default, kind="folder")))
+        if os.path.isdir(root) and kb_manage.is_library(root):
+            return root, True
         try:
             il.check_root(root)
-            return root
+            return root, False
         except il.Refused as e:
             print(m["bad"].format(err=e))
+
+
+def register_existing(q, m, il, lang, reg_path, root, s):
+    """Registers a folder that already holds a library, as it is. Returns the registry, None when
+    cancelled, or "again" to choose another folder."""
+    try:
+        label = il.kbconf.load_json(os.path.join(root, il.kbconf.KB_JSON)).get("label")
+    except (OSError, ValueError, il.kbconf.ConfigError):
+        label = None
+    s["label"] = label if isinstance(label, str) and label.strip() else os.path.basename(root)
+    print(m["existing"].format(root=root))
+    while True:
+        values = [root, s["label"], s["id"], s["scope"]]
+        try:
+            entry = il.registry_entry(s["id"], s["label"], s["scope"], "local", root)
+            il.add_to_registry(reg_path, entry, lang, dry_run=True)
+            print(f"\n{m['preview']}")
+            for i, (k, v) in enumerate(zip(m["existing_items"], values), 1):
+                print(f"  {i}. {k}: {v}")
+            print(m["registry"].format(path=reg_path))
+            print("  " + json.dumps(entry, ensure_ascii=False))
+            print(m["existing_next"].format(label=s["label"]))
+            ok = True
+        except (il.Refused, il.kbconf.ConfigError) as e:
+            print(m["bad"].format(err=e))
+            ok = False
+        ans = q.ask(m["confirm"]).lower()
+        if ok and ans in ("", "y", "yes", "是"):
+            break
+        if ans.startswith("n"):
+            print(m["cancelled"])
+            return None
+        if ans == "1":
+            return "again"
+        if ans.isdigit() and 2 <= int(ans) <= 4:
+            key = ["label", "id", "scope"][int(ans) - 2]
+            s[key] = q.ask(m["existing_items"][int(ans) - 1], s[key])
+    kb_manage.backup_once(MANAGE_DEFAULTS, "before registering a library", lang)
+    reg = il.add_to_registry(reg_path, entry, lang)
+    print(m["registered_only"].format(root=root, path=reg_path))
+    print(m["existing_next"].format(label=s["label"]))
+    return reg
 
 
 def library_settings(il, s):
@@ -303,7 +375,11 @@ def show_preview(m, il, s, root, reg_path, entry):
 def edit_item(q, m, il, s, root, n):
     item = m["items"][n - 1]
     if n == 1:
-        return ask_root(q, m, il, root)
+        while True:
+            new, existing = ask_root(q, m, il, root)
+            if not existing:
+                return new
+            print(m["bad"].format(err=m["existing"].format(root=new)))
     if n == 7:
         s["sensitivity"] = q.yes(item, s["sensitivity"])
     elif n == 8:
@@ -314,7 +390,7 @@ def edit_item(q, m, il, s, root, n):
     return root
 
 
-def setup_library(q, m, il, lang):
+def setup_library(q, m, il, lang, preset=None):
     reg_path = il.registry_path()
     reg = il.load_registry_or_new(reg_path, lang)
     taken = [lib.get("id") for lib in reg.get("libraries", [])]
@@ -324,13 +400,20 @@ def setup_library(q, m, il, lang):
             print(f"  {lib.get('id')}: {lib.get('label')} - {lib.get('scope')}")
     if not q.yes(m["setup"]):
         return None
-    preset = q.choose(m["q_preset"], [("life", m["life"]), ("work", m["work"])], "life")
+    preset = preset or q.choose(m["q_preset"], [("life", m["life"]), ("work", m["work"])], "life")
     s = il.defaults(preset, lang)
     new_id = free_id(s["id"], taken)
     if new_id != s["id"]:
         print(m["id_taken"].format(id=s["id"], new=new_id))
         s["id"] = new_id
-    root = ask_root(q, m, il, os.path.join(HOME, "kb", s["id"]))
+    root = os.path.join(HOME, "kb", s["id"])
+    while True:
+        root, existing = ask_root(q, m, il, root)
+        if not existing:
+            break
+        done = register_existing(q, m, il, lang, reg_path, root, dict(s))
+        if done != "again":
+            return done
     s["scope"] = q.ask(m["q_scope"], s["scope"])
     while True:
         try:
@@ -384,8 +467,9 @@ def add_instructions_line(q, m, il, target, reg, lang):
         print(m["skipped_line"])
 
 
-def wizard(asker=Asker, lang=None):
-    """asker(lang) returns the object that asks the questions; lang skips the language question."""
+def wizard(asker=Asker, lang=None, agent=None, preset=None, descriptions=None):
+    """asker(lang) returns the object that asks the questions. lang, agent (a --target name) and preset
+    answer those questions in advance; descriptions is a file that replaces the skill descriptions."""
     sys.path.insert(0, os.path.join(ROOT, "skills", "kb-incremental", "scripts"))
     import init_library as il
     il.kbconf.utf8_stdio()
@@ -397,9 +481,9 @@ def wizard(asker=Asker, lang=None):
     q = asker(lang)
     m = MSG[lang]
     try:
-        target, dest_root = choose_dest(q, m)
-        install_skills(q, m, target, dest_root, lang)
-        reg = setup_library(q, m, il, lang)
+        target, dest_root = choose_dest(q, m, agent)
+        install_skills(q, m, target, dest_root, lang, descriptions)
+        reg = setup_library(q, m, il, lang, preset)
         if reg is None:
             print(m["later"])
             return
@@ -422,6 +506,10 @@ def main():
     g.add_argument("--dest")
     g.add_argument("--wizard", action="store_true", help="interactive setup (the default in a terminal)")
     ap.add_argument("--locale")
+    ap.add_argument("--descriptions", metavar="FILE",
+                    help="skill descriptions to use instead of the built-in ones (shape of locales/*/descriptions.json)")
+    ap.add_argument("--agent", choices=sorted(TARGETS), help="wizard: the agent, instead of asking")
+    ap.add_argument("--preset", choices=["life", "work"], help="wizard: the kind of library, instead of asking")
     ap.add_argument("--link", action="store_true")
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
@@ -429,13 +517,22 @@ def main():
                     choices=["DEBUG", "INFO", "WARNING", "ERROR"])
     a = ap.parse_args()
     logging.basicConfig(level=a.log_level, format=LOG_FORMAT, stream=sys.stderr)
+    if a.descriptions:
+        if a.locale or a.link:
+            ap.error("--descriptions rewrites SKILL.md and cannot be combined with --locale or --link")
+        try:
+            load_descriptions(a.descriptions)
+        except (OSError, ValueError) as e:
+            ap.error(str(e))
     if a.wizard or not (a.target or a.dest):
         # Both ends must be a terminal: on Windows the NUL device reports isatty() as true.
         if not a.wizard and not (sys.stdin.isatty() and sys.stdout.isatty()):
             ap.error("give --target or --dest, or run without options in a terminal for interactive setup")
         if a.locale or a.link or a.force or a.dry_run:
             ap.error("--locale, --link, --force and --dry-run go with --target or --dest; the wizard asks instead")
-        return wizard()
+        return wizard(agent=a.agent, preset=a.preset, descriptions=a.descriptions)
+    if a.agent or a.preset:
+        ap.error("--agent and --preset answer wizard questions; use --target or --dest without the wizard")
     if a.link and a.locale:
         ap.error("--locale rewrites SKILL.md and cannot be combined with --link")
     if a.dest:
@@ -445,7 +542,7 @@ def main():
         if not verified:
             print(f"note: the {a.target} skills folder ({dest_root}) is not confirmed by its official "
                   "documentation; if the skills do not show up, try --target agents or --dest.")
-    desc = None
+    desc = load_descriptions(a.descriptions) if a.descriptions else None
     if a.locale:
         with open(os.path.join(ROOT, "locales", a.locale, "descriptions.json"), encoding="utf-8") as f:
             desc = json.load(f)

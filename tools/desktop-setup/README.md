@@ -22,14 +22,14 @@ No network is needed. On a computer without one, copy evergreen-wiki-v<version>.
 
 1. Double-click `evergreen-wiki-setup.desktop` (Knowledge base setup). The first time, the desktop may ask whether to trust or run it; choose to trust and launch. If double-clicking opens the file as text, open a terminal in this folder and run `python3 desktop_setup.py`.
 2. Pick an item from the menu:
-   - Set up: choose the agent, install the three skills, set up a library (kind, folder, scope; a preview comes before anything is written) and write the knowledge-base line into the agent's instructions file. Run it again to add another library.
+   - Set up: choose the agent, install the three skills, set up a library (kind, folder, scope; a preview comes before anything is written) and write the knowledge-base line into the agent's instructions file. A folder that already holds a library is registered as it is. Run it again to add another library.
    - Back up, Roll back, Uninstall: as `install.py backup`, `rollback` and `uninstall` (docs/manual-setup.md, section 6).
    - Move a library: pick a registered library and, in the folder chooser, the folder to move it into; then the move preview and confirmation of `install.py move`.
 3. The menu comes back after each item; Quit or closing the menu ends the tool.
 
 Folder questions offer the suggested folder or a folder chooser; cancelling the chooser goes back to that choice. Text printed by a step is shown in the next dialog, a long preview in a scrolling window first. Closing a list, text or folder dialog cancels the current item and closing a yes/no question answers no; what was finished stays.
 
-Options: `--ui zenity|tty` (or `EVERGREEN_SETUP_UI`) forces dialogs or terminal questions, `--lang en|zh` the language (default: the system language), `--log-level`.
+Options: `--ui zenity|tty` (or `EVERGREEN_SETUP_UI`) forces dialogs or terminal questions, `--lang en|zh` the language (default: the system language), `--log-level`. For Set up, `--agent <target>` and `--preset life|work` answer those questions in advance and `--descriptions <file>` replaces the skill descriptions, as with `install.py`; a wrapper script or a copy of the .desktop entry can fix them for a group of users.
 
 ## Checking on a desktop
 
