@@ -230,3 +230,9 @@ textarea {
 .entries li.pick.file { padding-left: 10px; }
 .entries li.dir.pick::before { content: ""; }
 .entries li.dir.pick span::before { content: "\25B8  "; color: var(--accent); }
+.msg.child { margin-left: 28px; border-style: dashed; }
+.msg .who { font-size: 12px; color: var(--muted); }
+.fold { color: var(--muted); font-size: 13px; }
+.fold > summary { cursor: pointer; }
+.fold > .text { margin-top: 4px; }
+.note.queued { font-style: italic; }

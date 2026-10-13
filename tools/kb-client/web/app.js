@@ -73,7 +73,17 @@
       chat_busy: "Working...",
       chat_simple: "Simple mode: OpenCode's server could not be used ({reason}). Each message runs once with opencode run; the assistant cannot ask for permission or ask questions on this page. For full use, open OpenCode in a terminal.",
       chat_failed: "OpenCode stopped ({reason}). Quit the client and start it again.",
-      chat_no_program: "OpenCode was not found on this computer, so the conversation is off. Install OpenCode, then start the client again.",
+      chat_no_program: "OpenCode was not found on this computer, so the conversation is off. Install OpenCode, or start the client with --opencode <path to opencode>, then start it again.",
+      chat_terminal: "Open in a terminal",
+      terminal_confirm: "Open this conversation in OpenCode in a terminal window? While you continue there, the conversation on this page pauses; when you are back, reload the page or start a new conversation.",
+      terminal_opened: "Opened in a terminal ({name}).",
+      terminal_no_session: "Send a message first; then the conversation can be opened in a terminal.",
+      terminal_none: "No terminal program was found on this computer.",
+      queued: "Queued: {text}",
+      child: "Subagent: ",
+      thinking: "Thinking...",
+      interim: "Working notes",
+      perm_task: "Send a subagent", agent_explore: "explore (looks things up)",
       chat_no_model: "OpenCode has no model set yet, so the conversation is off. Set up the model first (your administrator's setup tool), then start the client again.",
       chat_no_library: "No library on this computer yet. Choose Set up first.",
       pick_library: "Which library?",
@@ -166,7 +176,17 @@
       chat_busy: "助手正在处理…",
       chat_simple: "简易模式：OpenCode 的服务用不了（{reason}）。每条消息用 opencode run 单独运行一次，助手不能在本页面请求授权或提问。需要完整功能时，请在终端里打开 OpenCode。",
       chat_failed: "OpenCode 已停止（{reason}）。请退出客户端后重新启动。",
-      chat_no_program: "本机没有找到 OpenCode，对话不可用。请先安装 OpenCode，再重新启动客户端。",
+      chat_no_program: "本机没有找到 OpenCode，对话不可用。请先安装 OpenCode，或启动客户端时用 --opencode <opencode 的路径> 指定，再重新启动客户端。",
+      chat_terminal: "在终端里打开",
+      terminal_confirm: "在终端窗口里用 OpenCode 打开这个对话吗？在终端里继续时，本页面上的这个对话会暂停；回来后请刷新页面或开始新对话。",
+      terminal_opened: "已在终端里打开（{name}）。",
+      terminal_no_session: "请先发一条消息，之后才能在终端里打开这个对话。",
+      terminal_none: "本机没有找到终端程序。",
+      queued: "排队中：{text}",
+      child: "子助手：",
+      thinking: "思考中…",
+      interim: "过程说明",
+      perm_task: "派一个子助手去", agent_explore: "explore（查找）",
       chat_no_model: "OpenCode 还没有配置模型，对话不可用。请先用管理员提供的配置工具配好模型，再重新启动客户端。",
       chat_no_library: "本机还没有知识库，请先选「安装与建库」。",
       pick_library: "用哪个知识库？",
@@ -272,7 +292,7 @@
     status.textContent = "";
     var a = state.agent;
     var chip = !a.program ? ["bad", t("agent_missing")] : (a.model ? ["good", t("agent_ok")] : ["warn", t("agent_no_model")]);
-    status.appendChild(el("span", { "class": "chip " + chip[0], title: a.program || "" }, chip[1]));
+    status.appendChild(el("span", { "class": "chip " + chip[0], title: a.program ? a.program + "  (" + a.how + ")" : "" }, chip[1]));
     var names = state.skills.map(function (s) { return s.name; });
     status.appendChild(el("span", { "class": "chip " + (names.length ? "good" : "warn"),
       title: state.skills.map(function (s) { return s.folder; }).join("\n") },
@@ -538,7 +558,8 @@
 
   function chatEnable() {
     var on = chat.ready && !chat.busy;
-    $("chat-send").disabled = !on;
+    $("chat-send").disabled = !chat.ready;  // while the assistant works, a message waits its turn
+    $("chat-terminal").disabled = !chat.ready;
     Array.prototype.forEach.call(document.querySelectorAll("[data-task]"), function (b) { b.disabled = !on; });
     $("chat-new").disabled = !chat.ready || chat.busy;
     show($("chat-stop"), chat.ready && chat.busy);
@@ -567,22 +588,46 @@
     m.scrollTop = m.scrollHeight;
   }
 
-  function bubble(id, role) {
+  function bubble(id, role, child) {
     var b = chat.msgs[id];
     if (!b) {
-      b = el("div", { "class": "msg " + (role === "user" ? "user" : "assistant") });
+      b = el("div", { "class": "msg " + (role === "user" ? "user" : "assistant") + (child ? " child" : "") });
+      if (child) b.appendChild(el("div", { "class": "who" }, t("child")));
       chat.msgs[id] = b;
       $("messages").appendChild(b);
     }
     return b;
   }
 
+  function fold(label, body) {
+    var d = el("details", { "class": "fold" });
+    d.appendChild(el("summary", {}, label));
+    d.appendChild(body);
+    return d;
+  }
+
+  // The element whose text a part fills in. Reasoning is folded into one line from the start; text that a
+  // tool step follows in the same message is folded as working notes once the step appears.
   function partEl(ev) {
     var p = chat.parts[ev.partID];
     if (!p) {
-      p = el("div", { "class": ev.kind === "tool" ? "tool" : "text" });
+      var b = bubble(ev.messageID, ev.role, ev.child);
+      if (ev.kind === "reasoning") {
+        p = el("div", { "class": "text" });
+        b.appendChild(fold(t("thinking"), p));
+      } else {
+        p = el("div", { "class": ev.kind === "tool" ? "tool" : "text" });
+        if (ev.kind === "tool" && ev.role !== "user") {
+          Array.prototype.slice.call(b.children).forEach(function (c) {
+            if (c.className !== "text") return;
+            var d = fold(t("interim"), el("span"));
+            b.insertBefore(d, c);
+            d.replaceChild(c, d.lastChild);  // the same element moves, so later text still lands in it
+          });
+        }
+        b.appendChild(p);
+      }
       chat.parts[ev.partID] = p;
-      bubble(ev.messageID, ev.role).appendChild(p);
     }
     return p;
   }
@@ -596,8 +641,16 @@
       p.className = "tool" + (ev.status === "error" ? " failed" : "");
     } else {
       p.textContent = ev.text;
+      if (ev.role === "user") dropQueued(ev.text);
     }
     scrollChat();
+  }
+
+  function dropQueued(text) {
+    var q = Array.prototype.filter.call(document.querySelectorAll("#messages .note.queued"), function (n) {
+      return n.dataset.text === text;
+    })[0];
+    if (q) q.remove();
   }
 
   function note(text, cls) {
@@ -608,6 +661,13 @@
   function permName(name) {
     var key = "perm_" + name;
     return (T[lang][key] || T.en[key]) ? t(key) : t("perm_other", { name: name });
+  }
+
+  function permWhat(ev) {
+    return ev.patterns.map(function (p) {
+      var key = "agent_" + p;
+      return ev.permission === "task" && (T[lang][key] || T.en[key]) ? t(key) : p;
+    });
   }
 
   function dropCard(id) {
@@ -636,9 +696,9 @@
   }
 
   function permissionCard(ev) {
-    var c = card(ev.id, t("perm_title") + ": " + permName(ev.permission));
+    var c = card(ev.id, (ev.child ? t("child") : "") + t("perm_title") + ": " + permName(ev.permission));
     var pre = el("pre", { "class": "log" });
-    pre.textContent = ev.patterns.join("\n");
+    pre.textContent = permWhat(ev).join("\n");
     c.appendChild(pre);
     function reply(allow) {
       dropCard(ev.id);
@@ -688,11 +748,13 @@
     }
     else if (ev.type === "part") showPart(ev);
     else if (ev.type === "delta") {
-      var p = partEl({ partID: ev.partID, messageID: ev.messageID, role: ev.role, kind: "text" });
+      var p = partEl({ partID: ev.partID, messageID: ev.messageID, role: ev.role, child: ev.child, kind: "text" });
       p.textContent += ev.delta;
       scrollChat();
     } else if (ev.type === "status") { chat.busy = ev.status !== "idle"; chatEnable(); }
-    else if (ev.type === "auto") note(t("auto", { what: permName(ev.permission) + " " + ev.patterns.join(", ") }), "auto");
+    else if (ev.type === "auto") {
+      note((ev.child ? t("child") : "") + t("auto", { what: permName(ev.permission) + " " + permWhat(ev).join(", ") }), "auto");
+    }
     else if (ev.type === "error") note(ev.text, "error");
     else if (ev.type === "permission") permissionCard(ev);
     else if (ev.type === "question") questionCard(ev);
@@ -734,6 +796,12 @@
     if (!text.trim()) return;
     var body = { text: text };
     if (material && material.length) body.material = material;
+    if (chat.busy) {
+      var n = el("div", { "class": "note queued" }, t("queued", { text: text.length > 80 ? text.slice(0, 80) + "\u2026" : text }));
+      n.dataset.text = text;
+      $("messages").appendChild(n);
+      scrollChat();
+    }
     chat.busy = true;
     chatEnable();
     api("POST", "/api/chat/send", body).catch(function (e) {
@@ -845,7 +913,7 @@
   $("composer").addEventListener("submit", function (e) {
     e.preventDefault();
     var text = $("input").value;
-    if (!chat.ready || chat.busy || !text.trim()) return;
+    if (!chat.ready || !text.trim()) return;
     $("input").value = "";
     say(text);
   });
@@ -856,6 +924,15 @@
     }
   });
   $("chat-stop").addEventListener("click", function () { api("POST", "/api/chat/stop", {}).catch(function () {}); });
+  $("chat-terminal").addEventListener("click", function () {
+    if (!window.confirm(t("terminal_confirm"))) return;
+    api("POST", "/api/chat/terminal", {}).then(function (r) {
+      note(t("terminal_opened", { name: r.terminal }), "auto");
+    }).catch(function (e) {
+      note(e.status === 409 ? t(String(e.message).indexOf("terminal") >= 0 ? "terminal_none" : "terminal_no_session")
+        : String(e.message), "error");
+    });
+  });
   $("chat-new").addEventListener("click", function () {
     api("POST", "/api/chat/new", {}).catch(function (e) { note(String(e.message), "error"); });
   });

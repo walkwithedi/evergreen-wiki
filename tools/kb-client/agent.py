@@ -14,6 +14,7 @@ import logging
 import os
 import re
 import shlex
+import shutil
 import signal
 import subprocess
 import threading
@@ -32,6 +33,66 @@ ASK_ALL = {"permission": {name: "ask" for name in (
     "lsp", "skill")}}
 # The skills load their own instructions; reading a skill is never a question for the user.
 ASK_ALL["permission"]["skill"] = "allow"
+# Subagents that only look things up; what they do in turn is asked for like everything else.
+READ_ONLY_AGENTS = ("explore",)
+# Places OpenCode's installers commonly use, for a desktop session whose PATH lacks them.
+COMMON_DIRS = ("~/.opencode/bin", "~/.local/bin", "~/bin", "/usr/local/bin", "~/.npm-global/bin")
+TERMINALS = (("x-terminal-emulator", ["-e"]), ("mate-terminal", ["-x"]), ("gnome-terminal", ["--"]),
+             ("konsole", ["-e"]), ("xterm", ["-e"]))
+SHELL_TIMEOUT = 10
+
+
+# ---------- finding OpenCode ----------
+
+class Program:
+    """How to run OpenCode: a program file, or a shell function or alias run through `bash -ic`, so that
+    what the user's ~/.bashrc does before OpenCode (refreshing settings, say) happens here as well."""
+
+    def __init__(self, path="", shell=False, how=""):
+        self.path = path
+        self.shell = shell
+        self.how = how  # option, path, common, shell-file, shell-function
+
+    def __bool__(self):
+        return bool(self.path or self.shell)
+
+    def argv(self, args):
+        if self.shell:
+            return ["bash", "-ic", " ".join(["opencode"] + [shlex.quote(a) for a in args])]
+        return [self.path] + list(args)
+
+    def describe(self):
+        return "bash -ic opencode" if self.shell else self.path
+
+
+def find_opencode(explicit=""):
+    """The first of: the given command or path, OpenCode on PATH, in a common install folder, or as
+    the interactive shell knows it (a file, a function or an alias). An empty Program when none."""
+    if explicit:
+        path = shutil.which(os.path.expanduser(explicit))
+        return Program(path, how="option") if path else Program()
+    path = shutil.which("opencode")
+    if path:
+        return Program(path, how="path")
+    for folder in COMMON_DIRS:
+        path = os.path.join(os.path.expanduser(folder), "opencode")
+        if os.path.isfile(path) and os.access(path, os.X_OK):
+            return Program(path, how="common")
+    if not shutil.which("bash"):
+        return Program()
+    try:
+        p = subprocess.run(["bash", "-ic", "type -t opencode; command -v opencode"], stdin=subprocess.DEVNULL,
+                           capture_output=True, text=True, timeout=SHELL_TIMEOUT, start_new_session=True)
+    except (OSError, subprocess.SubprocessError) as e:
+        log.info("no answer from the interactive shell: %s", type(e).__name__)
+        return Program()
+    lines = [x.strip() for x in p.stdout.splitlines() if x.strip()]
+    kind = lines[0] if lines else ""
+    if kind == "file" and len(lines) > 1 and os.path.isabs(lines[1]):
+        return Program(lines[1], how="shell-file")
+    if kind in ("function", "alias"):
+        return Program(shell=True, how="shell-" + kind)
+    return Program()
 
 
 # ---------- which requests the client answers itself ----------
@@ -95,6 +156,8 @@ def decide(permission, patterns, places, cwd):
         return False
     if permission == "bash":
         return all(skill_command(p, places.get("scripts", []), cwd) for p in patterns)
+    if permission == "task":
+        return all(str(p).strip() in READ_ONLY_AGENTS for p in patterns)
     if permission in ("edit", "write"):
         roots = places.get("write", [])
     elif permission in ("read", "list", "glob", "grep", "external_directory"):
@@ -141,12 +204,15 @@ class Feed:
             return self.events[start:]
 
 
-def part_event(part, role):
-    """What the page needs of one message part: text, or a tool step in one line. None for the rest."""
+def part_event(part, role, child=False):
+    """What the page needs of one message part: text, reasoning, or a tool step in one line. None for the
+    rest. child marks a part of a subagent's conversation."""
     kind = part.get("type")
-    base = {"messageID": part.get("messageID", ""), "partID": part.get("id", ""), "role": role}
+    base = {"messageID": part.get("messageID", ""), "partID": part.get("id", ""), "role": role, "child": child}
     if kind == "text" and not part.get("synthetic") and not part.get("ignored"):
         return dict(base, kind="text", text=str(part.get("text", "")))
+    if kind == "reasoning":
+        return dict(base, kind="reasoning", text=str(part.get("text", "")))
     if kind == "tool":
         state = part.get("state") or {}
         detail = state.get("title") or ""
@@ -164,7 +230,7 @@ class Agent:
     """state: off, starting, ready, simple (opencode run per message), failed."""
 
     def __init__(self, program, cwd, places, state_file, start_timeout=90):
-        self.program = program
+        self.program = program  # a Program
         self.cwd = cwd
         self.places = places  # callable returning {"write", "read", "scripts"} without the material
         self.state_file = state_file
@@ -180,6 +246,7 @@ class Agent:
         self.status = "idle"
         self.material = []  # paths chosen for the current conversation's intake
         self.roles = {}  # messageID -> role
+        self.children = set()  # sessions of subagents started from the current conversation
         self.permissions = {}  # pending, id -> event
         self.questions = {}
         self.run_proc = None  # simple mode
@@ -198,7 +265,7 @@ class Agent:
     def _start(self):
         env = dict(os.environ, OPENCODE_CONFIG_CONTENT=json.dumps(ASK_ALL))
         try:
-            self.proc = subprocess.Popen([self.program, "serve", "--hostname=127.0.0.1", "--port=0"],
+            self.proc = subprocess.Popen(self.program.argv(["serve", "--hostname=127.0.0.1", "--port=0"]),
                                          cwd=self.cwd, env=env, stdin=subprocess.DEVNULL,
                                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                          text=True, encoding="utf-8", errors="replace",
@@ -221,9 +288,15 @@ class Agent:
             self._kill()
             self._simple(f"opencode serve: {e}")
             return
+        try:
+            stream = self._connect()  # before "ready", so no event of the first message is missed
+        except (OSError, http.client.HTTPException) as e:
+            self._kill()
+            self._simple(f"opencode serve: GET /event {type(e).__name__}")
+            return
         with self.lock:
             self.state = "ready"
-        threading.Thread(target=self._events, daemon=True).start()
+        threading.Thread(target=self._events, args=(stream,), daemon=True).start()
         self._resume()
         self.feed.emit("agent", state="ready", session=self.session)
 
@@ -285,12 +358,20 @@ class Agent:
         finally:
             c.close()
 
-    def _events(self):
+    def _connect(self):
+        c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=None)
+        c.request("GET", "/event", headers={"Accept": "text/event-stream"})
+        r = c.getresponse()
+        if r.status != 200:
+            c.close()
+            raise http.client.HTTPException(f"status {r.status}")
+        return c, r
+
+    def _events(self, stream=None):
         while not self.stopping:
             try:
-                c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=None)
-                c.request("GET", "/event", headers={"Accept": "text/event-stream"})
-                r = c.getresponse()
+                c, r = stream or self._connect()
+                stream = None
                 for raw in r.fp:
                     line = raw.decode("utf-8", "replace").rstrip("\r\n")
                     if line.startswith("data:"):
@@ -315,9 +396,20 @@ class Agent:
     def _handle(self, ev):
         kind = ev.get("type", "")
         p = ev.get("properties") or {}
-        sid = p.get("sessionID") or (p.get("info") or {}).get("sessionID") or (p.get("part") or {}).get("sessionID")
-        if sid != self.session:
+        if log.isEnabledFor(logging.DEBUG):  # the shape only, never the content
+            log.debug("event %s %s", kind, sorted(p) + sorted("part." + k for k in (p.get("part") or {})))
+        if kind in ("session.created", "session.updated"):
+            info = p.get("info") or {}
+            if info.get("id") and info.get("parentID") and \
+                    (info["parentID"] == self.session or info["parentID"] in self.children):
+                self.children.add(info["id"])
             return
+        sid = p.get("sessionID") or (p.get("info") or {}).get("sessionID") or (p.get("part") or {}).get("sessionID")
+        if not sid or not (sid == self.session or sid in self.children):
+            return
+        child = sid != self.session
+        if child and kind in ("session.status", "session.idle"):
+            return  # only the main conversation says whether the assistant is working
         if kind == "message.updated":
             info = p.get("info") or {}
             self.roles[info.get("id", "")] = info.get("role", "assistant")
@@ -326,13 +418,14 @@ class Agent:
                 self.feed.emit("error", text=str((err.get("data") or {}).get("message") or err.get("name") or err))
         elif kind == "message.part.updated":
             part = p.get("part") or {}
-            pe = part_event(part, self.roles.get(part.get("messageID", ""), "assistant"))
+            pe = part_event(part, self.roles.get(part.get("messageID", ""), "assistant"), child)
             if pe:
                 self.feed.emit("part", **pe)
         elif kind == "message.part.delta":
-            if p.get("field") == "text":
+            if p.get("field", "text") == "text":
                 self.feed.emit("delta", messageID=p.get("messageID", ""), partID=p.get("partID", ""),
-                               role=self.roles.get(p.get("messageID", ""), "assistant"), delta=str(p.get("delta", "")))
+                               role=self.roles.get(p.get("messageID", ""), "assistant"), child=child,
+                               delta=str(p.get("delta", "")))
         elif kind == "session.status":
             self._set_status((p.get("status") or {}).get("type", "idle"))
         elif kind == "session.idle":
@@ -341,7 +434,7 @@ class Agent:
             err = p.get("error") or {}
             self.feed.emit("error", text=str((err.get("data") or {}).get("message") or err.get("name") or "error"))
         elif kind == "permission.asked":
-            self._permission(p)
+            self._permission(p, child)
         elif kind == "permission.replied":
             rid = p.get("requestID") or p.get("id") or ""
             if self.permissions.pop(rid, None) is not None:
@@ -353,6 +446,7 @@ class Agent:
                  "options": [{"label": str(o.get("label", "")), "description": str(o.get("description", ""))}
                              for o in x.get("options") or []]}
                 for x in p.get("questions") or []]}
+            q["child"] = child
             self.questions[q["id"]] = q
             self.feed.emit("question", **q)
         elif kind in ("question.replied", "question.rejected"):
@@ -370,18 +464,18 @@ class Agent:
                 "read": [real(x) for x in pl.get("read", []) + self.material],
                 "scripts": [real(x) for x in pl.get("scripts", [])]}
 
-    def _permission(self, p):
+    def _permission(self, p, child=False):
         rid = p.get("id", "")
         perm = str(p.get("permission", ""))
         patterns = [str(x) for x in p.get("patterns") or []]
         if decide(perm, patterns, self.allowed_places(), self.cwd):
             try:
                 self.call("POST", f"/permission/{quote(rid, safe='')}/reply", {"reply": "once"})
-                self.feed.emit("auto", permission=perm, patterns=patterns[:5])
+                self.feed.emit("auto", permission=perm, patterns=patterns[:5], child=child)
                 return
             except OSError as e:
-                log.warning("automatic reply failed: %s", e)
-        ev = {"id": rid, "permission": perm, "patterns": patterns[:20]}
+                log.warning("automatic reply failed: %s", type(e).__name__)
+        ev = {"id": rid, "permission": perm, "patterns": patterns[:20], "child": child}
         self.permissions[rid] = ev
         self.feed.emit("permission", **ev)
 
@@ -433,6 +527,7 @@ class Agent:
             self.permissions.clear()
             self.questions.clear()
             self.roles.clear()
+            self.children.clear()
             self.status = "idle"
             if self.state == "ready":
                 self.session = None
@@ -511,7 +606,7 @@ class Agent:
                 raise RuntimeError("busy")
             mid = "run-" + str(time.time_ns())
             self.feed.emit("part", messageID=mid + "-u", partID=mid + "-u", role="user", kind="text", text=text)
-            self.run_proc = subprocess.Popen([self.program, "run", text], cwd=self.cwd, stdin=subprocess.DEVNULL,
+            self.run_proc = subprocess.Popen(self.program.argv(["run", text]), cwd=self.cwd, stdin=subprocess.DEVNULL,
                                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                                              encoding="utf-8", errors="replace", start_new_session=True)
         threading.Thread(target=self._run_output, args=(self.run_proc, mid), daemon=True).start()
@@ -524,6 +619,22 @@ class Agent:
             self.feed.emit("part", messageID=mid, partID=mid, role="assistant", kind="text", text=text)
         proc.wait()
         self._set_status("idle")
+
+    def open_terminal(self):
+        """Opens the current conversation in OpenCode's own interface, in a new terminal window. Returns
+        the terminal program's name; raises RuntimeError when there is no conversation or no terminal."""
+        if not self.session:
+            raise RuntimeError("no conversation")
+        cmd = self.program.argv(["--session=" + self.session])
+        env = dict(os.environ)
+        env.pop("OPENCODE_CONFIG_CONTENT", None)  # the terminal keeps the user's own settings
+        for name, flag in TERMINALS:
+            path = shutil.which(name)
+            if path:
+                subprocess.Popen([path] + flag + cmd, cwd=self.cwd, env=env, stdin=subprocess.DEVNULL,
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+                return name
+        raise RuntimeError("no terminal")
 
     def snapshot(self):
         return {"state": self.state, "reason": self.reason, "session": self.session, "status": self.status,

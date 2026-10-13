@@ -5,11 +5,13 @@ interface the client uses and sends their events; `run <message>` prints an answ
 FAKE_OPENCODE_LOG: file that gets one JSON line per call (the arguments, OPENCODE_CONFIG_CONTENT, and
 every request). FAKE_OPENCODE_MODE: "noserve" (serve exits at once), "noapi" (GET /permission is 404),
 "slow" (serve never says it listens). Messages starting with PERM <permission> <pattern>, QUESTION or SLOW
-make the session ask for a permission, ask a question or wait to be aborted.
+make the session ask for a permission, ask a question or wait to be aborted; SUBAGENT <permission>
+<pattern> starts a subagent session that asks for that permission; THINK sends reasoning first.
 """
 import json
 import os
 import queue
+import socketserver
 import sys
 import threading
 import time
@@ -83,6 +85,32 @@ class World:
             got = self.wait_for(rid)
             self.emit("question.replied", sessionID=sid, requestID=rid, answers=got)
             self.message(sid, "assistant", f"answers: {json.dumps(got)}")
+        elif words[0] == "SUBAGENT":
+            child = self.next("ses")
+            self.sessions[child] = []
+            self.emit("session.created", info={"id": child, "parentID": sid, "title": "explore"})
+            rid = self.next("per")
+            self.waits[rid] = (threading.Event(), [])
+            self.emit("permission.asked", id=rid, sessionID=child, permission=words[1],
+                      patterns=[" ".join(words[2:])], metadata={}, always=[])
+            got = self.wait_for(rid)
+            self.emit("permission.replied", sessionID=child, requestID=rid, reply=got)
+            self.emit("session.status", sessionID=child, status={"type": "idle"})  # only the child is idle
+            self.message(child, "assistant", f"subagent: {got}")
+            self.message(sid, "assistant", "done after the subagent")
+        elif words[0] == "THINK":
+            mid = self.next("m")
+            info = {"id": mid, "sessionID": sid, "role": "assistant"}
+            self.emit("message.updated", sessionID=sid, info=info)
+            self.emit("message.part.updated", sessionID=sid, time=0, part={
+                "id": self.next("p"), "sessionID": sid, "messageID": mid, "type": "reasoning", "text": "pondering"})
+            for part in ({"type": "text", "text": "let me look"},
+                         {"type": "tool", "tool": "read", "callID": "c1",
+                          "state": {"status": "completed", "input": {"filePath": "/x/a.md"}, "output": "",
+                                    "title": "a.md", "metadata": {}, "time": {"start": 0, "end": 0}}},
+                         {"type": "text", "text": "the answer"}):
+                self.emit("message.part.updated", sessionID=sid, time=0,
+                          part=dict(part, id=self.next("p"), sessionID=sid, messageID=mid))
         elif words[0] == "SLOW":
             ev = self.aborts.setdefault(sid, threading.Event())
             ev.clear()
@@ -94,6 +122,14 @@ class World:
 
 
 WORLD = World()
+
+
+class Server(ThreadingHTTPServer):
+    """No reverse lookup of the host name when binding: it can wait for a DNS timeout on some systems."""
+
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = "127.0.0.1", self.server_address[1]
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -182,7 +218,7 @@ def main():
     print("refreshing the model settings", flush=True)
     if MODE == "noserve":
         return 1
-    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server = Server(("127.0.0.1", 0), Handler)
     server.daemon_threads = True
     if MODE == "slow":
         time.sleep(60)

@@ -5,8 +5,10 @@ commands as a page in the browser, served from this computer.
   python3 kb_client.py          start the local server and open the page in the default browser
 Options: --lang en|zh (default: the system language), --port N (default: a free port), --no-browser
 (print the address only), --idle SECONDS (stop after that long without the page; 0 never; default 120),
---start-timeout SECONDS (wait that long for OpenCode to start; default 90), --log-level (default from
-LOG_LEVEL); for set up, --agent and --preset life|work answer those questions in advance and
+--start-timeout SECONDS (wait that long for OpenCode to start; default 90), --opencode PATH (the
+OpenCode program to use; also KB_CLIENT_OPENCODE; default: found on PATH, in a common install folder
+or through the interactive shell), --log-level (default from LOG_LEVEL); for set up, --agent and
+--preset life|work answer those questions in advance (otherwise a work library is suggested) and
 --descriptions FILE replaces the skill descriptions (as install.py).
 
 The server listens on 127.0.0.1 only and answers only requests that carry the token in the address it
@@ -25,7 +27,6 @@ import os
 import queue
 import re
 import secrets
-import shutil
 import sys
 import threading
 import time
@@ -47,7 +48,7 @@ WEB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 ACTIONS = ("setup", "backup", "rollback", "move", "uninstall")
 LANGS = ("en", "zh")
 MAX_BODY = 64 * 1024
-CHAT_ACTIONS = {name: name for name in ("start", "send", "new", "stop", "permission", "question")}
+CHAT_ACTIONS = {name: name for name in ("start", "send", "new", "stop", "permission", "question", "terminal")}
 MAX_TEXT = 20000  # characters of one message from the page
 MAX_PATHS = 200  # material paths sent with one message
 MAX_ENTRIES = 2000  # entries listed per folder; the page says when a folder holds more
@@ -264,7 +265,7 @@ class App:
                     return None, "no_program"
                 if not st["model"]:
                     return None, "no_model"
-                self.agent = agent_mod.Agent(st["program"], os.path.expanduser("~"), agent_places,
+                self.agent = agent_mod.Agent(OPENCODE["program"], os.path.expanduser("~"), agent_places,
                                              os.path.join(kb_manage.state_dir(), "kb-client.json"),
                                              self.start_timeout)
         self.agent.start()
@@ -285,7 +286,8 @@ def run_action(action, asker, lang, options, lib_id=None):
     """Runs one step; returns the exit code of kb_manage (0 when it went through), None for set up."""
     m = MSG[lang]
     if action == "setup":
-        install.wizard(asker, lang, options.get("agent"), options.get("preset"), options.get("descriptions"))
+        install.wizard(asker, lang, options.get("agent"), options.get("preset"), options.get("descriptions"),
+                       preset_default="work")
         return None
     if action == "move":
         libs = [(i, label, root) for i, label, root in kb_manage.registered_libs()
@@ -364,10 +366,20 @@ def strip_jsonc(text):
     return re.sub(r",(\s*[}\]])", r"\1", "".join(out))
 
 
+OPENCODE = {"program": None}  # agent.Program, looked up once at start (find_opencode)
+
+
+def find_opencode(explicit=""):
+    OPENCODE["program"] = agent_mod.find_opencode(explicit)
+    log.info("opencode: %s (%s)", OPENCODE["program"].describe() or "not found", OPENCODE["program"].how)
+    return OPENCODE["program"]
+
+
 def agent_status():
-    """OpenCode on this computer: the program, and whether its settings name a model."""
+    """OpenCode on this computer: how it is run, and whether its settings name a model."""
     folder = install.AGENT_HOMES["opencode"]
-    status = {"program": shutil.which("opencode") or "", "config": "", "model": False, "error": ""}
+    prog = OPENCODE["program"] or find_opencode()
+    status = {"program": prog.describe(), "how": prog.how, "config": "", "model": False, "error": ""}
     for name in ("opencode.jsonc", "opencode.json"):
         path = os.path.join(folder, name)
         if not os.path.isfile(path):
@@ -670,6 +682,11 @@ class Handler(BaseHTTPRequestHandler):
             if what == "stop":
                 ag.stop()
                 return self.send(200, {"ok": True})
+            if what == "terminal":
+                try:
+                    return self.send(200, {"ok": True, "terminal": ag.open_terminal()})
+                except RuntimeError as e:
+                    return self.send(409, {"error": str(e), "reason": "no_terminal" if "terminal" in str(e) else "no_session"})
             if what == "permission":
                 ok = ag.reply_permission(str(body.get("id", "")), body.get("allow") is True)
                 return self.send(200 if ok else 409, {"ok": ok})
@@ -726,6 +743,7 @@ def main():
     ap.add_argument("--no-browser", action="store_true")
     ap.add_argument("--idle", type=int, default=120, metavar="SECONDS")
     ap.add_argument("--start-timeout", type=int, default=90, metavar="SECONDS")
+    ap.add_argument("--opencode", default=os.environ.get("KB_CLIENT_OPENCODE", ""), metavar="PATH")
     ap.add_argument("--agent", choices=sorted(install.TARGETS))
     ap.add_argument("--preset", choices=["life", "work"])
     ap.add_argument("--descriptions", metavar="FILE")
@@ -747,6 +765,7 @@ def main():
     # Answers on the page are typed like answers in a terminal opened in the home folder: a relative
     # folder is taken from there, never from wherever the program was started.
     os.chdir(os.path.expanduser("~"))
+    find_opencode(a.opencode)
     app = App(lang, {"agent": a.agent, "preset": a.preset, "descriptions": a.descriptions}, a.idle,
               a.start_timeout)
     app.output = Output(sys.stdout)

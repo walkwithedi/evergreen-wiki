@@ -33,20 +33,24 @@ No network is needed. On a computer without one, copy evergreen-wiki-v<version>.
 
 ### Conversation
 
+OpenCode is looked for, in this order: `--opencode <path>` (or `KB_CLIENT_OPENCODE`), the program search path, the common install folders (`~/.opencode/bin`, `~/.local/bin`, `~/bin`, `/usr/local/bin`, `~/.npm-global/bin`), and the interactive shell (`bash -ic`), which also finds an `opencode` that `~/.bashrc` defines as a function or alias; such an `opencode` is then always run through `bash -ic`, so what the function does first still happens. Hovering over the OpenCode label at the top shows what was found and how.
+
 When the page opens, the client starts OpenCode in the background (`opencode serve`, listening on 127.0.0.1, in the home folder) and shows what OpenCode prints while it starts; starting can take a while, and the client waits up to `--start-timeout` seconds. Then:
 
-- Type a question or request in the box at the bottom; Enter sends, Shift+Enter starts a new line. Stop ends the assistant's current work.
+- Type a question or request in the box at the bottom; Enter sends, Shift+Enter starts a new line. A message sent while the assistant works is shown as queued and handled after the current work. Stop ends the assistant's current work.
 - The buttons above the conversation send the skills' own phrases: File material (choose the library, then tick any number of files and folders in the folder browser; the paths go with the request, so the skill does not open its own chooser), Quick note, File quick notes, Health check, Archive old versions, Continue intake. With more than one library the page asks which one.
 - When the assistant asks a question with choices, it appears as a card with the choices; a confirmation it asks for in words is answered in the box.
 - New conversation starts a clean one. The page keeps one current conversation; reopening the page or the client picks it up again. Earlier conversations stay in OpenCode and can be opened there.
+- What the assistant does is shown as it happens: its steps one line each (reading a file, running a script), its reasoning and the working notes before a step folded into one grey line each (click to read), its answer as normal text. Work it hands to a subagent (OpenCode's own helpers, such as explore) appears indented under "Subagent", with the subagent's own steps, permission requests and questions.
+- Open in a terminal opens the same conversation in OpenCode's own interface (`opencode --session=<id>`) in a new terminal window (the first found of x-terminal-emulator, mate-terminal, gnome-terminal, konsole, xterm), with the user's own OpenCode settings. While you continue there, the conversation on the page pauses; reload the page when you are back.
 
-Permissions. Every action of the OpenCode the client starts is set to ask first (`OPENCODE_CONFIG_CONTENT`, for that process only; the user's OpenCode settings are not changed). The client answers "allow once" itself for: reading and changing files inside a registered local library; reading the material chosen for this conversation, the installed skills and the agent's own settings; running a script of an installed skill (`python3 <skill>/scripts/<name>.py ...`, optionally after one `cd <folder> &&`, with no other shell syntax). Each such answer is noted in the conversation. Everything else appears as a card saying what the assistant wants to read, change or run, with Allow this once and Deny; there is no "always allow". Paths are compared as real paths, so a link out of a library is not allowed.
+Permissions. Every action of the OpenCode the client starts is set to ask first (`OPENCODE_CONFIG_CONTENT`, for that process only; the user's OpenCode settings are not changed). The client answers "allow once" itself for: reading and changing files inside a registered local library; reading the material chosen for this conversation, the installed skills and the agent's own settings; sending a subagent that only looks things up (explore); running a script of an installed skill (`python3 <skill>/scripts/<name>.py ...`, optionally after one `cd <folder> &&`, with no other shell syntax). The same rules apply to a subagent's requests. Each such answer is noted in the conversation. Everything else appears as a card saying what the assistant wants to read, change or run, with Allow this once and Deny; there is no "always allow". Paths are compared as real paths, so a link out of a library is not allowed.
 
 Simple mode. When OpenCode's server does not start in time or lacks the requests the client uses, the conversation runs `opencode run <message>` once per message instead and says so on the page; in this mode the assistant cannot ask for permission or ask questions on the page.
 
 Typed folders that are not absolute are taken from the home folder.
 
-Options: `--lang en|zh` (default: the system language), `--port N` (default: a free port), `--no-browser` (print the address only), `--idle SECONDS` (stop when no page has been open that long and no step is running; 0 never; default 120), `--start-timeout SECONDS` (wait that long for OpenCode to start; default 90), `--log-level`. For Set up, `--agent <target>` and `--preset life|work` answer those questions in advance and `--descriptions <file>` replaces the skill descriptions, as with `install.py`; a wrapper script or a copy of the .desktop entry can fix them for a group of users.
+Options: `--lang en|zh` (default: the system language), `--port N` (default: a free port), `--no-browser` (print the address only), `--idle SECONDS` (stop when no page has been open that long and no step is running; 0 never; default 120), `--start-timeout SECONDS` (wait that long for OpenCode to start; default 90), `--opencode PATH` (the OpenCode program to use), `--log-level`. For Set up, the kind of library suggested is work; `--agent <target>` and `--preset life|work` answer those questions in advance and `--descriptions <file>` replaces the skill descriptions, as with `install.py`; a wrapper script or a copy of the .desktop entry can fix them for a group of users.
 
 ## Safety
 
@@ -68,3 +72,8 @@ The unit tests answer the questions over HTTP the way the page does. On a real d
 7. File material: tick two folders; the request lists them, no other chooser opens, and the intake runs to its report without the terminal. Reading the material and writing the library ask nothing; an action outside them shows a card.
 8. Reopening the page shows the same conversation; New conversation starts a clean one.
 9. After Quit, no `opencode serve` process is left (`ps -ef | grep "opencode serve"`).
+10. Double-clicking finds OpenCode also when it is set up only for terminals (in `~/.bashrc`); the label at the top says how it was found.
+11. A subagent's steps appear indented while it works; explore is sent without a card.
+12. Reasoning and working notes are folded; a message sent while the assistant works waits as queued.
+13. Open in a terminal opens the same conversation in a terminal window.
+14. Set up suggests a work library; after reopening the client, the skills and libraries are still listed.
