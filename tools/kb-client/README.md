@@ -1,8 +1,6 @@
-# Knowledge base client: the installer in the browser
+# Knowledge base client: the knowledge base in the browser
 
-A page in the browser, served from your own computer, for people who do not use a terminal: install the skills, set up a library and tell the agent it exists, then back up, roll back, move a library or uninstall. The page lists the registered libraries, which agents have the skills and whether OpenCode is ready. The questions, previews and safety checks are those of `install.py` and `install.py backup|rollback|move|uninstall`; this tool only shows them on the page, so both behave the same.
-
-This first version covers setting up and managing libraries. Talking to the agent from the page comes in a later version; until then, open the agent as usual.
+A page in the browser, served from your own computer, for people who do not use a terminal: install the skills, set up a library and tell the agent it exists, back up, roll back, move a library or uninstall, and talk to OpenCode about the libraries: file material, take quick notes, run a health check, ask questions. The page lists the registered libraries, which agents have the skills and whether OpenCode is ready. The questions, previews and safety checks of the management steps are those of `install.py` and `install.py backup|rollback|move|uninstall`; the conversation uses the same skills, registry and OpenCode settings as OpenCode in a terminal, so both can be used side by side.
 
 [中文说明](README.zh-CN.md)
 
@@ -11,6 +9,7 @@ This first version covers setting up and managing libraries. Talking to the agen
 | File | What it is |
 | --- | --- |
 | `kb_client.py` | the local server: runs the installer's steps and passes their questions to the page |
+| `agent.py` | the conversation: starts `opencode serve` on 127.0.0.1, passes its events to the page and answers the permission requests the client may answer itself |
 | `web/` | the page (`index.html`, `app.js`, `style.css`); plain HTML, JavaScript and CSS, nothing loaded from the network |
 | `kb-client.desktop` | double-click entry; opens a terminal window that runs `kb_client.py` and the page in the default browser |
 
@@ -18,6 +17,7 @@ This first version covers setting up and managing libraries. Talking to the agen
 
 - Linux desktop, Python 3.8 or newer (standard library only), the whole evergreen-wiki folder: the tool runs `install.py` and the skills two folders up.
 - A browser with current JavaScript (`fetch`, `EventSource`), such as a recent Firefox or Chromium.
+- For the conversation: OpenCode with a model set up (checked with OpenCode 1.19). Without it the management steps work and the conversation says why it is off.
 
 No network is needed. On a computer without one, copy evergreen-wiki-v<version>.zip from [Releases](https://github.com/walkwithedi/evergreen-wiki/releases), unzip it and start the tool from `tools/kb-client/`.
 
@@ -29,15 +29,30 @@ No network is needed. On a computer without one, copy evergreen-wiki-v<version>.
    - Back up, Roll back, Uninstall: as `install.py backup`, `rollback` and `uninstall` (docs/manual-setup.md, section 6).
    - Move a library, or Move next to a library: pick the folder to move it into; then the move preview and confirmation of `install.py move`.
 3. What a step prints appears above its question. Folder questions have a Browse button that opens a folder browser: start from the home folder or a mounted drive, open folders, and choose one. No folder is suggested: the browser opens in the home folder. When the folder already in the answer does not exist yet (changing the folder at the preview, for example), the browser opens at its nearest existing parent and keeps the rest of the path as the new folder's name, so choosing there answers with that folder; clear the name to answer with the folder itself.
-4. Cancel this step stops the step at its current question; what was finished stays. Quit stops the client. Closing the page also stops it after a while (`--idle`).
+4. Cancel this step stops the step at its current question; what was finished stays. Quit stops the client and the OpenCode it started. Closing the page also stops both after a while (`--idle`), unless the assistant is still working.
+
+### Conversation
+
+When the page opens, the client starts OpenCode in the background (`opencode serve`, listening on 127.0.0.1, in the home folder) and shows what OpenCode prints while it starts; starting can take a while, and the client waits up to `--start-timeout` seconds. Then:
+
+- Type a question or request in the box at the bottom; Enter sends, Shift+Enter starts a new line. Stop ends the assistant's current work.
+- The buttons above the conversation send the skills' own phrases: File material (choose the library, then tick any number of files and folders in the folder browser; the paths go with the request, so the skill does not open its own chooser), Quick note, File quick notes, Health check, Archive old versions, Continue intake. With more than one library the page asks which one.
+- When the assistant asks a question with choices, it appears as a card with the choices; a confirmation it asks for in words is answered in the box.
+- New conversation starts a clean one. The page keeps one current conversation; reopening the page or the client picks it up again. Earlier conversations stay in OpenCode and can be opened there.
+
+Permissions. Every action of the OpenCode the client starts is set to ask first (`OPENCODE_CONFIG_CONTENT`, for that process only; the user's OpenCode settings are not changed). The client answers "allow once" itself for: reading and changing files inside a registered local library; reading the material chosen for this conversation, the installed skills and the agent's own settings; running a script of an installed skill (`python3 <skill>/scripts/<name>.py ...`, optionally after one `cd <folder> &&`, with no other shell syntax). Each such answer is noted in the conversation. Everything else appears as a card saying what the assistant wants to read, change or run, with Allow this once and Deny; there is no "always allow". Paths are compared as real paths, so a link out of a library is not allowed.
+
+Simple mode. When OpenCode's server does not start in time or lacks the requests the client uses, the conversation runs `opencode run <message>` once per message instead and says so on the page; in this mode the assistant cannot ask for permission or ask questions on the page.
 
 Typed folders that are not absolute are taken from the home folder.
 
-Options: `--lang en|zh` (default: the system language), `--port N` (default: a free port), `--no-browser` (print the address only), `--idle SECONDS` (stop when no page has been open that long and no step is running; 0 never; default 120), `--log-level`. For Set up, `--agent <target>` and `--preset life|work` answer those questions in advance and `--descriptions <file>` replaces the skill descriptions, as with `install.py`; a wrapper script or a copy of the .desktop entry can fix them for a group of users.
+Options: `--lang en|zh` (default: the system language), `--port N` (default: a free port), `--no-browser` (print the address only), `--idle SECONDS` (stop when no page has been open that long and no step is running; 0 never; default 120), `--start-timeout SECONDS` (wait that long for OpenCode to start; default 90), `--log-level`. For Set up, `--agent <target>` and `--preset life|work` answer those questions in advance and `--descriptions <file>` replaces the skill descriptions, as with `install.py`; a wrapper script or a copy of the .desktop entry can fix them for a group of users.
 
 ## Safety
 
 - The server listens on 127.0.0.1 only. The address it opens carries a random token; requests without it, or with another host name, are refused, so other pages in the browser cannot use the server.
+- The page talks only to this server; the server talks to OpenCode. OpenCode's own server has no password: any program on this computer that finds its port can use it, as with OpenCode started in a terminal. It listens on 127.0.0.1 only, on a port chosen at start, and stops with the client.
+- The client stores only the current conversation's id, in `~/.config/evergreen-wiki/kb-client.json`.
 - One step runs at a time. The folder browser only lists folders and file names, and only inside the home folder and mounted drives (a folder elsewhere can still be typed into the answer); the page's own three files are the only files the server sends; the client itself writes nothing outside what the installer's steps write after their confirmation.
 
 ## Checking on a desktop
@@ -49,3 +64,7 @@ The unit tests answer the questions over HTTP the way the page does. On a real d
 3. Move: after the move the page lists the library at its new place, and the agent finds it there after a restart.
 4. Uninstall: no library folder is deleted unless picked and the confirmation word typed.
 5. Cancel this step stops the step without changing anything further; Quit stops the client and the terminal window closes.
+6. Conversation: OpenCode starts and the page says it is ready (note how long it takes); a question about a library is answered from it.
+7. File material: tick two folders; the request lists them, no other chooser opens, and the intake runs to its report without the terminal. Reading the material and writing the library ask nothing; an action outside them shows a card.
+8. Reopening the page shows the same conversation; New conversation starts a clean one.
+9. After Quit, no `opencode serve` process is left (`ps -ef | grep "opencode serve"`).

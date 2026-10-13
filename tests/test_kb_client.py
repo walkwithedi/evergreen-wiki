@@ -12,7 +12,10 @@ import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TOOL = os.path.join(ROOT, "tools", "kb-client", "kb_client.py")
+FAKE = os.path.join(ROOT, "tests", "kb_client_fake_opencode.py")
 CANCEL = object()
+sys.path.insert(0, os.path.join(ROOT, "tools", "kb-client"))
+import agent  # noqa: E402
 
 
 def write(path, text):
@@ -298,6 +301,247 @@ class KbClientTest(unittest.TestCase):
     def test_quit(self):
         self.assertEqual(self.server.post("/api/quit", {})[0], 200)
         self.assertEqual(self.server.proc.wait(10), 0)
+
+
+class ChatEvents:
+    """The page's conversation stream, read until an event that matches."""
+
+    def __init__(self, server, after):
+        self.c = http.client.HTTPConnection("127.0.0.1", server.port, timeout=30)
+        self.c.request("GET", f"/api/chat/events?after={after}&t={server.token}")
+        self.resp = self.c.getresponse()
+        self.seen = []
+
+    def until(self, test, what="event", timeout=30):
+        end = time.time() + timeout
+        while True:
+            if time.time() > end:
+                raise AssertionError(f"no {what} in {timeout}s: {self.seen}")
+            line = self.resp.fp.readline().decode("utf-8")
+            if not line:
+                raise AssertionError(f"stream ended before {what}: {self.seen}")
+            if line.startswith("data: "):
+                ev = json.loads(line[6:])
+                self.seen.append(ev)
+                if test(ev):
+                    return ev
+
+    def close(self):
+        self.c.close()
+
+
+@unittest.skipUnless(os.name == "posix", "the client runs on Linux desktops")
+class ChatTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.home = self.p("home")
+        write(self.p("home", ".config", "opencode", "opencode.jsonc"), '{"model": "example/model-1"}\n')
+        os.makedirs(self.p("bin"))
+        write(self.p("bin", "opencode"), read(FAKE).replace("#!/usr/bin/env python3", "#!" + sys.executable, 1))
+        os.chmod(self.p("bin", "opencode"), 0o700)
+        self.log = self.p("log.jsonl")
+        self.env = dict(os.environ, HOME=self.home, XDG_CONFIG_HOME=self.p("home", ".config"),
+                        PYTHONIOENCODING="utf-8", FAKE_OPENCODE_LOG=self.log,
+                        PATH=self.p("bin") + os.pathsep + os.path.dirname(sys.executable))
+        for k in ("KB_LIBRARIES", "LANG", "LC_ALL", "LC_MESSAGES", "LANGUAGE", "FAKE_OPENCODE_MODE"):
+            self.env.pop(k, None)
+
+    def p(self, *parts):
+        return os.path.join(self.tmp, *parts)
+
+    def start(self, mode="", *args):
+        if mode:
+            self.env["FAKE_OPENCODE_MODE"] = mode
+        s = Server(self.env, "--idle", "0", *args)
+        self.addCleanup(s.stop)
+        self.server = s
+        status, r = s.post("/api/chat/start", {})
+        self.assertEqual(status, 200, r)
+        events = ChatEvents(s, 0)
+        self.addCleanup(events.close)
+        return events
+
+    def calls(self):
+        return [json.loads(x) for x in read(self.log).splitlines()] if os.path.exists(self.log) else []
+
+    def ready(self):
+        ev = self.start()
+        ev.until(lambda e: e["type"] == "agent" and e["state"] == "ready", "ready")
+        return ev
+
+    def send(self, text, **kw):
+        status, r = self.server.post("/api/chat/send", dict(kw, text=text))
+        self.assertEqual(status, 200, r)
+
+    def test_needs_opencode_and_a_model(self):
+        os.remove(self.p("home", ".config", "opencode", "opencode.jsonc"))
+        s = Server(self.env, "--idle", "0")
+        self.addCleanup(s.stop)
+        status, r = s.post("/api/chat/start", {})
+        self.assertEqual((status, r["reason"]), (409, "no_model"))
+        self.assertEqual(s.post("/api/chat/send", {"text": "hello"})[0], 409)
+        self.assertEqual(s.get("/api/chat/state")[1]["agent"]["state"], "off")
+
+    def test_conversation(self):
+        ev = self.ready()
+        start = self.calls()[0]
+        self.assertEqual(start["args"][:2], ["serve", "--hostname=127.0.0.1"])
+        self.assertEqual(start["cwd"], os.path.realpath(self.home))
+        config = json.loads(start["config"])
+        self.assertEqual(config["permission"]["edit"], "ask")
+        self.assertEqual(config["permission"]["bash"], "ask")
+        self.send("hello there")
+        user = ev.until(lambda e: e["type"] == "part" and e["role"] == "user", "user text")
+        self.assertEqual(user["text"], "hello there")
+        ev.until(lambda e: e["type"] == "delta" and "echo" in e["delta"], "delta")
+        answer = ev.until(lambda e: e["type"] == "part" and e["role"] == "assistant" and e["text"], "answer")
+        self.assertEqual(answer["text"], "echo: hello there")
+        ev.until(lambda e: e["type"] == "status" and e["status"] == "idle", "idle")
+        st = self.server.get("/api/chat/state")[1]
+        self.assertEqual([h["text"] for h in st["history"]], ["hello there", "echo: hello there"])
+        session = st["agent"]["session"]
+        # a new conversation, then the client started again picks the last one up
+        self.assertEqual(self.server.post("/api/chat/new", {})[0], 200)
+        ev.until(lambda e: e["type"] == "reset", "reset")
+        new = self.server.get("/api/chat/state")[1]["agent"]["session"]
+        self.assertNotEqual(new, session)
+        self.assertEqual(self.server.get("/api/chat/state")[1]["history"], [])
+        saved = json.loads(read(self.p("home", ".config", "evergreen-wiki", "kb-client.json")))
+        self.assertEqual(saved, {"session": new})
+
+    def test_bad_requests(self):
+        self.ready()
+        s = self.server
+        self.assertEqual(s.post("/api/chat/send", {"text": ""})[0], 400)
+        self.assertEqual(s.post("/api/chat/send", {"text": "x" * 20001})[0], 400)
+        self.assertEqual(s.post("/api/chat/send", {"text": "x", "material": ["relative"]})[0], 400)
+        self.assertEqual(s.post("/api/chat/question", {"id": "x", "answers": "no"})[0], 400)
+        self.assertEqual(s.post("/api/chat/permission", {"id": "unknown", "allow": True})[0], 409)
+        self.assertEqual(s.get("/api/chat/state", token=False)[0], 403)
+
+    def test_permission_asked_and_answered(self):
+        ev = self.ready()
+        self.send("PERM edit " + self.p("elsewhere", "a.md"))
+        card = ev.until(lambda e: e["type"] == "permission", "permission")
+        self.assertEqual(card["permission"], "edit")
+        self.assertEqual(len(self.server.get("/api/chat/state")[1]["agent"]["permissions"]), 1)
+        self.assertEqual(self.server.post("/api/chat/permission", {"id": card["id"], "allow": False})[0], 200)
+        ev.until(lambda e: e["type"] == "part" and e["text"] == "permission: reject", "reply")
+        self.assertEqual(self.server.get("/api/chat/state")[1]["agent"]["permissions"], [])
+
+    def test_permission_inside_the_material_is_answered_by_the_client(self):
+        material = self.p("home", "Documents", "minutes")
+        os.makedirs(material)
+        ev = self.ready()
+        self.send("PERM read " + os.path.join(material, "*"), material=[material])
+        auto = ev.until(lambda e: e["type"] in ("auto", "permission"), "answer")
+        self.assertEqual(auto["type"], "auto")
+        ev.until(lambda e: e["type"] == "part" and e["text"] == "permission: once", "reply")
+        # writing there is not allowed: only the library may be written to
+        self.send("PERM edit " + os.path.join(material, "a.md"))
+        self.assertEqual(ev.until(lambda e: e["type"] in ("auto", "permission"))["type"], "permission")
+
+    def test_question(self):
+        ev = self.ready()
+        self.send("QUESTION")
+        q = ev.until(lambda e: e["type"] == "question", "question")
+        self.assertEqual([o["label"] for o in q["questions"][0]["options"]], ["Work", "Life"])
+        self.assertEqual(self.server.post("/api/chat/question", {"id": q["id"], "answers": [["Life"]]})[0], 200)
+        ev.until(lambda e: e["type"] == "part" and e["text"] == 'answers: [["Life"]]', "answer")
+
+    def test_stop(self):
+        ev = self.ready()
+        self.send("SLOW")
+        ev.until(lambda e: e["type"] == "status" and e["status"] == "busy")
+        self.assertEqual(self.server.post("/api/chat/stop", {})[0], 200)
+        ev.until(lambda e: e["type"] == "part" and e["text"] == "aborted", "aborted")
+
+    def test_quit_stops_opencode(self):
+        self.ready()
+        pid = self.calls()[0]["pid"]
+        self.assertEqual(self.server.post("/api/quit", {})[0], 200)
+        self.assertEqual(self.server.proc.wait(15), 0)
+        for _ in range(50):
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                break
+            time.sleep(0.1)
+        else:
+            self.fail("opencode still runs")
+
+    def test_simple_mode_without_the_interface(self):
+        for mode in ("noapi", "noserve"):
+            with self.subTest(mode=mode):
+                ev = self.start(mode)
+                st = ev.until(lambda e: e["type"] == "agent" and e["state"] != "starting", "state")
+                self.assertEqual(st["state"], "simple")
+                self.send("hello")
+                out = ev.until(lambda e: e["type"] == "part" and e["role"] == "assistant", "output")
+                self.assertEqual(out["text"].strip(), "run: hello")
+
+    def test_start_timeout(self):
+        ev = self.start("slow", "--start-timeout", "2")
+        line = ev.until(lambda e: e["type"] == "agent" and e.get("line"), "output line")
+        self.assertIn("refreshing", line["line"])
+        st = ev.until(lambda e: e["type"] == "agent" and e["state"] != "starting", "state")
+        self.assertEqual(st["state"], "simple")
+
+
+@unittest.skipUnless(os.name == "posix", "the client runs on Linux desktops")
+class DecideTest(unittest.TestCase):
+    """Which permission requests the client answers itself (agent.decide)."""
+
+    def setUp(self):
+        self.tmp = os.path.realpath(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.lib = os.path.join(self.tmp, "home", "kb", "work")
+        self.mat = os.path.join(self.tmp, "disk", "minutes")
+        self.skill = os.path.join(self.tmp, "home", ".config", "opencode", "skills", "kb-incremental")
+        for d in (self.lib, self.mat, os.path.join(self.skill, "scripts")):
+            os.makedirs(d)
+        write(os.path.join(self.skill, "scripts", "batch_plan.py"), "")
+        write(os.path.join(self.tmp, "home", "other.py"), "")
+        os.symlink(os.path.join(self.tmp, "home"), os.path.join(self.lib, "out"))
+        self.places = {"write": [self.lib], "read": [self.mat, self.skill],
+                       "scripts": [os.path.join(self.skill, "scripts")]}
+        self.cwd = os.path.join(self.tmp, "home")
+
+    def ok(self, permission, *patterns):
+        return agent.decide(permission, list(patterns), self.places, self.cwd)
+
+    def test_writing(self):
+        self.assertTrue(self.ok("edit", os.path.join(self.lib, "00_Spec.md")))
+        self.assertTrue(self.ok("edit", "kb/work/notes/a.md"))  # relative to the home folder
+        self.assertTrue(self.ok("edit", os.path.join(self.lib, "*")))
+        self.assertFalse(self.ok("edit", os.path.join(self.mat, "a.md")))
+        self.assertFalse(self.ok("edit", os.path.join(self.lib, "out", "x.md")))  # a link out of the library
+        self.assertFalse(self.ok("edit", os.path.join(self.lib, "..", "x.md")))
+        self.assertFalse(self.ok("edit", os.path.join(self.lib, "a.md"), "/etc/passwd"))
+        self.assertFalse(self.ok("edit"))
+
+    def test_reading(self):
+        self.assertTrue(self.ok("read", os.path.join(self.mat, "a.docx")))
+        self.assertTrue(self.ok("external_directory", os.path.join(self.mat, "*")))
+        self.assertTrue(self.ok("read", os.path.join(self.skill, "SKILL.md")))
+        self.assertFalse(self.ok("read", os.path.join(self.tmp, "home", "other.py")))
+        self.assertFalse(self.ok("glob", "**/*.md"))  # the whole home folder
+        self.assertFalse(self.ok("webfetch", "https://example.com"))
+
+    def test_commands(self):
+        script = os.path.join(self.skill, "scripts", "batch_plan.py")
+        self.assertTrue(self.ok("bash", f"python3 {script} plan --root {self.lib}"))
+        self.assertTrue(self.ok("bash", f"python3 -I {script}"))
+        self.assertTrue(self.ok("bash", f"cd {self.skill} && python3 scripts/batch_plan.py next"))
+        self.assertTrue(self.ok("bash", f"python3 '{script}' --title 'two words'"))
+        for bad in (f"python3 {script}; rm -rf ~", f"python3 {script} && ls", f"python3 {script} | sh",
+                    f"python3 {script} $(id)", f"python3 {script} `id`", f"python3 {script} > /tmp/x",
+                    f"python3 {os.path.join(self.tmp, 'home', 'other.py')}", "ls -la",
+                    f"bash {script}", f"cd /tmp && python3 scripts/batch_plan.py",
+                    f"python3 -c 'print(1)' {script}"):
+            with self.subTest(bad=bad):
+                self.assertFalse(self.ok("bash", bad))
 
 
 @unittest.skipUnless(os.name == "posix", "the client runs on Linux desktops")

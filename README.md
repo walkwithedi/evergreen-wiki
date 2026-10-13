@@ -95,7 +95,7 @@ Later, from the same folder: `python3 install.py backup`, `rollback`, `move <lib
 
 It needs Python 3.8 or later and zenity for the dialogs (without zenity it asks in the terminal window). Details in [tools/desktop-setup](tools/desktop-setup/).
 
-The same steps also run in the browser: double-click `kb-client.desktop` (Knowledge base) in `tools/kb-client` instead. It needs Python 3.8 or later and a browser, and lists the registered libraries on the page. Details in [tools/kb-client](tools/kb-client/).
+The same steps also run in the browser: double-click `kb-client.desktop` (Knowledge base) in `tools/kb-client` instead. It needs Python 3.8 or later and a browser, lists the registered libraries on the page and, with OpenCode set up, lets you talk to OpenCode there. Details in [tools/kb-client](tools/kb-client/).
 
 ### In claude.ai or the Claude apps (Google Drive)
 
@@ -152,7 +152,7 @@ Scripts need Python 3.8+ and nothing outside the standard library. Without Pytho
 
 [tools/desktop-setup](tools/desktop-setup/) runs the installer and its backup, rollback, move and uninstall commands as a menu with dialogs on a Linux desktop, for people who do not use a terminal; it comes with the evergreen-wiki zip.
 
-[tools/kb-client](tools/kb-client/) does the same in a page in the browser, served from your own computer, and lists the registered libraries and the state of the skills; it comes with the evergreen-wiki zip.
+[tools/kb-client](tools/kb-client/) does the same in a page in the browser, served from your own computer, lists the registered libraries and the state of the skills, and holds a conversation with OpenCode (file material, quick notes, health checks, questions) with permission requests answered on the page; it comes with the evergreen-wiki zip.
 
 ## Development
 
