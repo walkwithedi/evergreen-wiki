@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Knowledge base</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <h1 data-t="title">Knowledge base</h1>
+  <div class="status" id="status"></div>
+  <button type="button" class="quiet" id="quit" data-t="quit">Quit</button>
+</header>
+
+<main class="layout">
+  <aside class="side">
+    <section>
+      <h2 data-t="libraries">Libraries</h2>
+      <ul class="libs" id="libs"></ul>
+      <p class="empty" id="libs-empty" data-t="no_libraries" hidden>No library yet.</p>
+    </section>
+    <section>
+      <h2 data-t="manage">Manage</h2>
+      <div class="actions">
+        <button type="button" data-action="setup" data-t="setup">Set up</button>
+        <button type="button" data-action="backup" data-t="backup">Back up</button>
+        <button type="button" data-action="rollback" data-t="rollback">Roll back</button>
+        <button type="button" data-action="move" data-t="move">Move a library</button>
+        <button type="button" data-action="uninstall" class="danger" data-t="uninstall">Uninstall</button>
+      </div>
+      <p class="hint" id="backups"></p>
+    </section>
+  </aside>
+
+  <section class="work">
+    <div class="panel" id="step">
+      <div class="panel-head">
+        <h2 id="step-title" data-t="welcome_title">Welcome</h2>
+        <button type="button" class="quiet" id="cancel" data-t="cancel_step" hidden>Cancel this step</button>
+      </div>
+      <p class="intro" id="welcome" data-t="welcome">Pick an item on the left.</p>
+      <pre class="log" id="log" hidden></pre>
+      <form class="ask" id="ask" hidden></form>
+      <p class="result" id="result" hidden></p>
+    </div>
+    <div class="panel later">
+      <h2 data-t="chat_title">Conversation</h2>
+      <p data-t="chat_later">Talking to your agent from this page comes in a later version.</p>
+    </div>
+  </section>
+</main>
+
+<div class="modal" id="browser" hidden>
+  <div class="browser" role="dialog" aria-modal="true" aria-labelledby="browse-title">
+    <h2 id="browse-title" data-t="browse_title">Choose a folder</h2>
+    <div class="places" id="places"></div>
+    <div class="pathbar">
+      <button type="button" class="quiet" id="up" data-t="up">Up</button>
+      <input type="text" id="path" spellcheck="false" autocomplete="off">
+      <button type="button" class="quiet" id="go" data-t="go">Open</button>
+    </div>
+    <label class="check"><input type="checkbox" id="hidden"> <span data-t="show_hidden">Show hidden folders</span></label>
+    <ul class="entries" id="entries"></ul>
+    <p class="hint" id="more" hidden></p>
+    <p class="error" id="fs-error" hidden></p>
+    <label class="newname"><span data-t="new_name">New folder inside it (made when the step writes; leave empty to use the folder itself)</span>
+      <input type="text" id="newname" spellcheck="false" autocomplete="off"></label>
+    <p class="hint" id="chosen"></p>
+    <div class="buttons">
+      <button type="button" class="quiet" id="browse-cancel" data-t="cancel">Cancel</button>
+      <button type="button" class="primary" id="browse-ok" data-t="choose_this">Choose this folder</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

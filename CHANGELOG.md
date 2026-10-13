@@ -4,6 +4,7 @@ All three skills share one version number. To release, update this file, the "Ve
 
 ## Unreleased
 
+- tools/kb-client: the installer and install.py backup, rollback, move and uninstall as a page in the browser, served by a local Python server (standard library only) and started by double-clicking kb-client.desktop on a Linux desktop. The page lists the registered libraries, the agents that have the skills and whether OpenCode has a model set. Each step runs the installer's own ask, yes and choose calls, so the questions, previews and checks are the same; what a step prints is streamed to the page above its question. Folder questions open a folder browser that only lists folders, starting at the home folder or a mounted drive; a suggested folder that does not exist yet opens at its nearest existing parent with the new folder's name kept. The server listens on 127.0.0.1 only, refuses requests without the token in the address it opens or with another host name, runs one step at a time and stops when no page has been open for a while. English and Chinese. Talking to the agent from the page comes later.
 - README (English and Chinese): a section on how the pieces fit together (skills, library folders, registry, instructions line), what each release download is for and which path to take in which situation; a quick-start path for a Linux desktop without a terminal.
 - Every release's notes end with the same download guide (docs/release-downloads.md, version filled in).
 
