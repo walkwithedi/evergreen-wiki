@@ -2,6 +2,10 @@
 
 All three skills share one version number. To release, update this file, the "Version:" line of every SKILL.md and the plugin manifests together and merge to main; the release workflow then publishes v<version>.
 
+## Unreleased
+
+- install.py wizard: a library folder that is the root, the home folder or a folder holding it, or that holds this program, the install record, the skills or the instructions files is refused with the reason and asked again, both for a new library and for registering an existing one (the same rule move and uninstall already follow, now kb_manage.is_protected).
+
 ## 1.12.0
 
 Library folder and material folder kept apart.

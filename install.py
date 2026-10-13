@@ -304,6 +304,10 @@ def ask_root(q, m, il, default):
             print(m["need_root"])
             continue
         root = os.path.abspath(os.path.expanduser(answer))
+        if kb_manage.is_protected(root, MANAGE_DEFAULTS):
+            lang = next(k for k, v in MSG.items() if v is m)
+            print(m["bad"].format(err=f"{root}: {kb_manage.MSG[lang]['protected']}"))
+            continue
         if os.path.isdir(root) and kb_manage.is_library(root):
             return root, True
         try:
