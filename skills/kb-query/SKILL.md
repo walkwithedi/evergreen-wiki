@@ -5,7 +5,7 @@ description: Answers questions from the user's own knowledge base of Markdown fi
 
 # Knowledge base questions
 
-Version: 1.11.0
+Version: 1.12.0
 
 Read-only: search, read and answer. Never create, change, move or delete anything in a library. Partitions, topics and terms are read from the library, never from this file.
 
@@ -20,6 +20,8 @@ Read references/config.md and references/environment.md once before starting.
 5. Intake, archive, health check or setup requests belong to kb-incremental.
 
 For each library searched, read its backend file and _kb.json. Start the answer with: Library: <label(s)>.
+
+After the answer, check each local library searched for an unfinished intake (references/config.md, section 4) and remind once per conversation; this skill only reminds and hands "continue intake" to kb-incremental.
 
 ## Step 2: which file first
 

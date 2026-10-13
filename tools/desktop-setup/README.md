@@ -27,7 +27,7 @@ No network is needed. On a computer without one, copy evergreen-wiki-v<version>.
    - Move a library: pick a registered library and, in the folder chooser, the folder to move it into; then the move preview and confirmation of `install.py move`.
 3. The menu comes back after each item; Quit or closing the menu ends the tool.
 
-Folder questions offer the suggested folder or a folder chooser; cancelling the chooser goes back to that choice. Text printed by a step is shown in the next dialog, a long preview in a scrolling window first. Closing a list, text or folder dialog cancels the current item and closing a yes/no question answers no; what was finished stays.
+Folder questions never suggest a folder: the question is shown, then a folder chooser opens in the home folder. Cancelling the chooser cancels the item; when a folder chosen earlier is being changed in the preview, the chooser opens there and cancelling keeps it. Text printed by a step is shown in the next dialog, a long preview in a scrolling window first. Closing a list, text or folder dialog cancels the current item and closing a yes/no question answers no; what was finished stays.
 
 Options: `--ui zenity|tty` (or `EVERGREEN_SETUP_UI`) forces dialogs or terminal questions, `--lang en|zh` the language (default: the system language), `--log-level`. For Set up, `--agent <target>` and `--preset life|work` answer those questions in advance and `--descriptions <file>` replaces the skill descriptions, as with `install.py`; a wrapper script or a copy of the .desktop entry can fix them for a group of users.
 
@@ -36,7 +36,7 @@ Options: `--ui zenity|tty` (or `EVERGREEN_SETUP_UI`) forces dialogs or terminal 
 The unit tests answer the dialogs with a stand-in for zenity. On a real desktop, check after a change:
 
 1. Double-clicking the entry opens a terminal window and the menu dialog; without zenity the menu is asked in that terminal.
-2. Set up: the library folder question offers the suggested folder and a chooser; cancelling the chooser returns to the choice. The preview is readable before the confirmation, and the closing dialog lists what to try.
+2. Set up: the library folder question opens a chooser in the home folder with nothing preselected; cancelling it writes nothing. The preview is readable before the confirmation, and the closing dialog lists what to try.
 3. Move: the folder chooser opens, the preview shows both places, and the library is found at the new place by the agent after a restart.
 4. Uninstall: no library folder is deleted unless picked and the confirmation word typed.
 5. Closing a list or text dialog stops the current item without changing anything further.

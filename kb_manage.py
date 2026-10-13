@@ -28,8 +28,6 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS = os.path.join(ROOT, "skills", "kb-incremental", "scripts")
 SKILLS = ["kb-note", "kb-query", "kb-incremental"]
 COMMANDS = ("backup", "rollback", "move", "uninstall")
-# Material folders next to a library, as the kb-incremental material chooser names them.
-MATERIAL_SUFFIXES = ("-待整理", "-inbox")
 # A spec file marks a folder as a library: the presets name it 00_Spec.md, Chinese libraries often 00_规范.md.
 SPEC_RE = re.compile(r"^00_.*(spec|规范).*\.md$", re.I)
 CONFIRM_WORDS = {"en": "delete", "zh": "删除"}
@@ -89,8 +87,7 @@ MSG = {
         "un_line": "  the knowledge-base line in {path} (the rest of the file stays)",
         "un_keep": "Your agent, its settings and other skills stay. A Claude Code plugin install is removed with /plugin.",
         "un_libs_q": "Also delete library folders? The default keeps them all.",
-        "un_lib_q": "Delete {label} at {root} ({n} files){extra}?",
-        "un_lib_extra": " together with {dirs}",
+        "un_lib_q": "Delete {label} at {root} ({n} files)?",
         "un_lib_skip": "  not offered: {label} at {root} ({why})",
         "un_lib_will": "  library folder  {path}",
         "un_ok": "Uninstall?",
@@ -154,8 +151,7 @@ MSG = {
         "un_line": "  {path} 中的知识库说明行（文件其余内容不动）",
         "un_keep": "助手本身、它的设置和其他技能不受影响。Claude Code 插件方式安装的，用 /plugin 卸载。",
         "un_libs_q": "同时删除知识库文件夹吗？默认全部保留。",
-        "un_lib_q": "删除「{label}」{root}（{n} 个文件）{extra}？",
-        "un_lib_extra": "，连同 {dirs}",
+        "un_lib_q": "删除「{label}」{root}（{n} 个文件）？",
         "un_lib_skip": "  不可删除：「{label}」{root}（{why}）",
         "un_lib_will": "  知识库文件夹  {path}",
         "un_ok": "确认卸载？",
@@ -441,16 +437,6 @@ def lib_check(root, defaults):
     return None
 
 
-def material_dirs(root):
-    parent, name = os.path.split(root)
-    out = []
-    for suffix in MATERIAL_SUFFIXES:
-        p = os.path.join(parent, name + suffix)
-        if os.path.isdir(p) and not os.path.islink(p):
-            out.append(p)
-    return out
-
-
 def count_files(root):
     return sum(len(files) for _, _, files in os.walk(root))
 
@@ -542,7 +528,6 @@ def move_jobs(lib_id, to, m, defaults):
     if os.path.lexists(parent) and not os.path.isdir(parent):
         raise Refused(m["parent_file"].format(parent=parent))
     jobs = [(root, os.path.join(parent, os.path.basename(root)))]
-    jobs += [(p, os.path.join(parent, os.path.basename(p))) for p in material_dirs(root)]
     if os.path.realpath(jobs[0][1]) == os.path.realpath(root):
         raise Refused(m["same_place"].format(root=root))
     for src, dest in jobs:
@@ -680,10 +665,8 @@ def cmd_uninstall(a, q, m, defaults):
     picked = []
     if deletable and q.yes(m["un_libs_q"], False):
         for label, root, _ in deletable:
-            extra = material_dirs(root)
-            text = m["un_lib_extra"].format(dirs=", ".join(extra)) if extra else ""
-            if q.yes(m["un_lib_q"].format(label=label, root=root, n=count_files(root), extra=text), False):
-                picked += [root] + extra
+            if q.yes(m["un_lib_q"].format(label=label, root=root, n=count_files(root)), False):
+                picked.append(root)
     print(m["un_items"])
     for p in skills:
         print(m["un_skill"].format(path=p))

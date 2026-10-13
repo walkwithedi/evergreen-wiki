@@ -1,6 +1,7 @@
 """Unit tests for the kb-incremental scripts. Standard library only: python3 -m unittest discover tests"""
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -327,6 +328,7 @@ class PickMaterialsTest(Tmp):
         rc, out, calls = self.pick(["0 folder\\n", "0 " + self.p("in") + "\\n"])
         self.assertEqual((rc, out), (0, [self.p("in")]))
         self.assertIn("--directory", calls[1])
+        self.assertIn("--multiple", calls[1])
         self.assertIn("--timeout 7", calls[0])
         self.assertIn("选择要入库的材料", calls[0])
 
@@ -357,15 +359,12 @@ class PickMaterialsTest(Tmp):
         os.remove(self.p("n"))
         self.assertEqual(self.pick(["5 "], args=["--library"])[0], 5)
 
-    def test_starts_in_material_folder_next_to_library(self):
+    def test_several_folders_from_home(self):
         lib = self.p("kb")
         os.makedirs(lib + "-待整理")
-        _, _, calls = self.pick(["0 folder\\n", "0 " + lib + "-待整理\\n"], args=["--library-root", lib])
-        self.assertIn("--filename " + lib + "-待整理" + os.sep, calls[1])
-        os.remove(self.p("n"))
-        os.remove(self.p("calls"))
-        _, _, calls = self.pick(["0 folder\\n", "0 /x\\n"], args=["--library-root", self.p("other")])
-        self.assertIn("--filename " + os.path.expanduser("~") + os.sep, calls[1])
+        rc, out, calls = self.pick(["0 folder\\n", "0 /x\\n/y z\\n"], args=[])
+        self.assertEqual((rc, out), (0, ["/x", "/y z"]))
+        self.assertIn("--filename " + os.path.expanduser("~") + os.sep, calls[1])  # no folder chosen in advance
 
 
 class BatchPlanTest(Tmp):
@@ -433,6 +432,7 @@ class BatchPlanTest(Tmp):
         p = run("batch_plan.py", "plan", self.p("mat"), "--plan", self.plan, check=False)
         self.assertEqual(p.returncode, 3)
         self.assertIn("a plan with pending batches exists", p.stdout)
+        self.assertIn("--append", p.stdout)
         status = self.bp("status").stdout
         self.assertIn("batches: 4 | done 1 | skipped 1 | pending 2", status)
         self.assertIn("next: batch 3 mat/Beta", status)
@@ -446,6 +446,54 @@ class BatchPlanTest(Tmp):
         self.assertIn("result: archive the plan", fin)
         self.assertNotIn("renamed to distinguish", self.bp("status").stdout)
         self.assertEqual(run("batch_plan.py", "plan", self.p("mat"), "--plan", self.plan).returncode, 0)
+
+    def test_append_new_sources(self):
+        self.make_plan()
+        write(self.p("other", "Gamma", "g1.docx"), "gamma 1")
+        write(self.p("other", "Gamma", "g2.docx"), "gamma 2")
+        write(self.p("other", "Gamma", "dup.docx"), "alpha 1")  # same content as a file in the run
+        out = run("batch_plan.py", "plan", self.p("other"), "--plan", self.plan, "--append",
+                  "--library-root", self.p("lib")).stdout
+        self.assertIn("same content as mat/Alpha/a1.docx", out)
+        self.assertIn("1 batches added", out)
+        plan = json.loads(read(self.plan))
+        self.assertEqual([b["n"] for b in plan["batches"]], [1, 2, 3, 4, 5])
+        self.assertEqual(plan["batches"][-1]["group"], "other/Gamma")
+        self.assertIn(self.p("other"), plan["sources"])
+        write(self.p("third", "t.txt"), "third")
+        write(self.p("third", "u.txt"), "third u")
+        write(self.p("third", "v.txt"), "third v")
+        run("batch_plan.py", "plan", self.p("third"), "--plan", self.plan, "--append", "--front",
+            "--library-root", self.p("lib"))
+        plan = json.loads(read(self.plan))
+        self.assertEqual(plan["batches"][0]["group"], "third/(loose files)")
+        self.assertIn("batch: 6/7 | third/(loose files) part 1/2", self.bp("next").stdout)
+
+    def test_interrupted_batch_resumes(self):
+        self.make_plan()
+        index = self.p("lib", "01_File-Index.md")
+        self.assertNotIn("resumed", self.bp("next").stdout)
+        status = self.bp("status").stdout
+        self.assertIn("interrupted, started", status)
+        # a0 was filed before the interruption
+        h = run("index_tool.py", "hash", self.p("mat", "Alpha", "a0.docx")).stdout.strip()
+        with open(index, "a", encoding="utf-8") as f:
+            f.write(f"| 03_Projects_Alpha.md | a0.docx | {h} |\n")
+        nxt = run("batch_plan.py", "next", "--plan", self.plan, "--index", index).stdout
+        self.assertIn("resumed (interrupted)", nxt)
+        self.assertIn("filed: " + self.p("mat", "Alpha", "a0.docx") + " as 03_Projects_Alpha.md", nxt)
+        self.assertIn("file: " + self.p("mat", "Alpha", "a1.docx"), nxt)
+
+    def test_missing_batch_and_skip_rest(self):
+        self.make_plan()
+        shutil.rmtree(self.p("mat", "Alpha"))
+        p = self.bp("next", check=False)
+        self.assertEqual(p.returncode, 4)
+        self.assertIn("missing folder: " + self.p("mat", "Alpha"), p.stdout)
+        self.assertNotIn("started", read(self.plan))
+        self.bp("skip", "--rest")
+        self.assertIn("batches: 4 | done 0 | skipped 4 | pending 0", self.bp("status").stdout)
+        self.assertEqual(self.bp("skip", check=False).returncode, 2)
 
     def test_bad_input(self):
         self.make_plan()
@@ -526,6 +574,7 @@ class InitLibraryTest(Tmp):
         text = read(md)
         self.assertIn("Be brief.", text)
         self.assertIn("I keep knowledge bases: Life (me and my family); Work (team projects).", text)
+        self.assertIn("unfinished batch intake, ask whether to continue it.", text)
         out = run("init_library.py", "instructions", "--registry", reg, "--file", md, "--apply").stdout
         self.assertIn("unchanged", out)
         block = run("init_library.py", "instructions", "--registry", reg, "--project-block").stdout

@@ -5,6 +5,16 @@ All three skills share one version number. To release, update this file, the "Ve
 ## Unreleased
 
 - install.py wizard: a library folder that is the root, the home folder or a folder holding it, or that holds this program, the install record, the skills or the instructions files is refused with the reason and asked again, both for a new library and for registering an existing one (the same rule move and uninstall already follow, now kb_manage.is_protected).
+
+## 1.12.0
+
+Library folder and material folder kept apart.
+- All three skills (shared config.md, section 3): the folder holding the filed knowledge base and the folder holding the user's original files are named to the user as "library folder" and "material folder" (知识库文件夹, 资料文件夹), each with a short explanation; registry, root and backend are not said to the user outside the init preview. Material outside the library folder is normal and is read where it is; a library's folder changes only on an explicit request to move it. A fixed two-option question for when it is unclear which folder the user means.
+- kb-incremental: hard rule 15 on the two folders; init mode and the folder chooser treat a folder of original files as material, never as a library, and ask for an empty folder for a new library.
+- No folder is chosen for the user. install.py, tools/desktop-setup and init mode no longer suggest ~/kb/<id>: the desktop asks with a chooser that opens in the home folder (in the current answer when changing it in the preview), the terminal asks until a path is typed, and the skills ask without suggesting a path where no chooser can open.
+- Material from anywhere, chosen anew each time: pick_materials.py selects several folders or files at once and always opens in the home folder (--library-root and the <library>-待整理 / -inbox start folder are gone). install.py move and uninstall act on the library folder only; folders of original files next to it are neither moved nor deleted.
+- Batch intake: plan --append adds new material to an open run (after the pending batches, or before them with --front), leaving out files already in the run; skip --rest ends a run; next --index marks a batch started, says when a batch was interrupted, leaves out files filed before the interruption, and exits 4 without marking anything when every file of the batch is missing (a disconnected drive). batches.md: a three-way choice when new material meets an open run, and how to resume an interrupted batch.
+- Reminder of an unfinished intake (config.md, section 4): all three skills check the library for an open run and ask once per conversation whether to continue, do it later or end it; the instructions line also asks for this at the start of a conversation.
 - README (English and Chinese): a section on how the pieces fit together (skills, library folders, registry, instructions line), what each release download is for and which path to take in which situation; a quick-start path for a Linux desktop without a terminal.
 - Every release's notes end with the same download guide (docs/release-downloads.md, version filled in).
 
