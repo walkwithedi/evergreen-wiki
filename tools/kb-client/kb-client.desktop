@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Knowledge base
+Name[zh_CN]=知识库
+Comment=Open the knowledge base client in the browser: set up, back up, move or uninstall
+Comment[zh_CN]=在浏览器中打开知识库客户端：安装与建库、备份、移动、卸载
+Exec=sh -c 'cd "$(dirname "$1")" && exec python3 kb_client.py' kb-client %k
+Terminal=true
+Icon=accessories-dictionary
+Categories=Utility;
