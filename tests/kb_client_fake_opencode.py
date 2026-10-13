@@ -135,7 +135,7 @@ class Handler(BaseHTTPRequestHandler):
                     self.wfile.flush()
             except OSError:
                 WORLD.clients.remove(q)
-            return
+            return None
         if self.path == "/session":
             return self.reply(200, [{"id": k} for k in WORLD.sessions])
         if self.path == "/permission":
@@ -144,7 +144,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(200 if parts[1] in WORLD.sessions else 404, {"id": parts[1]})
         if len(parts) == 3 and parts[0] == "session" and parts[2] == "message":
             return self.reply(200, WORLD.sessions.get(parts[1], []))
-        self.reply(404, {})
+        return self.reply(404, {})
 
     def do_POST(self):
         body = self.body()
@@ -168,7 +168,7 @@ class Handler(BaseHTTPRequestHandler):
             box.append(body.get("reply") or body.get("answers") or "rejected")
             ev.set()
             return self.reply(200, True)
-        self.reply(404, {})
+        return self.reply(404, {})
 
 
 def main():

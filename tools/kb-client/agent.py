@@ -204,12 +204,14 @@ class Agent:
                                          text=True, encoding="utf-8", errors="replace",
                                          start_new_session=True)
         except OSError as e:
-            return self._simple(f"opencode serve: {e}")
+            self._simple(f"opencode serve: {e}")
+            return
         found = threading.Event()
         threading.Thread(target=self._read_output, args=(found,), daemon=True).start()
         if not found.wait(self.start_timeout) or self.port is None:
             self._kill()
-            return self._simple("opencode serve did not start")
+            self._simple("opencode serve did not start")
+            return
         try:
             for path in ("/session", "/permission"):
                 code, _ = self.call("GET", path)
@@ -217,7 +219,8 @@ class Agent:
                     raise OSError(f"GET {path} answered {code}")
         except (OSError, ValueError) as e:
             self._kill()
-            return self._simple(f"opencode serve: {e}")
+            self._simple(f"opencode serve: {e}")
+            return
         with self.lock:
             self.state = "ready"
         threading.Thread(target=self._events, daemon=True).start()
@@ -253,8 +256,8 @@ class Agent:
             except (OSError, subprocess.TimeoutExpired):
                 try:
                     os.killpg(proc.pid, signal.SIGKILL)
-                except OSError:
-                    pass
+                except OSError:  # the process group has ended meanwhile
+                    log.debug("opencode had already stopped")
 
     def shutdown(self):
         self.stopping = True
@@ -263,8 +266,8 @@ class Agent:
         if rp and rp.poll() is None:
             try:
                 os.killpg(rp.pid, signal.SIGTERM)
-            except OSError:
-                pass
+            except OSError:  # the run has ended meanwhile
+                log.debug("opencode run had already stopped")
 
     # ----- talking to OpenCode -----
 
@@ -410,8 +413,8 @@ class Agent:
                 if code == 200:
                     self.session = sid
                     return
-            except OSError:
-                pass
+            except OSError:  # OpenCode cannot say; a new conversation starts with the first message
+                log.debug("saved conversation %s not found", sid)
         self.session = None
 
     def ensure_session(self):

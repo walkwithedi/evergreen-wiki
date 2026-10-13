@@ -47,6 +47,7 @@ WEB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 ACTIONS = ("setup", "backup", "rollback", "move", "uninstall")
 LANGS = ("en", "zh")
 MAX_BODY = 64 * 1024
+CHAT_ACTIONS = {name: name for name in ("start", "send", "new", "stop", "permission", "question")}
 MAX_TEXT = 20000  # characters of one message from the page
 MAX_PATHS = 200  # material paths sent with one message
 MAX_ENTRIES = 2000  # entries listed per folder; the page says when a folder holds more
@@ -640,7 +641,10 @@ class Handler(BaseHTTPRequestHandler):
             log.debug("chat stream closed by the page")
         return None
 
-    def chat_post(self, what, body):
+    def chat_post(self, path_part, body):
+        what = CHAT_ACTIONS.get(path_part)  # a fixed name from here on, never the request's own text
+        if what is None:
+            return self.send(404, {"error": "not found"})
         m = MSG[self.app.lang]
         if what == "start":
             ag, why = self.app.start_agent()
@@ -679,8 +683,8 @@ class Handler(BaseHTTPRequestHandler):
         except RuntimeError:
             return self.send(409, {"error": m["not_ready"]})
         except OSError as e:
-            log.warning("chat %s: %s", what, e)
-            return self.send(502, {"error": str(e)})
+            log.warning("chat %s failed: %s", what, type(e).__name__)
+            return self.send(502, {"error": " ".join(str(e).split())[:300]})
         return self.send(404, {"error": "not found"})
 
     def static(self, path):
