@@ -107,8 +107,8 @@ class ManageTest(unittest.TestCase):
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         self.assertEqual(read(self.skill), "local edit\n")
 
-    def test_move_with_material_folder(self):
-        write(self.lib + "-inbox/a.txt", "x\n")
+    def test_move_leaves_material_folders(self):
+        write(self.lib + "-inbox/a.txt", "x\n")  # original files stay where they are
         os.makedirs(os.path.join(self.lib, "empty"))
         dest = self.p("home", "disk")
         # confirm the move, then delete the originals with the confirmation word
@@ -116,9 +116,9 @@ class ManageTest(unittest.TestCase):
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         self.assertEqual(self.roots(), ["~/disk/work"])
         self.assertTrue(os.path.isdir(os.path.join(dest, "work", "empty")))
-        self.assertEqual(read(os.path.join(dest, "work-inbox", "a.txt")), "x\n")
+        self.assertFalse(os.path.exists(os.path.join(dest, "work-inbox")))
         self.assertFalse(os.path.exists(self.lib))
-        self.assertFalse(os.path.exists(self.lib + "-inbox"))
+        self.assertEqual(read(self.lib + "-inbox/a.txt"), "x\n")
 
     def test_move_keeps_originals_by_default(self):
         dest = self.p("elsewhere")
@@ -184,7 +184,7 @@ class ManageTest(unittest.TestCase):
         p = self.manage(["uninstall"], ["y", "y", "delete"])
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         self.assertFalse(os.path.exists(self.lib))
-        self.assertFalse(os.path.exists(self.lib + "-inbox"))
+        self.assertEqual(read(self.lib + "-inbox/a.txt"), "x\n")  # original files are never deleted
         self.assertFalse(os.path.exists(self.registry))
 
     def test_uninstall_never_offers_unsafe_folders(self):

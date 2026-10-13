@@ -21,6 +21,8 @@ Read references/config.md and references/environment.md once before starting.
 
 For each library searched, read its backend file and _kb.json. Start the answer with: Library: <label(s)>.
 
+After the answer, check each local library searched for an unfinished intake (references/config.md, section 4) and remind once per conversation; this skill only reminds and hands "continue intake" to kb-incremental.
+
 ## Step 2: which file first
 
 | Question about | Read first |

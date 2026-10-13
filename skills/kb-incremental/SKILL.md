@@ -29,6 +29,7 @@ Libraries share one process. Picking the wrong one writes material into the wron
 2. Otherwise match the material against each library's scope. If exactly one fits, propose it in one line and continue only when the user agrees or the request already made it clear; if none or several fit, ask in one sentence which library to use. Never default.
 3. Read the backend file for that library (references/backend-gdrive.md or references/backend-local.md), then read _kb.json and _kb-params.md from the library root. A missing _kb.json or _kb-params.md: stop and offer init mode (existing-library branch).
 4. Write the first line of the reply: Library: <label>. From here on, search and write only inside that library.
+5. Unfinished intake: for a local library, look for its batch progress file (references/config.md, section 4). When it has pending batches and the request is not already "continue intake", remind and ask as that section says, once per conversation; a request with new material goes to batches.md, "A run is already open".
 
 _kb-params.md defines: summary-file reading conditions, step 1 dates and output fields, the close-reading list, the five trigger classes and their output, the metadata header, issue categories, readme sections, the fallback partition and wording precedents, and any extra hard rules. "See params" below means that file.
 
@@ -50,13 +51,13 @@ You file and judge; you do not advise, recommend or evaluate. These rules apply 
 12. Replies follow the library language and preferences.output (references/environment.md). YAML front matter and the Bases block in entity pages are file formats and keep their syntax.
 13. No wiki links in body text. Links appear only in front matter, in the basis lines of summary files, and in entity pages.
 14. Working notes stay out of knowledge files: cleaning results, term fixes, duplicate and trigger judgements appear only in the reply and the readme.
-15. Library folder and material folder are different things (references/config.md, section 3). Material may sit anywhere; read it where it is. Never offer to change a library's folder because the material is elsewhere, and name the two folders to the user only in the words that section gives.
+15. The library folder and the material are different things (references/config.md, section 3). Material may come from any number of folders and files anywhere, chosen anew for every intake; read it where it is. Never choose or suggest a folder for the user, never offer to change a library's folder because the material is elsewhere, and name the two to the user only in the words that section gives.
 
 ## Input checks
 
 Check 1: material is readable. Handle several items one by one, never merged. Read images and scans as text first; record unreadable parts as they are and log them as issues. Keep the path of each original upload (the file itself, not a converted copy) for the hash in step 4; pasted text has no original file and step 4 runs without --file.
 
-No material given: the user asks for intake but names no path and uploads or pastes nothing. For a local library where you can run commands, open the desktop picker (references/pick-material.md, material); otherwise ask where the material folder is (the folder with the original files). When the user named a path or uploaded files, never open the picker.
+No material given: the user asks for intake but names no path and uploads or pastes nothing. For a local library where you can run commands, open the desktop picker (references/pick-material.md, material); otherwise ask where the material is (the folders or files with the original documents; several are fine), without suggesting a path. When the user named a path or uploaded files, never open the picker.
 
 Many files: when the material is files or folders on disk and commands can run, plan the batches before reading any of it (references/batches.md). One batch: go on here as usual. More than one: follow batches.md.
 
