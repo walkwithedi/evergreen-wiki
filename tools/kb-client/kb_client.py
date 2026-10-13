@@ -357,30 +357,40 @@ def places():
     return out
 
 
-def browse_root(path, roots):
-    """The starting point that holds path (both real paths), or None: the browser stays inside them."""
-    for root in roots:
-        if path == root or path.startswith(root.rstrip(os.sep) + os.sep):
-            return root
-    return None
+def walk_to(path, nearest=False):
+    """(folder, starting point) for an absolute path inside the home folder or a mounted drive. The folder
+    is built from the starting point one name at a time, each name taken from the folder listing, and its
+    real path must stay inside the starting point's, so links out of it are refused too. With nearest,
+    the walk stops at the last existing folder (a folder typed in an answer is often not made yet)."""
+    if not path or not os.path.isabs(os.path.expanduser(path)):
+        raise ValueError("not an absolute path")
+    want = os.path.normpath(os.path.expanduser(path))
+    for place in places():
+        root = os.path.normpath(place["path"])
+        if want != root and not want.startswith(root.rstrip(os.sep) + os.sep):
+            continue
+        folder = root
+        for name in [x for x in want[len(root):].split(os.sep) if x]:
+            try:
+                found = [e.name for e in os.scandir(folder) if e.name == name and e.is_dir()]
+            except OSError:
+                found = []
+            if not found:
+                if nearest:
+                    break
+                raise ValueError("not a folder")
+            folder = os.path.join(folder, found[0])
+        real, real_root = os.path.realpath(folder), os.path.realpath(root)
+        if real != real_root and not real.startswith(real_root.rstrip(os.sep) + os.sep):
+            raise ValueError("outside the home folder and the mounted drives")
+        return folder, root
+    raise ValueError("outside the home folder and the mounted drives")
 
 
 def list_folder(path, hidden=False, nearest=False):
-    """The entries of one folder inside the home folder or a mounted drive, folders first. Raises
-    ValueError for a path that is not an absolute, existing folder there; with nearest, a missing folder
-    is replaced by its nearest existing parent (a folder typed in an answer is often not made yet).
+    """The entries of one folder inside the home folder or a mounted drive, folders first (walk_to).
     Reads only."""
-    if not path or not os.path.isabs(os.path.expanduser(path)):
-        raise ValueError("not an absolute path")
-    path = os.path.realpath(os.path.expanduser(path))
-    roots = [os.path.realpath(p["path"]) for p in places()]
-    root = browse_root(path, roots)
-    if root is None:
-        raise ValueError("outside the home folder and the mounted drives")
-    while nearest and path != root and not os.path.isdir(path):
-        path = os.path.dirname(path)
-    if not os.path.isdir(path):
-        raise ValueError("not a folder")
+    path, root = walk_to(path, nearest)
     entries = []
     with os.scandir(path) as it:
         for e in it:
