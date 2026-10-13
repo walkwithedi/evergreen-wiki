@@ -122,7 +122,8 @@ MSG = {
         "q_preset": "Question 1 of 3. Which kind of library?",
         "life": "life: me and my family - IDs, health, insurance, money, home, subscriptions",
         "work": "work: goals and plans, projects, meetings and decisions, procedures, reports",
-        "q_root": "Question 2 of 3. Folder for the library (new or empty; an Obsidian vault works)",
+        "q_root": "Question 2 of 3. Folder for the library: where the filed results go, not your original files (new or empty; an Obsidian vault works)",
+        "need_root": "Please choose or type the library folder; there is no default.",
         "q_scope": "Question 3 of 3. One sentence: what belongs in this library? The assistant uses it to pick the library for each request.",
         "q_id": "Short id (lowercase letters, digits, hyphens)",
         "id_taken": "The id {id!r} is already registered; using {new!r}. Change it in the preview if you like.",
@@ -166,7 +167,8 @@ MSG = {
         "q_preset": "问题 1/3：建哪一类知识库？",
         "life": "life 生活库：我和家人的证件、健康、保险、财务、住房、订阅",
         "work": "work 工作库：目标与计划、项目、会议与决策、制度流程、报表",
-        "q_root": "问题 2/3：知识库放在哪个文件夹（新文件夹或空文件夹；Obsidian 库也可以）",
+        "q_root": "问题 2/3：知识库文件夹放在哪里（放整理好的结果，不是放原始文件的地方；新文件夹或空文件夹；Obsidian 库也可以）",
+        "need_root": "请选择或输入知识库文件夹，没有默认位置。",
         "q_scope": "问题 3/3：用一句话说明这个库收什么内容。助手靠这句话判断每次请求该用哪个库。",
         "q_id": "简短 id（小写字母、数字、连字符）",
         "id_taken": "id {id!r} 已被登记，改用 {new!r}；可以在预览里修改。",
@@ -297,7 +299,11 @@ def free_id(base, taken):
 def ask_root(q, m, il, default):
     """Returns (folder, True when it already holds a library)."""
     while True:
-        root = os.path.abspath(os.path.expanduser(q.ask(m["q_root"], default, kind="folder")))
+        answer = q.ask(m["q_root"], default, kind="folder").strip()
+        if not answer:
+            print(m["need_root"])
+            continue
+        root = os.path.abspath(os.path.expanduser(answer))
         if os.path.isdir(root) and kb_manage.is_library(root):
             return root, True
         try:
@@ -406,7 +412,7 @@ def setup_library(q, m, il, lang, preset=None):
     if new_id != s["id"]:
         print(m["id_taken"].format(id=s["id"], new=new_id))
         s["id"] = new_id
-    root = os.path.join(HOME, "kb", s["id"])
+    root = ""  # no default: the user chooses the library folder
     while True:
         root, existing = ask_root(q, m, il, root)
         if not existing:

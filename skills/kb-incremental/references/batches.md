@@ -6,7 +6,12 @@ Filing a large folder in one pass is slow, and the user sees nothing for a long 
 
 - The material is files or folders on disk (a named path, or the material picker of references/pick-material.md) and commands can run. Uploads and pasted text are filed as usual.
 - Run the plan below for every such intake. When it reports one batch, there is no batch mode: file the material as usual. With two or more batches, batch mode applies whether the user chose everything or only part of it.
-- A run is already open: before planning, check for the progress file (find_exact names.batch_plan in the library root; for a Google Drive library, in the work folder). When it exists with pending batches, say in one line how far it got and ask whether to continue it or start over. "Continue intake" ("继续入库") always means: continue the open run.
+- Material can come from several folders and files anywhere; give plan every path in one call. Each intake chooses its own material; nothing is remembered from the last one.
+- A run is already open: before planning, check for the progress file (find_exact names.batch_plan in the library root; for a Google Drive library, in the work folder). "Continue intake" ("继续入库") always means: continue the open run. When the user brings new material while the run has pending batches, say in one line how far it got and ask once, as a choice:
+  - Add to this intake (recommended): plan <paths> --append; the new batches follow the pending ones, files already in the run are left out as duplicates, and one final step covers everything.
+  - New material first: plan <paths> --append --front; the new batches go before the pending ones, the rest of the run follows.
+  - Drop the rest of the old run: batch_plan.py skip --plan <file> --rest, then the final step for what was filed (section 3), then plan the new material. Filed files stay; original files are never touched.
+  Without new material, the reminder of references/config.md, section 4 applies.
 
 Without Python there is no batch mode: say that a large folder will be slow and offer to file one subfolder at a time.
 
@@ -24,13 +29,18 @@ Show the plan to the user in a short table or list: groups, files, batches, what
 - File only some groups: re-run plan on those folders with --replace.
 - Cancel.
 
-"Start" is the user's confirmation for every batch delivery of this run. Tell the user they can stop between batches and continue later by saying "continue intake".
+"Start" is the user's confirmation for every batch delivery of this run. Tell the user they can stop at any time, even inside a batch (closing the window, an interruption), and continue later by saying "continue intake"; the next conversation also reminds them.
 
 ## 2. Each batch
 
-  python3 scripts/batch_plan.py next --plan <progress file>
+  python3 scripts/batch_plan.py next --plan <progress file> --index <library root>/<index name>
 
-prints the batch number, its group and one "file: <path>" line per file ("missing: <path>" for a file moved since planning: record it with add --kind review and leave it out). File these paths through Check 1 to step 4 and delivery, as in SKILL.md, with these changes:
+marks the batch started and prints the batch number, its group and one "file: <path>" line per file. Other lines:
+- "missing: <path>": a file moved since planning. Record it with add --kind review and leave it out.
+- "filed: <path> as <name>": its content is in the library by now (an interrupted run filed it). Leave it out.
+- "resumed (interrupted)" in the header: the batch was started before and not finished. A topic or entity file of this batch that is already in the library under the name you would give it, with no index row for its source, was written before the interruption: do not overwrite or rename it; record it with add --kind review ("written before an interruption, please check") and go on.
+- Exit code 4, "missing folder: <folder>" lines: every file of the batch is gone, usually a removable or network drive that is not connected. Stop, nothing is marked; ask the user to connect it and say "continue intake", or to skip that batch (skip --batch <n>).
+File the "file:" paths through Check 1 to step 4 and delivery, as in SKILL.md, with these changes:
 
 1. Read the file index from the library again for every batch: earlier batches have added to it.
 2. Topics and entities: before step 1, take the topics and entities recorded in the progress file (status lists them) as part of Table A and Table E. A new topic is used at once and recorded, not written into the spec:

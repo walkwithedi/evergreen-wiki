@@ -28,7 +28,7 @@ No network is needed. On a computer without one, copy evergreen-wiki-v<version>.
    - Set up: choose the agent, install the three skills, set up a library (kind, folder, scope; a preview comes before anything is written) and write the knowledge-base line into the agent's instructions file. A folder that already holds a library is registered as it is. Run it again to add another library.
    - Back up, Roll back, Uninstall: as `install.py backup`, `rollback` and `uninstall` (docs/manual-setup.md, section 6).
    - Move a library, or Move next to a library: pick the folder to move it into; then the move preview and confirmation of `install.py move`.
-3. What a step prints appears above its question. Folder questions have a Browse button that opens a folder browser: start from the home folder or a mounted drive, open folders, and choose one. When the suggested folder does not exist yet, the browser opens at its nearest existing parent and keeps the rest of the path as the new folder's name, so choosing there answers with the suggested folder; clear the name to answer with the folder itself.
+3. What a step prints appears above its question. Folder questions have a Browse button that opens a folder browser: start from the home folder or a mounted drive, open folders, and choose one. No folder is suggested: the browser opens in the home folder. When the folder already in the answer does not exist yet (changing the folder at the preview, for example), the browser opens at its nearest existing parent and keeps the rest of the path as the new folder's name, so choosing there answers with that folder; clear the name to answer with the folder itself.
 4. Cancel this step stops the step at its current question; what was finished stays. Quit stops the client. Closing the page also stops it after a while (`--idle`).
 
 Typed folders that are not absolute are taken from the home folder.
@@ -45,7 +45,7 @@ Options: `--lang en|zh` (default: the system language), `--port N` (default: a f
 The unit tests answer the questions over HTTP the way the page does. On a real desktop, check after a change:
 
 1. Double-clicking the entry opens a terminal window and the page in the default browser.
-2. Set up: the folder browser opens at the suggested place (or its nearest existing parent with the new folder's name filled in), lists mounted drives, and its answer appears in the question; the preview is readable before the confirmation.
+2. Set up: the folder browser opens in the home folder (when changing the folder at the preview, at the current answer or its nearest existing parent with the new folder's name filled in), lists mounted drives, and its answer appears in the question; the preview is readable before the confirmation.
 3. Move: after the move the page lists the library at its new place, and the agent finds it there after a restart.
 4. Uninstall: no library folder is deleted unless picked and the confirmation word typed.
 5. Cancel this step stops the step without changing anything further; Quit stops the client and the terminal window closes.

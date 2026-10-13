@@ -11,22 +11,34 @@ from _kb.json intake). One batch means no batching: nothing is written.
 
 With more than one batch the plan is saved as a JSON progress file (names.batch_plan,
 default _intake-batches.json, in the library root for a local library). Later commands
-read and update it, so a run can stop after any batch and go on in a new conversation.
+read and update it, so a run can stop after any batch, or be interrupted inside one, and go
+on in a new conversation. New material can be added to an open run (--append).
 
 Subcommands:
   plan    PATH [PATH ...] --plan FILE [--library-root DIR] [--index INDEX]
-          [--batch-files N] [--batch-mb N] [--first GROUP ...] [--replace]
-                                   inventory, batches and summary; writes FILE when > 1 batch
+          [--batch-files N] [--batch-mb N] [--first GROUP ...] [--replace | --append [--front]]
+                                   inventory, batches and summary; writes FILE when > 1 batch.
+                                   --append adds the paths to an open run as new batches (after
+                                   the pending ones, or before them with --front); files already
+                                   in the run are left out as duplicates
   status  --plan FILE              progress, pending summary work and the review list
-  next    --plan FILE              the next pending batch: a header line, then "file: <path>" lines
+  next    --plan FILE [--index INDEX]
+                                   the next pending batch, marked started: a header line, then
+                                   "file: <path>" lines. A batch started before and not done was
+                                   interrupted ("resumed" in the header); with --index, files
+                                   whose content is in the library by now are listed as
+                                   "filed: <path> as <name>" and left out. Every file missing:
+                                   exit 4, nothing marked (reconnect the drive or folder)
   done    --plan FILE --batch N [--written N] [--duplicates N] [--review N]
-  skip    --plan FILE --batch N    leave a batch out (its files stay where they are)
+  skip    --plan FILE (--batch N | --rest)
+                                   leave a batch, or every pending batch, out (files stay where they are)
   add     --plan FILE --batch N --kind topic|entity|trigger|review --text TEXT [--file NAME]
                                    record work deferred to the final step, or an item to review
   finish  --plan FILE              mark the final step done; prints what was recorded and
                                    "result: archive the plan" or "result: keep the plan" (batches pending)
 Exit codes: 0 ok; 1 next: no pending batch; 2 bad input or unreadable file;
-3 plan: a plan with pending batches already exists (use status, or --replace).
+3 plan: a plan with pending batches already exists (use status, --append or --replace);
+4 next: every file of the batch is missing.
 Results go to stdout, logs to stderr.
 """
 import argparse
@@ -144,11 +156,12 @@ def cut(files, max_files, max_bytes):
     return batches
 
 
-def build(paths, library_root, index, max_files, max_mb, first):
+def build(paths, library_root, index, max_files, max_mb, first, in_run=None):
+    """in_run: {hash: rel} of files already in an open run, left out as duplicates."""
     known = index_hashes(index)
     groups, order = {}, []
     excluded = {"duplicates": [], "unsupported": [], "unreadable": []}
-    hashes = {}
+    hashes = dict(in_run or {})
     for group, rel, full in scan(paths, library_root):
         kind = kind_of(full)
         if kind in ("archive", "other"):
@@ -264,6 +277,27 @@ def pending(plan):
     return [b for b in plan["batches"] if b["status"] == "pending"]
 
 
+def append(plan, new, front):
+    """Adds the batches of a new plan to an open one; numbers continue after the highest."""
+    top = max((b["n"] for b in plan["batches"]), default=0)
+    added = []
+    for i, b in enumerate(new["batches"], 1):
+        b["n"] = top + i
+        added.append(b)
+    bs = plan["batches"]
+    if front:
+        at = next((i for i, b in enumerate(bs) if b["status"] == "pending"), len(bs))
+        plan["batches"] = bs[:at] + added + bs[at:]
+    else:
+        plan["batches"] = bs + added
+    plan["sources"] += [p for p in new["sources"] if p not in plan["sources"]]
+    for key, items in new["excluded"].items():
+        plan["excluded"].setdefault(key, []).extend(items)
+    if added:
+        plan["final_step"] = "pending"
+    return added
+
+
 def print_status(plan):
     bs = plan["batches"]
     done = [b for b in bs if b["status"] == "done"]
@@ -274,7 +308,10 @@ def print_status(plan):
     files_left = sum(len(b["files"]) for b in left)
     print(f"files: done {files_done} | pending {files_left}")
     if left:
-        print(f"next: batch {left[0]['n']} {batch_label(left[0])} ({len(left[0]['files'])} files)")
+        b = left[0]
+        note = f", interrupted, started {b['started']}" if b.get("started") else ""
+        print(f"next: batch {b['n']} {batch_label(b)} ({len(b['files'])} files{note})")
+    print(f"updated: {plan['updated']}")
     print(f"final step: {plan['final_step']}")
     # items a final step already handled are kept in the file but no longer listed
     by_kind = {k: [d for d in plan["deferred"] if d["kind"] == k and not d.get("handled")] for k in KINDS}
@@ -292,13 +329,25 @@ def cmd_plan(a):
     max_mb = a.batch_mb or intake["batch_mb"]
     if max_files < 1 or max_mb < 1:
         raise kbconf.ConfigError("--batch-files and --batch-mb must be 1 or more")
-    if os.path.exists(a.plan) and not a.replace:
-        old = load(a.plan)
-        if pending(old):
-            print(f"existing plan: {a.plan}")
-            print_status(old)
-            print("result: a plan with pending batches exists; continue it, or pass --replace to start over")
-            return 3
+    old = load(a.plan) if os.path.exists(a.plan) and not a.replace else None
+    if old and pending(old) and a.append:
+        in_run = {f["hash"]: f["rel"] for b in old["batches"] for f in b["files"] if b["status"] != "skipped"}
+        lim = old["limits"]
+        new = build(a.paths, a.library_root, a.index, a.batch_files or lim["batch_files"],
+                    a.batch_mb or lim["batch_mb"], a.first or [], in_run)
+        added = append(old, new, a.front)
+        new["batches"] = added
+        print_plan(new)
+        save(a.plan, old)
+        where = "before the pending batches" if a.front else "after the pending batches"
+        print(f"result: {len(added)} batches added to {a.plan}, {where}" if added else "result: nothing new to file")
+        return 0
+    if old and pending(old):
+        print(f"existing plan: {a.plan}")
+        print_status(old)
+        print("result: a plan with pending batches exists; continue it, add to it with --append, "
+              "or pass --replace to start over")
+        return 3
     plan = build(a.paths, a.library_root, a.index, max_files, max_mb, a.first or [])
     print_plan(plan)
     if not plan["batches"]:
@@ -324,26 +373,46 @@ def cmd_next(a):
         print(f"result: no pending batch; final step {plan['final_step']}")
         return 1
     b = left[0]
-    print(f"batch: {b['n']}/{len(plan['batches'])} | {batch_label(b)} | {len(b['files'])} files")
+    present = [f for f in b["files"] if os.path.isfile(f["path"])]
+    if not present:
+        print(f"batch: {b['n']}/{len(plan['batches'])} | {batch_label(b)} | {len(b['files'])} files")
+        for d in sorted({os.path.dirname(f["path"]) for f in b["files"]}):
+            print(f"missing folder: {d}")
+        print("result: every file of this batch is missing; reconnect the drive or folder, then run next again")
+        return 4
+    known = index_hashes(a.index) if a.index else {}
+    resumed = " | resumed (interrupted)" if b.get("started") else ""
+    b["started"] = b.get("started") or now_text()
+    save(a.plan, plan)
+    print(f"batch: {b['n']}/{len(plan['batches'])} | {batch_label(b)} | {len(b['files'])} files{resumed}")
     for f in b["files"]:
-        if os.path.isfile(f["path"]):
-            print(f"file: {f['path']}")
-        else:
+        if not os.path.isfile(f["path"]):
             print(f"missing: {f['path']}")
+        elif f.get("hash") in known:
+            print(f"filed: {f['path']} as {known[f['hash']]}")
+        else:
+            print(f"file: {f['path']}")
     return 0
 
 
 def cmd_done(a, status="done"):
     plan = load(a.plan)
-    b = get_batch(plan, a.batch)
-    b["status"] = status
-    b["finished"] = now_text()
-    if status == "done":
-        b["result"] = {"written": a.written, "duplicates": a.duplicates, "review": a.review}
-        plan["final_step"] = "pending"  # new material since a "finish intake": the summary step is due again
+    if status == "skipped" and a.rest:
+        targets = pending(plan)
+    elif a.batch is None:
+        raise kbconf.ConfigError("--batch is required")
+    else:
+        targets = [get_batch(plan, a.batch)]
+    for b in targets:
+        b["status"] = status
+        b["finished"] = now_text()
+        if status == "done":
+            b["result"] = {"written": a.written, "duplicates": a.duplicates, "review": a.review}
+            plan["final_step"] = "pending"  # new material since a "finish intake": the summary step is due again
     save(a.plan, plan)
     left = pending(plan)
-    print(f"batch {b['n']}: {status} | pending {len(left)}")
+    for b in targets:
+        print(f"batch {b['n']}: {status} | pending {len(left)}")
     return 0
 
 
@@ -385,16 +454,25 @@ def main():
     p.add_argument("--batch-files", type=int)
     p.add_argument("--batch-mb", type=int)
     p.add_argument("--first", action="append", help="group to put first (repeatable, in this order)")
-    p.add_argument("--replace", action="store_true")
+    how = p.add_mutually_exclusive_group()
+    how.add_argument("--replace", action="store_true", help="start over, dropping an open run")
+    how.add_argument("--append", action="store_true", help="add the paths to an open run")
+    p.add_argument("--front", action="store_true", help="with --append: file the new batches first")
     for c in ("status", "next", "finish"):
-        sub.add_parser(c).add_argument("--plan", required=True)
-    for c in ("done", "skip"):
-        p = sub.add_parser(c)
-        p.add_argument("--plan", required=True)
-        p.add_argument("--batch", type=int, required=True)
-        if c == "done":
-            for k in ("written", "duplicates", "review"):
-                p.add_argument(f"--{k}", type=int, default=0)
+        sp = sub.add_parser(c)
+        sp.add_argument("--plan", required=True)
+        if c == "next":
+            sp.add_argument("--index", help="the library's file index: files filed by now are left out")
+    p = sub.add_parser("done")
+    p.add_argument("--plan", required=True)
+    p.add_argument("--batch", type=int, required=True)
+    for k in ("written", "duplicates", "review"):
+        p.add_argument(f"--{k}", type=int, default=0)
+    p = sub.add_parser("skip")
+    p.add_argument("--plan", required=True)
+    which = p.add_mutually_exclusive_group(required=True)
+    which.add_argument("--batch", type=int)
+    which.add_argument("--rest", action="store_true", help="every pending batch")
     p = sub.add_parser("add")
     p.add_argument("--plan", required=True)
     p.add_argument("--batch", type=int, required=True)

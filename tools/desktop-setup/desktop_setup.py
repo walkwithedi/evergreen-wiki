@@ -44,8 +44,8 @@ MSG = {
         "move_pick": "Which library should be moved?",
         "move_none": "No registered library on this computer can be moved.",
         "move_to": "Choose the folder to move the library into. The library keeps its folder name.",
-        "use_default": "Use {path} (suggested)",
-        "pick_other": "Choose another folder...",
+        "pick_folder": "Choose the folder in the next window.",
+        "keep_folder": "Now: {path}. Choose another folder in the next window, or cancel there to keep it.",
         "done": "Finished.",
         "yes": "Yes", "no": "No",
         "no_zenity": "zenity was not found or there is no graphical session; asking in the terminal instead.",
@@ -62,8 +62,8 @@ MSG = {
         "move_pick": "移动哪个知识库？",
         "move_none": "本机没有可以移动的已登记知识库。",
         "move_to": "选择要把知识库移到哪个文件夹里，库文件夹名不变。",
-        "use_default": "用 {path}（推荐）",
-        "pick_other": "选择其他文件夹……",
+        "pick_folder": "请在下一个窗口里选择文件夹。",
+        "keep_folder": "当前：{path}。在下一个窗口里另选文件夹，或在那里取消以保留当前文件夹。",
         "done": "已完成。",
         "yes": "是", "no": "否",
         "no_zenity": "没有找到 zenity 或不在图形桌面中，改为在终端里问答。",
@@ -158,19 +158,19 @@ class Dialogs:
         return out.split("|")[0] or default
 
     def folder(self, prompt, default):
-        """The suggested folder or a folder chooser; cancelling the chooser goes back to the choice."""
-        while True:
-            if default and self.choose(prompt, [("default", self.m["use_default"].format(path=default)),
-                                                ("other", self.m["pick_other"])], "default") == "default":
-                return default
-            start = os.path.abspath(os.path.expanduser(default or "~"))
-            while not os.path.isdir(start) and os.path.dirname(start) != start:
-                start = os.path.dirname(start)
-            rc, out = self.run("--file-selection", "--directory", "--filename=" + os.path.join(start, ""))
-            if rc == 0 and out:
-                return out.rstrip(os.sep) or os.sep
-            if not default:
-                raise KeyboardInterrupt
+        """A folder chooser, never a suggested folder. The question is shown first; the chooser opens in
+        the home folder, or in the current answer when one is being changed (cancelling keeps it)."""
+        note = self.m["keep_folder"].format(path=default) if default else self.m["pick_folder"]
+        self.run("--info", "--no-markup", "--width=560", "--text=" + f"{self.text(prompt)}\n\n{note}")
+        start = os.path.abspath(os.path.expanduser(default or "~"))
+        while not os.path.isdir(start) and os.path.dirname(start) != start:
+            start = os.path.dirname(start)
+        rc, out = self.run("--file-selection", "--directory", "--filename=" + os.path.join(start, ""))
+        if rc == 0 and out:
+            return out.rstrip(os.sep) or os.sep
+        if default:
+            return default
+        raise KeyboardInterrupt
 
 
 def pick_ui(wanted, m):

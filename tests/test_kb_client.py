@@ -132,9 +132,10 @@ class KbClientTest(unittest.TestCase):
         return os.path.join(self.tmp, *parts)
 
     def setup_library(self):
-        # agent, install the skills, set up a library, its kind, folder (the suggested one) and scope,
+        # agent, install the skills, set up a library, its kind, folder and scope,
         # write it (Enter at the preview), add the knowledge-base line
-        return self.server.run("setup", ["claude-code", True, True, "work", "", "team projects", "", True])
+        return self.server.run("setup", ["claude-code", True, True, "work", self.p("home", "kb", "work"),
+                                         "team projects", "", True])
 
     def test_requests_need_the_token_and_the_local_host(self):
         s = self.server
@@ -249,9 +250,12 @@ class KbClientTest(unittest.TestCase):
         self.assertEqual(self.server.get("/api/state")[1]["libraries"], [])
 
     def test_answers_of_the_wrong_type_take_the_default(self):
-        # a yes question answered with text and a folder question with a number count as the default
-        result, out, _ = self.server.run("setup", ["claude-code", "yes", True, "work", 7, "team projects", "", True])
+        # a yes question answered with text counts as its default (yes); a folder question answered with a
+        # number counts as no answer, so it is asked again
+        result, out, asked = self.server.run("setup", ["claude-code", "yes", True, "work", 7,
+                                                       self.p("home", "kb", "work"), "team projects", "", True])
         self.assertEqual(result, "ok", out)
+        self.assertEqual([q["kind"] for q in asked].count("folder"), 2)
         self.assertTrue(os.path.isfile(self.p("home", "kb", "work", "_kb.json")))
 
     def test_folder_listing_reads_only(self):

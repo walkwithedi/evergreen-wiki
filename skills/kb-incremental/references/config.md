@@ -110,3 +110,36 @@ In kb-incremental, scripts/kbconf.py prints the resolved configuration: python3 
 ### Ignored files
 
 Every search and every read of knowledge files skips: the archive folder; names that start with an underscore (run logs, _kb.json, _kb-params.md, an inbox configuration file, the batch progress file); names that start with snapshot_prefix; names that contain old_suffix followed by a time stamp.
+
+## 3. Library folder and material: words to use with the user
+
+Users do not know the inner workings, so the library folder and the material must never be confused, and the reply names them the same way every time:
+
+- Library folder: where the filed Markdown files, the spec, the status card and the file index live. There is one per library and it matters: the assistant writes here, and the registry records only this folder (backend.root). In Chinese: 知识库文件夹（整理好的结果，助手维护）.
+- Material: the user's own original files (Word, PDF, spreadsheets, mail, pictures), from any number of folders or single files anywhere (a work folder, a network or removable drive, the desktop). The assistant only reads it and never changes it. It is chosen anew for every intake: never registered, remembered or suggested. In Chinese: 资料来源（你的原始文件，可以来自多个文件夹，只读不改）.
+
+Rules:
+1. To the user, say only "library folder" and "material" (知识库文件夹, 资料来源), with the short explanation in brackets the first time each appears in a conversation. Never say registry, root, backend, _kb.json or 注册表 to the user, except in the init preview and when the user uses the word first.
+2. No folder is ever chosen for the user. Where a desktop chooser can open (references/pick-material.md in kb-incremental), let the user pick there; otherwise ask for the path in one sentence without suggesting one. Folders already chosen can be changed in the init preview.
+3. Material outside the library folder is normal. Never offer to change a registered library's folder because the material is somewhere else. Folders the user names that hold original files are material: read them from there. Change a library's folder only when the user explicitly asks to move the library or points it at a folder that already holds that library (_kb.json or a 00_ spec file); a move of a local library goes through install.py move.
+4. When it is unclear which the user means, ask once with this question, each option saying what follows:
+   "Is <folder> where your original files are, or where the filed knowledge base should be?
+   1. Original files (material): I read them from there and file the results into <library label>; nothing in that folder changes.
+   2. Knowledge base (library folder): <library label> will be kept there from now on; only choose this when the folder holds no original files."
+   In Chinese:
+   「<文件夹> 是放你原始文件的地方，还是放整理结果的知识库？
+   1. 原始文件（资料来源）：我从这里读取，整理结果放进<库名>，这个文件夹里的东西不会被改动。
+   2. 知识库（知识库文件夹）：今后<库名>的整理结果放在这里；只有这个文件夹里没有原始文件时才选。」
+
+## 4. Unfinished intake: remind once per conversation
+
+A batch intake (references/batches.md in kb-incremental) can stop between batches or be interrupted inside one; its progress file (names.batch_plan) stays in the library root of a local library until the run is finished. Every skill checks for it, so the user is reminded next time:
+
+1. After the library is chosen (and, when the instructions line asks for it, at the start of a conversation for each registered local library), find_exact names.batch_plan in the library root. Not there: nothing to say. A Google Drive library keeps its plan only for one conversation: skip this.
+2. Where commands run, python3 scripts/batch_plan.py status --plan <file> in kb-incremental (kb-query and kb-note: read the JSON; batches with status "pending" are left, final_step "pending" means the summary step is due). Nothing left and the final step done: say nothing.
+3. Otherwise say in one line how far it got (batches done of all, files left, last update; "interrupted in batch <n>" when a pending batch has a start time), then ask once, as a choice:
+   - Continue intake (recommended): kb-incremental, batch mode, continue the open run.
+   - Later: no further reminder in this conversation.
+   - End this intake: python3 scripts/batch_plan.py skip --plan <file> --rest, then the final step for what was filed. Filed files stay; the original files are not touched.
+   In Chinese: 「上次的分批入库还没做完：已完成 <n>/<总数> 批，还剩 <m> 个文件（<时间> 更新）。要继续吗？」 with 继续入库 / 稍后再说 / 结束这次入库.
+4. Ask at most once per conversation. kb-query and kb-note only remind: after their own answer or note, "Continue intake" hands over to kb-incremental; they never file material themselves.
