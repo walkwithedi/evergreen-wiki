@@ -83,6 +83,21 @@ class InstallOptionsTest(unittest.TestCase):
         self.assertFalse(os.path.exists(os.path.join(loose, "_kb.json")))
         self.assertTrue(os.path.isfile(os.path.join(new, "_kb.json")))
 
+    def test_home_and_agent_folders_are_refused(self):
+        os.makedirs(self.p("home", "Documents"))
+        new = self.p("home", "kb", "fresh")
+        # language, install, set up; the home folder, the folder holding the installed skills, a new folder
+        p = self.install(["--wizard", "--agent", "claude-code", "--preset", "life"],
+                         ["2", "", "", self.home, self.p("home", ".claude"), new, "", "", ""])
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertEqual(p.stdout.count("Not valid"), 2, p.stdout)
+        self.assertFalse(os.path.exists(os.path.join(self.home, "_kb.json")))
+        self.assertFalse(os.path.exists(self.p("home", ".claude", "_kb.json")))
+        self.assertTrue(os.path.isfile(os.path.join(new, "_kb.json")))
+        roots = [os.path.normpath(lib["backend"]["root"].replace("~", self.home, 1))
+                 for lib in self.registry()["libraries"]]
+        self.assertEqual(roots, [os.path.normpath(new)])
+
     def test_descriptions_file(self):
         desc = {"kb-note": "Notes one line.", "kb-query": "Query one line.", "kb-incremental": "Intake one line."}
         path = self.p("desc.json")
