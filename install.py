@@ -298,6 +298,10 @@ def ask_root(q, m, il, default):
     """Returns (folder, True when it already holds a library)."""
     while True:
         root = os.path.abspath(os.path.expanduser(q.ask(m["q_root"], default, kind="folder")))
+        if kb_manage.is_protected(root, MANAGE_DEFAULTS):
+            lang = next(k for k, v in MSG.items() if v is m)
+            print(m["bad"].format(err=f"{root}: {kb_manage.MSG[lang]['protected']}"))
+            continue
         if os.path.isdir(root) and kb_manage.is_library(root):
             return root, True
         try:

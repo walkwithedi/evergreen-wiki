@@ -416,6 +416,15 @@ def protected(defaults):
     return [ROOT, state_dir()] + dirs + [os.path.dirname(f) for f in files]
 
 
+def is_protected(root, defaults):
+    """True for the root, the home folder or a folder holding it, and a folder holding this program, the
+    install record, the skills or the instructions files: never a library's own folder."""
+    real = os.path.realpath(root)
+    if real == os.path.dirname(real) or inside(os.path.expanduser("~"), real):
+        return True
+    return any(inside(p, real) for p in protected(defaults) if p)
+
+
 def lib_check(root, defaults):
     """None when the folder may be moved or deleted, else the message key of the reason."""
     if not root or not os.path.isabs(root):
@@ -425,9 +434,7 @@ def lib_check(root, defaults):
     if not os.path.isdir(root):
         return "missing"
     real = os.path.realpath(root)
-    if real == os.path.dirname(real) or inside(os.path.expanduser("~"), real):
-        return "protected"
-    if any(inside(p, real) for p in protected(defaults) if p):
+    if is_protected(real, defaults):
         return "protected"
     if not is_library(real):
         return "not_library"

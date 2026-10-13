@@ -4,6 +4,7 @@ All three skills share one version number. To release, update this file, the "Ve
 
 ## Unreleased
 
+- install.py wizard: a library folder that is the root, the home folder or a folder holding it, or that holds this program, the install record, the skills or the instructions files is refused with the reason and asked again, both for a new library and for registering an existing one (the same rule move and uninstall already follow, now kb_manage.is_protected).
 - README (English and Chinese): a section on how the pieces fit together (skills, library folders, registry, instructions line), what each release download is for and which path to take in which situation; a quick-start path for a Linux desktop without a terminal.
 - Every release's notes end with the same download guide (docs/release-downloads.md, version filled in).
 
