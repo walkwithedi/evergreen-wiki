@@ -71,7 +71,7 @@ class World:
             rid = self.next("per")
             self.waits[rid] = (threading.Event(), [])
             self.emit("permission.asked", id=rid, sessionID=sid, permission=words[1], patterns=[" ".join(words[2:])],
-                      metadata={}, always=[])
+                      metadata={}, always=[words[1] + " *"])
             got = self.wait_for(rid)
             self.emit("permission.replied", sessionID=sid, requestID=rid, reply=got)
             self.message(sid, "assistant", f"permission: {got}")

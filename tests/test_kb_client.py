@@ -3,6 +3,7 @@ import http.client
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -432,6 +433,16 @@ class ChatTest(unittest.TestCase):
         ev.until(lambda e: e["type"] == "part" and e["text"] == "permission: reject", "reply")
         self.assertEqual(self.server.get("/api/chat/state")[1]["agent"]["permissions"], [])
 
+    def test_permission_always(self):
+        ev = self.ready()
+        self.send("PERM bash git status")
+        card = ev.until(lambda e: e["type"] == "permission", "permission")
+        self.assertEqual(card["always"], ["bash *"])
+        self.assertEqual(self.server.post("/api/chat/permission", {"id": card["id"], "reply": "sometimes"})[0], 400)
+        self.assertEqual(self.server.post("/api/chat/permission", {"id": card["id"], "reply": ["always"]})[0], 400)
+        self.assertEqual(self.server.post("/api/chat/permission", {"id": card["id"], "reply": "always"})[0], 200)
+        ev.until(lambda e: e["type"] == "part" and e["text"] == "permission: always", "reply")
+
     def test_permission_inside_the_material_is_answered_by_the_client(self):
         material = self.p("home", "Documents", "minutes")
         os.makedirs(material)
@@ -672,6 +683,20 @@ class IdleTest(unittest.TestCase):
         s = Server(env, "--idle", "1")
         self.addCleanup(s.stop)
         self.assertEqual(s.proc.wait(15), 0)
+
+
+@unittest.skipIf(os.name == "nt", "desktop entries are for Linux desktops")
+class DesktopEntryTest(unittest.TestCase):
+    """Both double-click entries, at the top of the folder and in tools/kb-client, start kb_client.py."""
+
+    def test_entries_reach_the_client(self):
+        for entry in (os.path.join(ROOT, "kb-client.desktop"), os.path.join(os.path.dirname(TOOL), "kb-client.desktop")):
+            with open(entry, encoding="utf-8") as f:
+                line = next(x for x in f.read().splitlines() if x.startswith("Exec="))
+            self.assertIn("exec python3 kb_client.py", line)
+            args = shlex.split(line[len("Exec="):].replace("exec python3 kb_client.py", "test -f kb_client.py && pwd -P"))
+            out = subprocess.run([entry if a == "%k" else a for a in args], capture_output=True, text=True, check=True)
+            self.assertEqual(out.stdout.strip(), os.path.realpath(os.path.dirname(TOOL)), entry)
 
 
 if __name__ == "__main__":

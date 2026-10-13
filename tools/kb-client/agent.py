@@ -34,6 +34,7 @@ ASK_ALL = {"permission": {name: "ask" for name in (
 # The skills load their own instructions; reading a skill is never a question for the user.
 ASK_ALL["permission"]["skill"] = "allow"
 # Subagents that only look things up; what they do in turn is asked for like everything else.
+REPLIES = {name: name for name in ("once", "always", "reject")}
 READ_ONLY_AGENTS = ("explore",)
 # Places OpenCode's installers commonly use, for a desktop session whose PATH lacks them.
 COMMON_DIRS = ("~/.opencode/bin", "~/.local/bin", "~/bin", "/usr/local/bin", "~/.npm-global/bin")
@@ -475,7 +476,8 @@ class Agent:
                 return
             except OSError as e:
                 log.warning("automatic reply failed: %s", type(e).__name__)
-        ev = {"id": rid, "permission": perm, "patterns": patterns[:20], "child": child}
+        always = [str(x) for x in p.get("always") or []]
+        ev = {"id": rid, "permission": perm, "patterns": patterns[:20], "always": always[:20], "child": child}
         self.permissions[rid] = ev
         self.feed.emit("permission", **ev)
 
@@ -573,11 +575,11 @@ class Agent:
         if self.state == "ready" and self.session:
             self.call("POST", f"/session/{self.session}/abort")
 
-    def reply_permission(self, rid, allow):
-        if rid not in self.permissions:
+    def reply_permission(self, rid, reply):
+        """reply: "once", "always" (OpenCode stops asking for the request's `always` patterns) or "reject"."""
+        if rid not in self.permissions or reply not in REPLIES:
             return False
-        code, _ = self.call("POST", f"/permission/{quote(rid, safe='')}/reply",
-                            {"reply": "once" if allow else "reject"})
+        code, _ = self.call("POST", f"/permission/{quote(rid, safe='')}/reply", {"reply": REPLIES[reply]})
         if code in (200, 204):
             self.permissions.pop(rid, None)
             self.feed.emit("permission_done", id=rid)

@@ -83,7 +83,7 @@ python3 install.py
 
 需要 Python 3.8 及以上；弹窗需要 zenity，没有时在终端窗口里问答。详见 [tools/desktop-setup](tools/desktop-setup/README.zh-CN.md)。
 
-同样的步骤也可以在浏览器里做：改为双击 `tools/kb-client` 里的 `kb-client.desktop`（知识库）。需要 Python 3.8 及以上和一个浏览器，页面上会列出已登记的知识库；装好并配置了 OpenCode 时，还能在页面上直接和它对话。详见 [tools/kb-client](tools/kb-client/README.zh-CN.md)。
+同样的步骤也可以在浏览器里做：改为双击最上层文件夹里的 `kb-client.desktop`（知识库；`tools/kb-client` 里也有同样的入口）。需要 Python 3.8 及以上和一个浏览器，页面上会列出已登记的知识库；装好并配置了 OpenCode 时，还能在页面上直接和它对话。详见 [tools/kb-client](tools/kb-client/README.zh-CN.md)。
 
 ### 在 claude.ai 或 Claude App 里（Google Drive）
 

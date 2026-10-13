@@ -11,7 +11,7 @@ A page in the browser, served from your own computer, for people who do not use 
 | `kb_client.py` | the local server: runs the installer's steps and passes their questions to the page |
 | `agent.py` | the conversation: starts `opencode serve` on 127.0.0.1, passes its events to the page and answers the permission requests the client may answer itself |
 | `web/` | the page (`index.html`, `app.js`, `style.css`); plain HTML, JavaScript and CSS, nothing loaded from the network |
-| `kb-client.desktop` | double-click entry; opens a terminal window that runs `kb_client.py` and the page in the default browser |
+| `kb-client.desktop` | double-click entry; opens a terminal window that runs `kb_client.py` and the page in the default browser. The same entry is in the top folder of evergreen-wiki |
 
 ## Requirements
 
@@ -19,11 +19,11 @@ A page in the browser, served from your own computer, for people who do not use 
 - A browser with current JavaScript (`fetch`, `EventSource`), such as a recent Firefox or Chromium.
 - For the conversation: OpenCode with a model set up (checked with OpenCode 1.19). Without it the management steps work and the conversation says why it is off.
 
-No network is needed. On a computer without one, copy evergreen-wiki-v<version>.zip from [Releases](https://github.com/walkwithedi/evergreen-wiki/releases), unzip it and start the tool from `tools/kb-client/`.
+No network is needed. On a computer without one, copy evergreen-wiki-v<version>.zip from [Releases](https://github.com/walkwithedi/evergreen-wiki/releases), unzip it and double-click `kb-client.desktop` in the top folder.
 
 ## Use
 
-1. Double-click `kb-client.desktop` (Knowledge base). The first time, the desktop may ask whether to trust or run it; choose to trust and launch. If double-clicking opens the file as text, open a terminal in this folder and run `python3 kb_client.py`. The page opens in the default browser; the terminal window shows its address.
+1. Double-click `kb-client.desktop` (Knowledge base), in the top folder of evergreen-wiki or in this one. The first time, the desktop may ask whether to trust or run it; choose to trust and launch. If double-clicking opens the file as text, open a terminal in this folder and run `python3 kb_client.py`. The page opens in the default browser; the terminal window shows its address.
 2. On the left, choose a step:
    - Set up: choose the agent, install the three skills, set up a library (kind, folder, scope; a preview comes before anything is written) and write the knowledge-base line into the agent's instructions file. A folder that already holds a library is registered as it is. Run it again to add another library.
    - Back up, Roll back, Uninstall: as `install.py backup`, `rollback` and `uninstall` (docs/manual-setup.md, section 6).
@@ -44,7 +44,7 @@ When the page opens, the client starts OpenCode in the background (`opencode ser
 - What the assistant does is shown as it happens: its steps one line each (reading a file, running a script), its reasoning and the working notes before a step folded into one grey line each (click to read), its answer as normal text. Work it hands to a subagent (OpenCode's own helpers, such as explore) appears indented under "Subagent", with the subagent's own steps, permission requests and questions.
 - Open in a terminal opens the same conversation in OpenCode's own interface (`opencode --session=<id>`) in a new terminal window (the first found of x-terminal-emulator, mate-terminal, gnome-terminal, konsole, xterm), with the user's own OpenCode settings. While you continue there, the conversation on the page pauses; reload the page when you are back.
 
-Permissions. Every action of the OpenCode the client starts is set to ask first (`OPENCODE_CONFIG_CONTENT`, for that process only; the user's OpenCode settings are not changed). The client answers "allow once" itself for: reading and changing files inside a registered local library; reading the material chosen for this conversation, the installed skills and the agent's own settings; sending a subagent that only looks things up (explore); running a script of an installed skill (`python3 <skill>/scripts/<name>.py ...`, optionally after one `cd <folder> &&`, with no other shell syntax). The same rules apply to a subagent's requests. Each such answer is noted in the conversation. Everything else appears as a card saying what the assistant wants to read, change or run, with Allow this once and Deny; there is no "always allow". Paths are compared as real paths, so a link out of a library is not allowed.
+Permissions. Every action of the OpenCode the client starts is set to ask first (`OPENCODE_CONFIG_CONTENT`, for that process only; the user's OpenCode settings are not changed). The client answers "allow once" itself for: reading and changing files inside a registered local library; reading the material chosen for this conversation, the installed skills and the agent's own settings; sending a subagent that only looks things up (explore); running a script of an installed skill (`python3 <skill>/scripts/<name>.py ...`, optionally after one `cd <folder> &&`, with no other shell syntax). The same rules apply to a subagent's requests. Each such answer is noted in the conversation. Everything else appears as a card saying what the assistant wants to read, change or run, with Deny and Allow this once. When OpenCode says what it would stop asking for (for example every `git` command), the card lists it and adds Always allow: the client passes that answer to OpenCode, which then stops asking for those actions, as in a terminal. How long OpenCode remembers it is up to OpenCode; it applies to the OpenCode the client starts, and the user's OpenCode settings files are not changed. Paths are compared as real paths, so a link out of a library is not allowed.
 
 Simple mode. When OpenCode's server does not start in time or lacks the requests the client uses, the conversation runs `opencode run <message>` once per message instead and says so on the page; in this mode the assistant cannot ask for permission or ask questions on the page.
 
@@ -63,7 +63,7 @@ Options: `--lang en|zh` (default: the system language), `--port N` (default: a f
 
 The unit tests answer the questions over HTTP the way the page does. On a real desktop, check after a change:
 
-1. Double-clicking the entry opens a terminal window and the page in the default browser.
+1. Double-clicking either entry (the top folder, tools/kb-client) opens a terminal window and the page in the default browser.
 2. Set up: the folder browser opens in the home folder (when changing the folder at the preview, at the current answer or its nearest existing parent with the new folder's name filled in), lists mounted drives, and its answer appears in the question; the preview is readable before the confirmation.
 3. Move: after the move the page lists the library at its new place, and the agent finds it there after a restart.
 4. Uninstall: no library folder is deleted unless picked and the confirmation word typed.
@@ -77,3 +77,4 @@ The unit tests answer the questions over HTTP the way the page does. On a real d
 12. Reasoning and working notes are folded; a message sent while the assistant works waits as queued.
 13. Open in a terminal opens the same conversation in a terminal window.
 14. Set up suggests a work library; after reopening the client, the skills and libraries are still listed.
+15. After Always allow on a card, the same kind of action shows no card again; note whether it is still remembered after quitting and reopening the client.
