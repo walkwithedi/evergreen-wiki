@@ -55,8 +55,10 @@ PRESET_DEFAULTS = {
 LINE_PREFIX = {"en": "I keep knowledge bases: ", "zh": "我有知识库："}
 LINE_TAIL = {
     "en": ". For questions about these, use kb-query before searching code or answering from memory; "
-          "to save something, use kb-note.",
-    "zh": "。相关问题先用 kb-query 查知识库，再查代码或凭记忆回答；要记录用 kb-note。",
+          "to save something, use kb-note. At the start of a conversation, if a library holds an unfinished "
+          "batch intake, ask whether to continue it.",
+    "zh": "。相关问题先用 kb-query 查知识库，再查代码或凭记忆回答；要记录用 kb-note。"
+          "新对话开始时，如知识库有未完成的分批入库，先提醒是否继续。",
 }
 # One line for a registry kept in Google Drive. The "registry: ..." part is what the skills
 # look for (references/config.md), so it stays in English in every language.

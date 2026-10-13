@@ -5,7 +5,7 @@ description: Saves a small piece of information from the conversation into the u
 
 # Quick notes: save a piece of the conversation
 
-Version: 1.11.0
+Version: 1.12.0
 
 This skill does one thing: create one new file in a library's quick-notes folder. It never edits, moves or deletes any file, and never touches the library root, archive, entities or inbox.
 
@@ -26,6 +26,7 @@ Load the registry. Match the content against each library's scope.
 2. Exactly one scope fits: use it.
 3. None or several fit: ask "Which library: <labels>?" in one sentence. Never default.
 Then read that library's backend file (references/backend-gdrive.md or references/backend-local.md) and its _kb.json (for language, timezone, sensitivity and names).
+After the note is saved, check that library for an unfinished intake (references/config.md, section 4) and remind once per conversation; this skill only reminds and hands "continue intake" to kb-incremental.
 
 ## Step 3: write the note
 
