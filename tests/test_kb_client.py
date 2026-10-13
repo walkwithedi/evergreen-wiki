@@ -685,6 +685,7 @@ class IdleTest(unittest.TestCase):
         self.assertEqual(s.proc.wait(15), 0)
 
 
+@unittest.skipIf(os.name == "nt", "desktop entries are for Linux desktops")
 class DesktopEntryTest(unittest.TestCase):
     """Both double-click entries, at the top of the folder and in tools/kb-client, start kb_client.py."""
 
