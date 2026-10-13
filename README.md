@@ -95,7 +95,7 @@ Later, from the same folder: `python3 install.py backup`, `rollback`, `move <lib
 
 It needs Python 3.8 or later and zenity for the dialogs (without zenity it asks in the terminal window). Details in [tools/desktop-setup](tools/desktop-setup/).
 
-The same steps also run in the browser: double-click `kb-client.desktop` (Knowledge base) in `tools/kb-client` instead. It needs Python 3.8 or later and a browser, lists the registered libraries on the page and, with OpenCode set up, lets you talk to OpenCode there. Details in [tools/kb-client](tools/kb-client/).
+The same steps also run in the browser: double-click `kb-client.desktop` (Knowledge base) in the top folder instead (the same entry is also in `tools/kb-client`). It needs Python 3.8 or later and a browser, lists the registered libraries on the page and, with OpenCode set up, lets you talk to OpenCode there. Details in [tools/kb-client](tools/kb-client/).
 
 ### In claude.ai or the Claude apps (Google Drive)
 

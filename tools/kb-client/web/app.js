@@ -95,6 +95,8 @@
       perm_glob: "Search file names", perm_grep: "Search file contents", perm_list: "List a folder", perm_webfetch: "Open a web page",
       perm_other: "Use: {name}",
       allow_once: "Allow this once",
+      allow_always: "Always allow",
+      always_what: "With Always allow, OpenCode stops asking for:",
       deny: "Deny",
       q_submit: "Answer",
       q_skip: "Skip",
@@ -198,6 +200,8 @@
       perm_glob: "按文件名查找", perm_grep: "搜索文件内容", perm_list: "列出文件夹", perm_webfetch: "打开网页",
       perm_other: "使用：{name}",
       allow_once: "允许这一次",
+      allow_always: "总是允许",
+      always_what: "选「总是允许」后，以下操作不再询问：",
       deny: "拒绝",
       q_submit: "回答",
       q_skip: "跳过",
@@ -700,11 +704,21 @@
     var pre = el("pre", { "class": "log" });
     pre.textContent = permWhat(ev).join("\n");
     c.appendChild(pre);
-    function reply(allow) {
-      dropCard(ev.id);
-      api("POST", "/api/chat/permission", { id: ev.id, allow: allow }).catch(function (e) { note(String(e.message), "error"); });
+    var always = ev.always || [];
+    if (always.length) {
+      c.appendChild(el("span", { "class": "hint" }, t("always_what")));
+      var pa = el("pre", { "class": "log" });
+      pa.textContent = always.join("\n");
+      c.appendChild(pa);
     }
-    buttonRow(c, [[t("deny"), "", function () { reply(false); }], [t("allow_once"), "primary", function () { reply(true); }]]);
+    function reply(how) {
+      dropCard(ev.id);
+      api("POST", "/api/chat/permission", { id: ev.id, reply: how }).catch(function (e) { note(String(e.message), "error"); });
+    }
+    var buttons = [[t("deny"), "", function () { reply("reject"); }]];
+    if (always.length) buttons.push([t("allow_always"), "", function () { reply("always"); }]);
+    buttons.push([t("allow_once"), "primary", function () { reply("once"); }]);
+    buttonRow(c, buttons);
     c.scrollIntoView({ block: "nearest" });
   }
 

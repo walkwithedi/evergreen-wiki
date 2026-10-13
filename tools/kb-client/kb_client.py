@@ -688,7 +688,12 @@ class Handler(BaseHTTPRequestHandler):
                 except RuntimeError as e:
                     return self.send(409, {"error": str(e), "reason": "no_terminal" if "terminal" in str(e) else "no_session"})
             if what == "permission":
-                ok = ag.reply_permission(str(body.get("id", "")), body.get("allow") is True)
+                reply = body.get("reply")
+                if reply is None:
+                    reply = "once" if body.get("allow") is True else "reject"
+                if not isinstance(reply, str) or reply not in agent_mod.REPLIES:
+                    return self.send(400, {"error": "reply"})
+                ok = ag.reply_permission(str(body.get("id", "")), agent_mod.REPLIES[reply])
                 return self.send(200 if ok else 409, {"ok": ok})
             if what == "question":
                 answers = body.get("answers")
