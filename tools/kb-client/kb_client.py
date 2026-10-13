@@ -18,7 +18,6 @@ import argparse
 import getpass
 import json
 import logging
-import mimetypes
 import os
 import queue
 import re
@@ -43,6 +42,8 @@ ACTIONS = ("setup", "backup", "rollback", "move", "uninstall")
 LANGS = ("en", "zh")
 MAX_BODY = 64 * 1024
 MAX_ENTRIES = 2000  # entries listed per folder; the page says when a folder holds more
+STATIC = {"index.html": "text/html; charset=utf-8", "app.js": "text/javascript; charset=utf-8",
+          "style.css": "text/css; charset=utf-8"}
 
 MSG = {
     "en": {
@@ -356,14 +357,27 @@ def places():
     return out
 
 
+def browse_root(path, roots):
+    """The starting point that holds path (both real paths), or None: the browser stays inside them."""
+    for root in roots:
+        if path == root or path.startswith(root.rstrip(os.sep) + os.sep):
+            return root
+    return None
+
+
 def list_folder(path, hidden=False, nearest=False):
-    """The entries of one folder, folders first. Raises ValueError for a path that is not an absolute,
-    existing folder; with nearest, a missing folder is replaced by its nearest existing parent (a
-    suggested library folder is often not made yet). Reads only."""
+    """The entries of one folder inside the home folder or a mounted drive, folders first. Raises
+    ValueError for a path that is not an absolute, existing folder there; with nearest, a missing folder
+    is replaced by its nearest existing parent (a folder typed in an answer is often not made yet).
+    Reads only."""
     if not path or not os.path.isabs(os.path.expanduser(path)):
         raise ValueError("not an absolute path")
     path = os.path.realpath(os.path.expanduser(path))
-    while nearest and not os.path.isdir(path) and os.path.dirname(path) != path:
+    roots = [os.path.realpath(p["path"]) for p in places()]
+    root = browse_root(path, roots)
+    if root is None:
+        raise ValueError("outside the home folder and the mounted drives")
+    while nearest and path != root and not os.path.isdir(path):
         path = os.path.dirname(path)
     if not os.path.isdir(path):
         raise ValueError("not a folder")
@@ -379,8 +393,8 @@ def list_folder(path, hidden=False, nearest=False):
                 continue
             entries.append({"name": e.name, "dir": is_dir, "size": size})
     entries.sort(key=lambda x: (not x["dir"], x["name"].lower()))
-    parent = os.path.dirname(path)
-    return {"path": path, "parent": parent if parent != path else "",
+    parent = os.path.dirname(path) if path != root else ""
+    return {"path": path, "parent": parent,
             "entries": entries[:MAX_ENTRIES], "more": max(0, len(entries) - MAX_ENTRIES)}
 
 
@@ -432,7 +446,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         g = self.guard()
         if g is None:
-            return
+            return None
         path, query = g
         if path == "/api/state":
             return self.send(200, self.app.state())
@@ -452,7 +466,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         g = self.guard()
         if g is None:
-            return
+            return None
         path, _ = g
         if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
             return self.send(415, {"error": "json only"})
@@ -524,18 +538,13 @@ class Handler(BaseHTTPRequestHandler):
         return None
 
     def static(self, path):
-        name = "index.html" if path in ("/", "/index.html") else path.lstrip("/")
-        if "/" in name or name.startswith(".") or not re.fullmatch(r"[\w.-]+", name):
-            return self.send(404, {"error": "not found"})
-        full = os.path.join(WEB, name)
-        if not os.path.isfile(full):
-            return self.send(404, {"error": "not found"})
-        with open(full, "rb") as f:
-            body = f.read()
-        ctype = mimetypes.guess_type(name)[0] or "application/octet-stream"
-        if ctype.startswith("text/") or ctype.endswith("javascript"):
-            ctype += "; charset=utf-8"
-        return self.send(200, body, ctype)
+        """Only the page's own files, by fixed name and type."""
+        name = "index.html" if path == "/" else path[1:]
+        for known, ctype in STATIC.items():
+            if name == known:
+                with open(os.path.join(WEB, known), "rb") as f:
+                    return self.send(200, f.read(), ctype)
+        return self.send(404, {"error": "not found"})
 
 
 def serve(app, port, open_browser):
@@ -551,8 +560,8 @@ def serve(app, port, open_browser):
         threading.Thread(target=app.idle_watch, daemon=True).start()
     try:
         server.serve_forever(poll_interval=0.5)
-    except KeyboardInterrupt:
-        pass
+    except KeyboardInterrupt:  # Ctrl+C in the terminal window stops the client like Quit
+        log.info("stopped from the terminal")
     finally:
         server.server_close()
     print(MSG[app.lang]["stopped"], flush=True)

@@ -152,6 +152,8 @@ class KbClientTest(unittest.TestCase):
         self.assertIn("app.js", page)
         self.assertEqual(s.get("/../install.py", token=False)[0], 404)
         self.assertEqual(s.get("/%2e%2e/install.py", token=False)[0], 404)
+        self.assertEqual(s.get("/kb_client.py", token=False)[0], 404)
+        self.assertEqual(s.get("/app.js", token=False)[0], 200)
 
     def test_state_before_and_after_setup(self):
         status, st = self.server.get("/api/state")
@@ -274,7 +276,14 @@ class KbClientTest(unittest.TestCase):
         self.assertEqual(self.server.get("/api/fs?path=" + self.p("home", "Documents", "a.txt"))[0], 400)
         self.assertEqual(self.server.get("/api/fs?path=" + self.p("missing"))[0], 400)
         r = self.server.get("/api/fs?nearest=1&path=" + self.p("home", "kb", "work"))[1]
-        self.assertEqual(r["path"], self.home)  # a suggested folder not made yet opens at its parent
+        self.assertEqual(r["path"], self.home)  # a folder not made yet opens at its parent
+        self.assertEqual(self.server.get("/api/fs?path=" + self.home)[1]["parent"], "")
+        # nothing outside the home folder and the mounted drives, not even through a link
+        self.assertEqual(self.server.get("/api/fs?path=/")[0], 400)
+        self.assertEqual(self.server.get("/api/fs?path=" + self.tmp)[0], 400)
+        self.assertEqual(self.server.get("/api/fs?nearest=1&path=" + self.p("elsewhere", "x"))[0], 400)
+        os.symlink(self.tmp, self.p("home", "out"))
+        self.assertEqual(self.server.get("/api/fs?path=" + self.p("home", "out"))[0], 400)
         self.assertEqual(self.server.request("PUT", "/api/fs?path=" + self.home)[0], 501)
         places = self.server.get("/api/places")[1]["places"]
         self.assertEqual(places[0], {"path": self.home, "kind": "home"})

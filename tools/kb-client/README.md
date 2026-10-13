@@ -38,7 +38,7 @@ Options: `--lang en|zh` (default: the system language), `--port N` (default: a f
 ## Safety
 
 - The server listens on 127.0.0.1 only. The address it opens carries a random token; requests without it, or with another host name, are refused, so other pages in the browser cannot use the server.
-- One step runs at a time. The folder browser only lists folders and file names; the client itself writes nothing outside what the installer's steps write after their confirmation.
+- One step runs at a time. The folder browser only lists folders and file names, and only inside the home folder and mounted drives (a folder elsewhere can still be typed into the answer); the page's own three files are the only files the server sends; the client itself writes nothing outside what the installer's steps write after their confirmation.
 
 ## Checking on a desktop
 
