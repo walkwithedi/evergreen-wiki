@@ -12,7 +12,10 @@ import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TOOL = os.path.join(ROOT, "tools", "kb-client", "kb_client.py")
+FAKE = os.path.join(ROOT, "tests", "kb_client_fake_opencode.py")
 CANCEL = object()
+sys.path.insert(0, os.path.join(ROOT, "tools", "kb-client"))
+import agent  # noqa: E402
 
 
 def write(path, text):
@@ -163,6 +166,8 @@ class KbClientTest(unittest.TestCase):
         self.assertEqual(st["agent"]["program"], "")
         result, out, asked = self.setup_library()
         self.assertEqual(result, "ok", out)
+        kind = [q for q in asked if q["kind"] == "choose" and [o["value"] for o in q["options"]] == ["life", "work"]]
+        self.assertEqual(kind[0]["default"], "work")  # the client suggests a work library
         self.assertEqual(self.server.last_type, "text/event-stream; charset=utf-8")
         self.assertIn("Preview", out)
         self.assertTrue(any(q["kind"] == "folder" for q in asked))
@@ -298,6 +303,364 @@ class KbClientTest(unittest.TestCase):
     def test_quit(self):
         self.assertEqual(self.server.post("/api/quit", {})[0], 200)
         self.assertEqual(self.server.proc.wait(10), 0)
+
+
+class ChatEvents:
+    """The page's conversation stream, read until an event that matches."""
+
+    def __init__(self, server, after):
+        self.c = http.client.HTTPConnection("127.0.0.1", server.port, timeout=30)
+        self.c.request("GET", f"/api/chat/events?after={after}&t={server.token}")
+        self.resp = self.c.getresponse()
+        self.seen = []
+
+    def until(self, test, what="event", timeout=30):
+        end = time.time() + timeout
+        while True:
+            if time.time() > end:
+                raise AssertionError(f"no {what} in {timeout}s: {self.seen}")
+            line = self.resp.fp.readline().decode("utf-8")
+            if not line:
+                raise AssertionError(f"stream ended before {what}: {self.seen}")
+            if line.startswith("data: "):
+                ev = json.loads(line[6:])
+                self.seen.append(ev)
+                if test(ev):
+                    return ev
+
+    def close(self):
+        self.c.close()
+
+
+@unittest.skipUnless(os.name == "posix", "the client runs on Linux desktops")
+class ChatTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.home = self.p("home")
+        write(self.p("home", ".config", "opencode", "opencode.jsonc"), '{"model": "example/model-1"}\n')
+        os.makedirs(self.p("bin"))
+        write(self.p("bin", "opencode"), read(FAKE).replace("#!/usr/bin/env python3", "#!" + sys.executable, 1))
+        os.chmod(self.p("bin", "opencode"), 0o700)
+        self.log = self.p("log.jsonl")
+        self.env = dict(os.environ, HOME=self.home, XDG_CONFIG_HOME=self.p("home", ".config"),
+                        PYTHONIOENCODING="utf-8", FAKE_OPENCODE_LOG=self.log,
+                        PATH=self.p("bin") + os.pathsep + os.path.dirname(sys.executable))
+        for k in ("KB_LIBRARIES", "LANG", "LC_ALL", "LC_MESSAGES", "LANGUAGE", "FAKE_OPENCODE_MODE"):
+            self.env.pop(k, None)
+
+    def p(self, *parts):
+        return os.path.join(self.tmp, *parts)
+
+    def start(self, mode="", *args):
+        if mode:
+            self.env["FAKE_OPENCODE_MODE"] = mode
+        s = Server(self.env, "--idle", "0", *args)
+        self.addCleanup(s.stop)
+        self.server = s
+        status, r = s.post("/api/chat/start", {})
+        self.assertEqual(status, 200, r)
+        events = ChatEvents(s, 0)
+        self.addCleanup(events.close)
+        return events
+
+    def calls(self):
+        return [json.loads(x) for x in read(self.log).splitlines()] if os.path.exists(self.log) else []
+
+    def ready(self):
+        ev = self.start()
+        ev.until(lambda e: e["type"] == "agent" and e["state"] == "ready", "ready")
+        return ev
+
+    def send(self, text, **kw):
+        status, r = self.server.post("/api/chat/send", dict(kw, text=text))
+        self.assertEqual(status, 200, r)
+
+    def test_needs_opencode_and_a_model(self):
+        os.remove(self.p("home", ".config", "opencode", "opencode.jsonc"))
+        s = Server(self.env, "--idle", "0")
+        self.addCleanup(s.stop)
+        status, r = s.post("/api/chat/start", {})
+        self.assertEqual((status, r["reason"]), (409, "no_model"))
+        self.assertEqual(s.post("/api/chat/send", {"text": "hello"})[0], 409)
+        self.assertEqual(s.get("/api/chat/state")[1]["agent"]["state"], "off")
+
+    def test_conversation(self):
+        ev = self.ready()
+        start = self.calls()[0]
+        self.assertEqual(start["args"][:2], ["serve", "--hostname=127.0.0.1"])
+        self.assertEqual(start["cwd"], os.path.realpath(self.home))
+        config = json.loads(start["config"])
+        self.assertEqual(config["permission"]["edit"], "ask")
+        self.assertEqual(config["permission"]["bash"], "ask")
+        self.send("hello there")
+        user = ev.until(lambda e: e["type"] == "part" and e["role"] == "user", "user text")
+        self.assertEqual(user["text"], "hello there")
+        ev.until(lambda e: e["type"] == "delta" and "echo" in e["delta"], "delta")
+        answer = ev.until(lambda e: e["type"] == "part" and e["role"] == "assistant" and e["text"], "answer")
+        self.assertEqual(answer["text"], "echo: hello there")
+        ev.until(lambda e: e["type"] == "status" and e["status"] == "idle", "idle")
+        st = self.server.get("/api/chat/state")[1]
+        self.assertEqual([h["text"] for h in st["history"]], ["hello there", "echo: hello there"])
+        session = st["agent"]["session"]
+        # a new conversation, then the client started again picks the last one up
+        self.assertEqual(self.server.post("/api/chat/new", {})[0], 200)
+        ev.until(lambda e: e["type"] == "reset", "reset")
+        new = self.server.get("/api/chat/state")[1]["agent"]["session"]
+        self.assertNotEqual(new, session)
+        self.assertEqual(self.server.get("/api/chat/state")[1]["history"], [])
+        saved = json.loads(read(self.p("home", ".config", "evergreen-wiki", "kb-client.json")))
+        self.assertEqual(saved, {"session": new})
+
+    def test_bad_requests(self):
+        self.ready()
+        s = self.server
+        self.assertEqual(s.post("/api/chat/send", {"text": ""})[0], 400)
+        self.assertEqual(s.post("/api/chat/send", {"text": "x" * 20001})[0], 400)
+        self.assertEqual(s.post("/api/chat/send", {"text": "x", "material": ["relative"]})[0], 400)
+        self.assertEqual(s.post("/api/chat/question", {"id": "x", "answers": "no"})[0], 400)
+        self.assertEqual(s.post("/api/chat/permission", {"id": "unknown", "allow": True})[0], 409)
+        self.assertEqual(s.get("/api/chat/state", token=False)[0], 403)
+
+    def test_permission_asked_and_answered(self):
+        ev = self.ready()
+        self.send("PERM edit " + self.p("elsewhere", "a.md"))
+        card = ev.until(lambda e: e["type"] == "permission", "permission")
+        self.assertEqual(card["permission"], "edit")
+        self.assertEqual(len(self.server.get("/api/chat/state")[1]["agent"]["permissions"]), 1)
+        self.assertEqual(self.server.post("/api/chat/permission", {"id": card["id"], "allow": False})[0], 200)
+        ev.until(lambda e: e["type"] == "part" and e["text"] == "permission: reject", "reply")
+        self.assertEqual(self.server.get("/api/chat/state")[1]["agent"]["permissions"], [])
+
+    def test_permission_inside_the_material_is_answered_by_the_client(self):
+        material = self.p("home", "Documents", "minutes")
+        os.makedirs(material)
+        ev = self.ready()
+        self.send("PERM read " + os.path.join(material, "*"), material=[material])
+        auto = ev.until(lambda e: e["type"] in ("auto", "permission"), "answer")
+        self.assertEqual(auto["type"], "auto")
+        ev.until(lambda e: e["type"] == "part" and e["text"] == "permission: once", "reply")
+        # writing there is not allowed: only the library may be written to
+        self.send("PERM edit " + os.path.join(material, "a.md"))
+        self.assertEqual(ev.until(lambda e: e["type"] in ("auto", "permission"))["type"], "permission")
+
+    def test_question(self):
+        ev = self.ready()
+        self.send("QUESTION")
+        q = ev.until(lambda e: e["type"] == "question", "question")
+        self.assertEqual([o["label"] for o in q["questions"][0]["options"]], ["Work", "Life"])
+        self.assertEqual(self.server.post("/api/chat/question", {"id": q["id"], "answers": [["Life"]]})[0], 200)
+        ev.until(lambda e: e["type"] == "part" and e["text"] == 'answers: [["Life"]]', "answer")
+
+    def test_stop(self):
+        ev = self.ready()
+        self.send("SLOW")
+        ev.until(lambda e: e["type"] == "status" and e["status"] == "busy")
+        self.assertEqual(self.server.post("/api/chat/stop", {})[0], 200)
+        ev.until(lambda e: e["type"] == "part" and e["text"] == "aborted", "aborted")
+
+    def test_quit_stops_opencode(self):
+        self.ready()
+        pid = self.calls()[0]["pid"]
+        self.assertEqual(self.server.post("/api/quit", {})[0], 200)
+        self.assertEqual(self.server.proc.wait(15), 0)
+        for _ in range(50):
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                break
+            time.sleep(0.1)
+        else:
+            self.fail("opencode still runs")
+
+    def test_simple_mode_without_the_interface(self):
+        for mode in ("noapi", "noserve"):
+            with self.subTest(mode=mode):
+                ev = self.start(mode)
+                st = ev.until(lambda e: e["type"] == "agent" and e["state"] != "starting", "state")
+                self.assertEqual(st["state"], "simple")
+                self.send("hello")
+                out = ev.until(lambda e: e["type"] == "part" and e["role"] == "assistant", "output")
+                self.assertEqual(out["text"].strip(), "run: hello")
+
+    def test_subagent_permission_answered_by_the_client(self):
+        material = self.p("home", "Documents", "minutes")
+        os.makedirs(material)
+        ev = self.ready()
+        self.send("SUBAGENT read " + os.path.join(material, "*"), material=[material])
+        auto = ev.until(lambda e: e["type"] in ("auto", "permission"), "answer")
+        self.assertEqual((auto["type"], auto["child"]), ("auto", True))
+        sub = ev.until(lambda e: e["type"] == "part" and e["text"].startswith("subagent"), "subagent")
+        self.assertTrue(sub["child"])
+        ev.until(lambda e: e["type"] == "part" and e["text"] == "done after the subagent", "answer")
+
+    def test_subagent_permission_card(self):
+        ev = self.ready()
+        self.send("SUBAGENT edit " + self.p("elsewhere", "a.md"))
+        card = ev.until(lambda e: e["type"] == "permission", "card")
+        self.assertTrue(card["child"])
+        self.assertEqual(self.server.post("/api/chat/permission", {"id": card["id"], "allow": True})[0], 200)
+        sub = ev.until(lambda e: e["type"] == "part" and e["text"].startswith("subagent"), "subagent")
+        self.assertEqual(sub["text"], "subagent: once")
+        # the subagent going idle does not end the main conversation's work
+        idle = [e for e in ev.seen if e["type"] == "status" and e["status"] == "idle"]
+        self.assertEqual(idle, [])
+
+    def test_reasoning_part(self):
+        ev = self.ready()
+        self.send("THINK")
+        r = ev.until(lambda e: e["type"] == "part" and e["kind"] == "reasoning", "reasoning")
+        self.assertEqual(r["text"], "pondering")
+
+    def test_send_while_busy(self):
+        ev = self.ready()
+        self.send("SLOW")
+        ev.until(lambda e: e["type"] == "status" and e["status"] == "busy")
+        self.send("and this too")
+        ev.until(lambda e: e["type"] == "part" and e["text"] == "echo: and this too", "second answer")
+        self.server.post("/api/chat/stop", {})
+
+    def test_terminal(self):
+        write(self.p("bin", "x-terminal-emulator"),
+              "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$FAKE_TERMINAL_LOG\"\n")
+        os.chmod(self.p("bin", "x-terminal-emulator"), 0o700)
+        self.env["FAKE_TERMINAL_LOG"] = self.p("terminal.txt")
+        self.ready()
+        self.assertEqual(self.server.post("/api/chat/terminal", {})[1]["reason"], "no_session")
+        self.server.post("/api/chat/new", {})
+        session = self.server.get("/api/chat/state")[1]["agent"]["session"]
+        status, r = self.server.post("/api/chat/terminal", {})
+        self.assertEqual((status, r["terminal"]), (200, "x-terminal-emulator"))
+        for _ in range(50):
+            if os.path.exists(self.p("terminal.txt")):
+                break
+            time.sleep(0.1)
+        args = read(self.p("terminal.txt")).split("\n")
+        self.assertEqual(args[0], "-e")
+        self.assertTrue(args[1].endswith("opencode"))
+        self.assertEqual(args[2], "--session=" + session)
+
+    def test_start_timeout(self):
+        ev = self.start("slow", "--start-timeout", "2")
+        line = ev.until(lambda e: e["type"] == "agent" and e.get("line"), "output line")
+        self.assertIn("refreshing", line["line"])
+        st = ev.until(lambda e: e["type"] == "agent" and e["state"] != "starting", "state")
+        self.assertEqual(st["state"], "simple")
+
+
+@unittest.skipUnless(sys.platform.startswith("linux") and shutil.which("bash"), "Linux desktops with bash")
+class FindOpenCodeTest(unittest.TestCase):
+    """OpenCode where a desktop session does not look: a common install folder, a ~/.bashrc function."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.home = os.path.join(self.tmp, "home")
+        write(os.path.join(self.home, ".config", "opencode", "opencode.jsonc"), '{"model": "example/model-1"}\n')
+        self.env = dict(os.environ, HOME=self.home, XDG_CONFIG_HOME=os.path.join(self.home, ".config"),
+                        PYTHONIOENCODING="utf-8", PATH=os.path.dirname(sys.executable) + os.pathsep + "/usr/bin:/bin")
+        for k in ("KB_LIBRARIES", "LANG", "LC_ALL", "KB_CLIENT_OPENCODE", "FAKE_OPENCODE_MODE", "BASH_ENV", "ENV"):
+            self.env.pop(k, None)
+
+    def fake(self, path):
+        write(path, read(FAKE).replace("#!/usr/bin/env python3", "#!" + sys.executable, 1))
+        os.chmod(path, 0o700)
+
+    def start(self, *args):
+        s = Server(self.env, "--idle", "0", *args)
+        self.addCleanup(s.stop)
+        return s
+
+    def ready(self, s):
+        self.assertEqual(s.post("/api/chat/start", {})[0], 200)
+        ev = ChatEvents(s, 0)
+        self.addCleanup(ev.close)
+        ev.until(lambda e: e["type"] == "agent" and e["state"] == "ready", "ready")
+        return ev
+
+    def test_common_folder(self):
+        self.fake(os.path.join(self.home, ".local", "bin", "opencode"))
+        s = self.start()
+        self.assertEqual(s.get("/api/state")[1]["agent"]["how"], "common")
+        self.ready(s)
+
+    def test_bashrc_function(self):
+        self.fake(os.path.join(self.tmp, "hidden", "real-opencode"))
+        write(os.path.join(self.home, ".bashrc"), 'opencode() { echo "settings refreshed"; "%s" "$@"; }\n'
+              % os.path.join(self.tmp, "hidden", "real-opencode"))
+        s = self.start()
+        self.assertEqual(s.get("/api/state")[1]["agent"]["how"], "shell-function")
+        ev = self.ready(s)
+        self.assertTrue(any(e.get("line") == "settings refreshed" for e in ev.seen), ev.seen)
+
+    def test_option_and_not_found(self):
+        s = self.start()
+        self.assertEqual(s.get("/api/state")[1]["agent"]["program"], "")
+        self.assertEqual(s.post("/api/chat/start", {})[1]["reason"], "no_program")
+        self.fake(os.path.join(self.tmp, "elsewhere", "oc"))
+        s = self.start("--opencode", os.path.join(self.tmp, "elsewhere", "oc"))
+        self.assertEqual(s.get("/api/state")[1]["agent"]["how"], "option")
+        self.ready(s)
+
+
+@unittest.skipUnless(os.name == "posix", "the client runs on Linux desktops")
+class DecideTest(unittest.TestCase):
+    """Which permission requests the client answers itself (agent.decide)."""
+
+    def setUp(self):
+        self.tmp = os.path.realpath(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.lib = os.path.join(self.tmp, "home", "kb", "work")
+        self.mat = os.path.join(self.tmp, "disk", "minutes")
+        self.skill = os.path.join(self.tmp, "home", ".config", "opencode", "skills", "kb-incremental")
+        for d in (self.lib, self.mat, os.path.join(self.skill, "scripts")):
+            os.makedirs(d)
+        write(os.path.join(self.skill, "scripts", "batch_plan.py"), "")
+        write(os.path.join(self.tmp, "home", "other.py"), "")
+        os.symlink(os.path.join(self.tmp, "home"), os.path.join(self.lib, "out"))
+        self.places = {"write": [self.lib], "read": [self.mat, self.skill],
+                       "scripts": [os.path.join(self.skill, "scripts")]}
+        self.cwd = os.path.join(self.tmp, "home")
+
+    def ok(self, permission, *patterns):
+        return agent.decide(permission, list(patterns), self.places, self.cwd)
+
+    def test_writing(self):
+        self.assertTrue(self.ok("edit", os.path.join(self.lib, "00_Spec.md")))
+        self.assertTrue(self.ok("edit", "kb/work/notes/a.md"))  # relative to the home folder
+        self.assertTrue(self.ok("edit", os.path.join(self.lib, "*")))
+        self.assertFalse(self.ok("edit", os.path.join(self.mat, "a.md")))
+        self.assertFalse(self.ok("edit", os.path.join(self.lib, "out", "x.md")))  # a link out of the library
+        self.assertFalse(self.ok("edit", os.path.join(self.lib, "..", "x.md")))
+        self.assertFalse(self.ok("edit", os.path.join(self.lib, "a.md"), "/etc/passwd"))
+        self.assertFalse(self.ok("edit"))
+
+    def test_reading(self):
+        self.assertTrue(self.ok("read", os.path.join(self.mat, "a.docx")))
+        self.assertTrue(self.ok("external_directory", os.path.join(self.mat, "*")))
+        self.assertTrue(self.ok("read", os.path.join(self.skill, "SKILL.md")))
+        self.assertFalse(self.ok("read", os.path.join(self.tmp, "home", "other.py")))
+        self.assertFalse(self.ok("glob", "**/*.md"))  # the whole home folder
+        self.assertFalse(self.ok("webfetch", "https://example.com"))
+
+    def test_subagents(self):
+        self.assertTrue(self.ok("task", "explore"))
+        self.assertFalse(self.ok("task", "general"))
+        self.assertFalse(self.ok("task", "explore", "general"))
+
+    def test_commands(self):
+        script = os.path.join(self.skill, "scripts", "batch_plan.py")
+        self.assertTrue(self.ok("bash", f"python3 {script} plan --root {self.lib}"))
+        self.assertTrue(self.ok("bash", f"python3 -I {script}"))
+        self.assertTrue(self.ok("bash", f"cd {self.skill} && python3 scripts/batch_plan.py next"))
+        self.assertTrue(self.ok("bash", f"python3 '{script}' --title 'two words'"))
+        for bad in (f"python3 {script}; rm -rf ~", f"python3 {script} && ls", f"python3 {script} | sh",
+                    f"python3 {script} $(id)", f"python3 {script} `id`", f"python3 {script} > /tmp/x",
+                    f"python3 {os.path.join(self.tmp, 'home', 'other.py')}", "ls -la",
+                    f"bash {script}", f"cd /tmp && python3 scripts/batch_plan.py",
+                    f"python3 -c 'print(1)' {script}"):
+            with self.subTest(bad=bad):
+                self.assertFalse(self.ok("bash", bad))
 
 
 @unittest.skipUnless(os.name == "posix", "the client runs on Linux desktops")

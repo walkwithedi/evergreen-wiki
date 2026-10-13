@@ -400,7 +400,7 @@ def edit_item(q, m, il, s, root, n):
     return root
 
 
-def setup_library(q, m, il, lang, preset=None):
+def setup_library(q, m, il, lang, preset=None, preset_default="life"):
     reg_path = il.registry_path()
     reg = il.load_registry_or_new(reg_path, lang)
     taken = [lib.get("id") for lib in reg.get("libraries", [])]
@@ -410,7 +410,8 @@ def setup_library(q, m, il, lang, preset=None):
             print(f"  {lib.get('id')}: {lib.get('label')} - {lib.get('scope')}")
     if not q.yes(m["setup"]):
         return None
-    preset = preset or q.choose(m["q_preset"], [("life", m["life"]), ("work", m["work"])], "life")
+    preset = preset or q.choose(m["q_preset"], [("life", m["life"]), ("work", m["work"])],
+                                preset_default if preset_default in ("life", "work") else "life")
     s = il.defaults(preset, lang)
     new_id = free_id(s["id"], taken)
     if new_id != s["id"]:
@@ -477,9 +478,10 @@ def add_instructions_line(q, m, il, target, reg, lang):
         print(m["skipped_line"])
 
 
-def wizard(asker=Asker, lang=None, agent=None, preset=None, descriptions=None):
+def wizard(asker=Asker, lang=None, agent=None, preset=None, descriptions=None, preset_default="life"):
     """asker(lang) returns the object that asks the questions. lang, agent (a --target name) and preset
-    answer those questions in advance; descriptions is a file that replaces the skill descriptions."""
+    answer those questions in advance; descriptions is a file that replaces the skill descriptions;
+    preset_default is the kind of library chosen beforehand when the question is asked."""
     sys.path.insert(0, os.path.join(ROOT, "skills", "kb-incremental", "scripts"))
     import init_library as il
     il.kbconf.utf8_stdio()
@@ -493,7 +495,7 @@ def wizard(asker=Asker, lang=None, agent=None, preset=None, descriptions=None):
     try:
         target, dest_root = choose_dest(q, m, agent)
         install_skills(q, m, target, dest_root, lang, descriptions)
-        reg = setup_library(q, m, il, lang, preset)
+        reg = setup_library(q, m, il, lang, preset, preset_default)
         if reg is None:
             print(m["later"])
             return

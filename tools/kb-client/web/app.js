@@ -53,7 +53,59 @@
       lost: "The connection to the knowledge base client was lost. Start it again and reload this page.",
       quit_done: "The knowledge base client has stopped. You can close this tab.",
       quit_confirm: "A step is still running. Cancel it and quit?",
-      no_token: "Open this page from the address the knowledge base client printed when it started."
+      no_token: "Open this page from the address the knowledge base client printed when it started.",
+      browse_multi: "Choose material",
+      picked: "{n} chosen",
+      choose_picked: "Use the chosen items",
+      chat_new: "New conversation",
+      task_intake: "File material",
+      task_note: "Quick note",
+      task_notes: "File quick notes",
+      task_lint: "Health check",
+      task_archive: "Archive old versions",
+      task_resume: "Continue intake",
+      chat_one_agent: "If OpenCode is also open in a terminal, quit it before filing material, so that only one of them writes to the library.",
+      chat_keys: "Enter sends, Shift+Enter starts a new line.",
+      chat_stop: "Stop",
+      chat_send: "Send",
+      chat_starting: "Starting OpenCode...",
+      chat_ready: "Ready",
+      chat_busy: "Working...",
+      chat_simple: "Simple mode: OpenCode's server could not be used ({reason}). Each message runs once with opencode run; the assistant cannot ask for permission or ask questions on this page. For full use, open OpenCode in a terminal.",
+      chat_failed: "OpenCode stopped ({reason}). Quit the client and start it again.",
+      chat_no_program: "OpenCode was not found on this computer, so the conversation is off. Install OpenCode, or start the client with --opencode <path to opencode>, then start it again.",
+      chat_terminal: "Open in a terminal",
+      terminal_confirm: "Open this conversation in OpenCode in a terminal window? While you continue there, the conversation on this page pauses; when you are back, reload the page or start a new conversation.",
+      terminal_opened: "Opened in a terminal ({name}).",
+      terminal_no_session: "Send a message first; then the conversation can be opened in a terminal.",
+      terminal_none: "No terminal program was found on this computer.",
+      queued: "Queued: {text}",
+      child: "Subagent: ",
+      thinking: "Thinking...",
+      interim: "Working notes",
+      perm_task: "Send a subagent", agent_explore: "explore (looks things up)",
+      chat_no_model: "OpenCode has no model set yet, so the conversation is off. Set up the model first (your administrator's setup tool), then start the client again.",
+      chat_no_library: "No library on this computer yet. Choose Set up first.",
+      pick_library: "Which library?",
+      note_prompt: "What should be noted?",
+      ok_cancel: "Cancel",
+      auto: "Allowed without asking: {what}",
+      perm_title: "The assistant asks for permission",
+      perm_read: "Read", perm_edit: "Change files", perm_bash: "Run a command", perm_external_directory: "Use a folder outside the home folder",
+      perm_glob: "Search file names", perm_grep: "Search file contents", perm_list: "List a folder", perm_webfetch: "Open a web page",
+      perm_other: "Use: {name}",
+      allow_once: "Allow this once",
+      deny: "Deny",
+      q_submit: "Answer",
+      q_skip: "Skip",
+      q_own: "Your own answer",
+      tool_running: "running", tool_completed: "done", tool_error: "failed", tool_pending: "waiting",
+      say_intake: "file these into the {lib} library:\n{paths}",
+      say_note: "note this: {text}",
+      say_notes: "file my quick notes in the {lib} library",
+      say_lint: "health check the {lib} library",
+      say_archive: "archive old versions in the {lib} library",
+      say_resume: "continue intake in the {lib} library"
     },
     zh: {
       title: "知识库",
@@ -104,7 +156,59 @@
       lost: "与知识库客户端的连接断开了。请重新启动它，再刷新本页面。",
       quit_done: "知识库客户端已停止，可以关闭这个标签页了。",
       quit_confirm: "还有步骤在运行。要取消它并退出吗？",
-      no_token: "请从知识库客户端启动时显示的地址打开本页面。"
+      no_token: "请从知识库客户端启动时显示的地址打开本页面。",
+      browse_multi: "选择材料",
+      picked: "已选 {n} 项",
+      choose_picked: "用选中的这些",
+      chat_new: "新对话",
+      task_intake: "入库",
+      task_note: "随手记",
+      task_notes: "整理随手记",
+      task_lint: "体检",
+      task_archive: "归档旧版",
+      task_resume: "继续入库",
+      chat_one_agent: "如果终端里也开着 OpenCode，入库前请先退出它，免得两边同时写同一个知识库。",
+      chat_keys: "回车发送，Shift+回车换行。",
+      chat_stop: "停止",
+      chat_send: "发送",
+      chat_starting: "正在启动 OpenCode…",
+      chat_ready: "已就绪",
+      chat_busy: "助手正在处理…",
+      chat_simple: "简易模式：OpenCode 的服务用不了（{reason}）。每条消息用 opencode run 单独运行一次，助手不能在本页面请求授权或提问。需要完整功能时，请在终端里打开 OpenCode。",
+      chat_failed: "OpenCode 已停止（{reason}）。请退出客户端后重新启动。",
+      chat_no_program: "本机没有找到 OpenCode，对话不可用。请先安装 OpenCode，或启动客户端时用 --opencode <opencode 的路径> 指定，再重新启动客户端。",
+      chat_terminal: "在终端里打开",
+      terminal_confirm: "在终端窗口里用 OpenCode 打开这个对话吗？在终端里继续时，本页面上的这个对话会暂停；回来后请刷新页面或开始新对话。",
+      terminal_opened: "已在终端里打开（{name}）。",
+      terminal_no_session: "请先发一条消息，之后才能在终端里打开这个对话。",
+      terminal_none: "本机没有找到终端程序。",
+      queued: "排队中：{text}",
+      child: "子助手：",
+      thinking: "思考中…",
+      interim: "过程说明",
+      perm_task: "派一个子助手去", agent_explore: "explore（查找）",
+      chat_no_model: "OpenCode 还没有配置模型，对话不可用。请先用管理员提供的配置工具配好模型，再重新启动客户端。",
+      chat_no_library: "本机还没有知识库，请先选「安装与建库」。",
+      pick_library: "用哪个知识库？",
+      note_prompt: "要记下什么？",
+      ok_cancel: "取消",
+      auto: "已自动允许：{what}",
+      perm_title: "助手请求授权",
+      perm_read: "读取", perm_edit: "修改文件", perm_bash: "运行命令", perm_external_directory: "使用家目录以外的文件夹",
+      perm_glob: "按文件名查找", perm_grep: "搜索文件内容", perm_list: "列出文件夹", perm_webfetch: "打开网页",
+      perm_other: "使用：{name}",
+      allow_once: "允许这一次",
+      deny: "拒绝",
+      q_submit: "回答",
+      q_skip: "跳过",
+      q_own: "自己填写",
+      tool_running: "进行中", tool_completed: "完成", tool_error: "失败", tool_pending: "等待中",
+      say_intake: "增量整理以下材料，放入知识库「{lib}」：\n{paths}",
+      say_note: "记一下：{text}",
+      say_notes: "整理随手记（知识库「{lib}」）",
+      say_lint: "检查知识库「{lib}」",
+      say_archive: "归档旧版（知识库「{lib}」）",
+      say_resume: "继续入库（知识库「{lib}」）"
     }
   };
 
@@ -188,7 +292,7 @@
     status.textContent = "";
     var a = state.agent;
     var chip = !a.program ? ["bad", t("agent_missing")] : (a.model ? ["good", t("agent_ok")] : ["warn", t("agent_no_model")]);
-    status.appendChild(el("span", { "class": "chip " + chip[0], title: a.program || "" }, chip[1]));
+    status.appendChild(el("span", { "class": "chip " + chip[0], title: a.program ? a.program + "  (" + a.how + ")" : "" }, chip[1]));
     var names = state.skills.map(function (s) { return s.name; });
     status.appendChild(el("span", { "class": "chip " + (names.length ? "good" : "warn"),
       title: state.skills.map(function (s) { return s.folder; }).join("\n") },
@@ -352,9 +456,15 @@
 
   // ---------- folder browser ----------
 
-  function openBrowser(start, done) {
-    browse = { path: "", done: done, start: start };
+  function openBrowser(start, done, multi) {
+    browse = { path: "", done: done, start: start, multi: !!multi, picked: {} };
     $("newname").value = "";
+    $("browse-title").textContent = t(multi ? "browse_multi" : "browse_title");
+    $("browse-ok").textContent = t(multi ? "choose_picked" : "choose_this");
+    show($("newname-row"), !multi);
+    show($("chosen"), !multi);
+    show($("picked"), !!multi);
+    updatePicked();
     show($("browser"), true);
     api("GET", "/api/places").then(function (r) {
       var box = $("places");
@@ -390,7 +500,20 @@
       var ul = $("entries");
       ul.textContent = "";
       r.entries.forEach(function (e) {
-        var li = el("li", { "class": e.dir ? "dir" : "file" }, e.name);
+        var li = el("li", { "class": e.dir ? "dir" : "file" }, browse.multi ? undefined : e.name);
+        if (browse.multi) {
+          var full = join(r.path, e.name);
+          var box = el("input", { type: "checkbox", "aria-label": e.name });
+          box.checked = !!browse.picked[full];
+          box.addEventListener("click", function (ev) {
+            ev.stopPropagation();
+            if (box.checked) browse.picked[full] = true; else delete browse.picked[full];
+            updatePicked();
+          });
+          li.className += " pick";
+          li.appendChild(box);
+          li.appendChild(el("span", {}, e.name));
+        }
         if (e.dir) {
           li.tabIndex = 0;
           li.addEventListener("click", function () { listFolder(join(r.path, e.name)); });
@@ -414,8 +537,326 @@
     return name ? join(browse.path, name) : browse.path;
   }
 
+  function updatePicked() {
+    if (browse) $("picked").textContent = t("picked", { n: Object.keys(browse.picked).length });
+  }
+
   function updateChosen() {
     if (browse && browse.path) $("chosen").textContent = t("chosen", { path: chosenPath() });
+  }
+
+  // ---------- conversation ----------
+
+  var chat = { source: null, ready: false, busy: false, msgs: {}, parts: {}, cards: {} };
+
+  function chatInfo(text, output) {
+    $("chat-info").textContent = text || "";
+    show($("chat-info"), !!text);
+    $("chat-output").textContent = output || "";
+    show($("chat-output"), !!output);
+  }
+
+  function chatEnable() {
+    var on = chat.ready && !chat.busy;
+    $("chat-send").disabled = !chat.ready;  // while the assistant works, a message waits its turn
+    $("chat-terminal").disabled = !chat.ready;
+    Array.prototype.forEach.call(document.querySelectorAll("[data-task]"), function (b) { b.disabled = !on; });
+    $("chat-new").disabled = !chat.ready || chat.busy;
+    show($("chat-stop"), chat.ready && chat.busy);
+    $("chat-state").textContent = !chat.ready ? "" : (chat.busy ? t("chat_busy") : t("chat_ready"));
+  }
+
+  function chatAgent(a) {
+    if (a.state === "starting") {
+      chat.ready = false;
+      chatInfo(t("chat_starting"), a.line || "");
+    } else if (a.state === "ready") {
+      chat.ready = true;
+      chatInfo("");
+    } else if (a.state === "simple") {
+      chat.ready = true;
+      chatInfo(t("chat_simple", { reason: a.reason || "" }), a.output || "");
+    } else if (a.state === "failed") {
+      chat.ready = false;
+      chatInfo(t("chat_failed", { reason: a.reason || "" }), a.output || "");
+    }
+    chatEnable();
+  }
+
+  function scrollChat() {
+    var m = $("messages");
+    m.scrollTop = m.scrollHeight;
+  }
+
+  function bubble(id, role, child) {
+    var b = chat.msgs[id];
+    if (!b) {
+      b = el("div", { "class": "msg " + (role === "user" ? "user" : "assistant") + (child ? " child" : "") });
+      if (child) b.appendChild(el("div", { "class": "who" }, t("child")));
+      chat.msgs[id] = b;
+      $("messages").appendChild(b);
+    }
+    return b;
+  }
+
+  function fold(label, body) {
+    var d = el("details", { "class": "fold" });
+    d.appendChild(el("summary", {}, label));
+    d.appendChild(body);
+    return d;
+  }
+
+  // The element whose text a part fills in. Reasoning is folded into one line from the start; text that a
+  // tool step follows in the same message is folded as working notes once the step appears.
+  function partEl(ev) {
+    var p = chat.parts[ev.partID];
+    if (!p) {
+      var b = bubble(ev.messageID, ev.role, ev.child);
+      if (ev.kind === "reasoning") {
+        p = el("div", { "class": "text" });
+        b.appendChild(fold(t("thinking"), p));
+      } else {
+        p = el("div", { "class": ev.kind === "tool" ? "tool" : "text" });
+        if (ev.kind === "tool" && ev.role !== "user") {
+          Array.prototype.slice.call(b.children).forEach(function (c) {
+            if (c.className !== "text") return;
+            var d = fold(t("interim"), el("span"));
+            b.insertBefore(d, c);
+            d.replaceChild(c, d.lastChild);  // the same element moves, so later text still lands in it
+          });
+        }
+        b.appendChild(p);
+      }
+      chat.parts[ev.partID] = p;
+    }
+    return p;
+  }
+
+  function showPart(ev) {
+    var p = partEl(ev);
+    if (ev.kind === "tool") {
+      var line = "▸ " + ev.tool + (ev.detail ? ": " + ev.detail : "") +
+        (ev.status ? "  (" + t("tool_" + ev.status) + ")" : "");
+      p.textContent = line + (ev.error ? "\n" + ev.error : "");
+      p.className = "tool" + (ev.status === "error" ? " failed" : "");
+    } else {
+      p.textContent = ev.text;
+      if (ev.role === "user") dropQueued(ev.text);
+    }
+    scrollChat();
+  }
+
+  function dropQueued(text) {
+    var q = Array.prototype.filter.call(document.querySelectorAll("#messages .note.queued"), function (n) {
+      return n.dataset.text === text;
+    })[0];
+    if (q) q.remove();
+  }
+
+  function note(text, cls) {
+    $("messages").appendChild(el("div", { "class": "note " + (cls || "") }, text));
+    scrollChat();
+  }
+
+  function permName(name) {
+    var key = "perm_" + name;
+    return (T[lang][key] || T.en[key]) ? t(key) : t("perm_other", { name: name });
+  }
+
+  function permWhat(ev) {
+    return ev.patterns.map(function (p) {
+      var key = "agent_" + p;
+      return ev.permission === "task" && (T[lang][key] || T.en[key]) ? t(key) : p;
+    });
+  }
+
+  function dropCard(id) {
+    var c = chat.cards[id];
+    if (c) { c.remove(); delete chat.cards[id]; }
+  }
+
+  function card(id, title) {
+    dropCard(id);
+    var c = el("div", { "class": "card" });
+    c.appendChild(el("p", { "class": "prompt" }, title));
+    chat.cards[id] = c;
+    $("cards").appendChild(c);
+    return c;
+  }
+
+  function buttonRow(c, list) {
+    var row = el("div", { "class": "buttons" });
+    list.forEach(function (x) {
+      var b = el("button", { type: "button", "class": x[1] }, x[0]);
+      b.addEventListener("click", x[2]);
+      row.appendChild(b);
+    });
+    c.appendChild(row);
+    return row;
+  }
+
+  function permissionCard(ev) {
+    var c = card(ev.id, (ev.child ? t("child") : "") + t("perm_title") + ": " + permName(ev.permission));
+    var pre = el("pre", { "class": "log" });
+    pre.textContent = permWhat(ev).join("\n");
+    c.appendChild(pre);
+    function reply(allow) {
+      dropCard(ev.id);
+      api("POST", "/api/chat/permission", { id: ev.id, allow: allow }).catch(function (e) { note(String(e.message), "error"); });
+    }
+    buttonRow(c, [[t("deny"), "", function () { reply(false); }], [t("allow_once"), "primary", function () { reply(true); }]]);
+    c.scrollIntoView({ block: "nearest" });
+  }
+
+  function questionCard(ev) {
+    var c = card(ev.id, ev.questions.map(function (q) { return q.header; }).filter(Boolean).join(" / ") || t("q_submit"));
+    var reads = ev.questions.map(function (q, qi) {
+      c.appendChild(el("p", {}, q.question));
+      var name = "q" + ev.id + "-" + qi;
+      var inputs = q.options.map(function (o) {
+        var label = el("label", { "class": "choice" });
+        var r = el("input", { type: q.multiple ? "checkbox" : "radio", name: name, value: o.label });
+        label.appendChild(r);
+        label.appendChild(el("span", {}, o.label + (o.description ? " — " + o.description : "")));
+        c.appendChild(label);
+        return r;
+      });
+      var own = null;
+      if (q.custom) {
+        own = el("input", { type: "text", placeholder: t("q_own"), spellcheck: "false" });
+        c.appendChild(own);
+      }
+      return function () {
+        var got = inputs.filter(function (r) { return r.checked; }).map(function (r) { return r.value; });
+        if (own && own.value.trim()) got.push(own.value.trim());
+        return got;
+      };
+    });
+    function reply(answers) {
+      dropCard(ev.id);
+      api("POST", "/api/chat/question", { id: ev.id, answers: answers }).catch(function (e) { note(String(e.message), "error"); });
+    }
+    buttonRow(c, [[t("q_skip"), "quiet", function () { reply(null); }],
+                  [t("q_submit"), "primary", function () { reply(reads.map(function (r) { return r(); })); }]]);
+    c.scrollIntoView({ block: "nearest" });
+  }
+
+  function chatEvent(ev) {
+    if (ev.type === "agent") {
+      chatAgent(ev);
+      if (ev.state === "ready") chatLoad();  // a conversation picked up again brings its history
+    }
+    else if (ev.type === "part") showPart(ev);
+    else if (ev.type === "delta") {
+      var p = partEl({ partID: ev.partID, messageID: ev.messageID, role: ev.role, child: ev.child, kind: "text" });
+      p.textContent += ev.delta;
+      scrollChat();
+    } else if (ev.type === "status") { chat.busy = ev.status !== "idle"; chatEnable(); }
+    else if (ev.type === "auto") {
+      note((ev.child ? t("child") : "") + t("auto", { what: permName(ev.permission) + " " + permWhat(ev).join(", ") }), "auto");
+    }
+    else if (ev.type === "error") note(ev.text, "error");
+    else if (ev.type === "permission") permissionCard(ev);
+    else if (ev.type === "question") questionCard(ev);
+    else if (ev.type === "permission_done" || ev.type === "question_done") dropCard(ev.id);
+    else if (ev.type === "reset") clearChat();
+  }
+
+  function clearChat() {
+    $("messages").textContent = "";
+    $("cards").textContent = "";
+    chat.msgs = {}; chat.parts = {}; chat.cards = {};
+    chat.busy = false;
+    chatEnable();
+  }
+
+  function chatLoad() {
+    return api("GET", "/api/chat/state").then(function (st) {
+      clearChat();
+      st.history.forEach(showPart);
+      chatAgent(st.agent);
+      chat.busy = st.agent.status && st.agent.status !== "idle";
+      (st.agent.permissions || []).forEach(permissionCard);
+      (st.agent.questions || []).forEach(questionCard);
+      chatEnable();
+      if (chat.source) chat.source.close();
+      chat.source = new EventSource("/api/chat/events?after=" + st.seq + "&t=" + encodeURIComponent(token));
+      chat.source.onmessage = function (m) { chatEvent(JSON.parse(m.data)); };
+    });
+  }
+
+  function chatStart() {
+    var a = state.agent;
+    if (!a.program) { chatInfo(t("chat_no_program")); chatEnable(); return; }
+    if (!a.model) { chatInfo(t("chat_no_model")); chatEnable(); return; }
+    api("POST", "/api/chat/start", {}).then(chatLoad).catch(function (e) { chatInfo(String(e.message)); });
+  }
+
+  function say(text, material) {
+    if (!text.trim()) return;
+    var body = { text: text };
+    if (material && material.length) body.material = material;
+    if (chat.busy) {
+      var n = el("div", { "class": "note queued" }, t("queued", { text: text.length > 80 ? text.slice(0, 80) + "\u2026" : text }));
+      n.dataset.text = text;
+      $("messages").appendChild(n);
+      scrollChat();
+    }
+    chat.busy = true;
+    chatEnable();
+    api("POST", "/api/chat/send", body).catch(function (e) {
+      chat.busy = false;
+      chatEnable();
+      note(String(e.message), "error");
+    });
+  }
+
+  function localLibs() {
+    return ((state && state.libraries) || []).filter(function (l) { return l.root && l.exists; });
+  }
+
+  function pickLibrary(then) {
+    var libs = localLibs();
+    if (!libs.length) { note(t("chat_no_library"), "error"); return; }
+    if (libs.length === 1) { then(libs[0]); return; }
+    var c = card("pick-library", t("pick_library"));
+    libs.forEach(function (l, i) {
+      var label = el("label", { "class": "choice" });
+      var r = el("input", { type: "radio", name: "pick-library", value: String(i) });
+      if (i === 0) r.checked = true;
+      label.appendChild(r);
+      label.appendChild(el("span", {}, l.label + "  " + l.root));
+      c.appendChild(label);
+    });
+    buttonRow(c, [[t("ok_cancel"), "quiet", function () { dropCard("pick-library"); }],
+                  [t("ok"), "primary", function () {
+                    var r = c.querySelector("input[name=pick-library]:checked");
+                    dropCard("pick-library");
+                    then(libs[r ? Number(r.value) : 0]);
+                  }]]);
+  }
+
+  function noteCard() {
+    var c = card("note", t("note_prompt"));
+    var box = el("textarea", { rows: "3", spellcheck: "false" });
+    c.appendChild(box);
+    buttonRow(c, [[t("ok_cancel"), "quiet", function () { dropCard("note"); }],
+                  [t("ok"), "primary", function () {
+                    var text = box.value.trim();
+                    dropCard("note");
+                    if (text) say(t("say_note", { text: text }));
+                  }]]);
+    box.focus();
+  }
+
+  function task(name) {
+    if (name === "note") { noteCard(); return; }
+    pickLibrary(function (lib) {
+      if (name !== "intake") { say(t("say_" + name, { lib: lib.label })); return; }
+      openBrowser((state && state.home) || "", function (paths) {
+        say(t("say_intake", { lib: lib.label, paths: paths.join("\n") }), paths);
+      }, true);
+    });
   }
 
   // ---------- start ----------
@@ -438,6 +879,13 @@
   $("browse-ok").addEventListener("click", function () {
     var b = browse;
     if (!b || !b.path) return;
+    if (b.multi) {
+      var paths = Object.keys(b.picked);
+      if (!paths.length) return;
+      closeBrowser();
+      b.done(paths);
+      return;
+    }
     var p = chosenPath();
     closeBrowser();
     b.done(p);
@@ -449,6 +897,9 @@
     if (job && !window.confirm(t("quit_confirm"))) return;
     api("POST", "/api/quit", {}).then(function () {
       if (job && job.source) job.source.close();
+      if (chat.source) chat.source.close();
+      chat.ready = false;
+      chatEnable();
       job = null;
       setBusy(true);
       $("cancel").hidden = true;
@@ -456,7 +907,37 @@
       result("ok", t("quit_done"));
     }).catch(lost);
   });
+  Array.prototype.forEach.call(document.querySelectorAll("[data-task]"), function (b) {
+    b.addEventListener("click", function () { task(b.getAttribute("data-task")); });
+  });
+  $("composer").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var text = $("input").value;
+    if (!chat.ready || !text.trim()) return;
+    $("input").value = "";
+    say(text);
+  });
+  $("input").addEventListener("keydown", function (k) {
+    if (k.key === "Enter" && !k.shiftKey && !k.isComposing) {
+      k.preventDefault();
+      $("composer").dispatchEvent(new Event("submit", { cancelable: true }));
+    }
+  });
+  $("chat-stop").addEventListener("click", function () { api("POST", "/api/chat/stop", {}).catch(function () {}); });
+  $("chat-terminal").addEventListener("click", function () {
+    if (!window.confirm(t("terminal_confirm"))) return;
+    api("POST", "/api/chat/terminal", {}).then(function (r) {
+      note(t("terminal_opened", { name: r.terminal }), "auto");
+    }).catch(function (e) {
+      note(e.status === 409 ? t(String(e.message).indexOf("terminal") >= 0 ? "terminal_none" : "terminal_no_session")
+        : String(e.message), "error");
+    });
+  });
+  $("chat-new").addEventListener("click", function () {
+    api("POST", "/api/chat/new", {}).catch(function (e) { note(String(e.message), "error"); });
+  });
+  chatEnable();
   if (!token) { result("error", t("no_token")); return; }
-  refresh();
+  refresh().then(function () { if (state) chatStart(); });
   setInterval(function () { if (!job) refresh(); else api("GET", "/api/state").catch(function () {}); }, 20000);
 })();

@@ -44,16 +44,41 @@
       <form class="ask" id="ask" hidden></form>
       <p class="result" id="result" hidden></p>
     </div>
-    <div class="panel later">
-      <h2 data-t="chat_title">Conversation</h2>
-      <p data-t="chat_later">Talking to your agent from this page comes in a later version.</p>
+    <div class="panel chat" id="chat">
+      <div class="panel-head">
+        <h2 data-t="chat_title">Conversation</h2>
+        <span class="chat-state" id="chat-state"></span>
+        <button type="button" class="quiet small" id="chat-terminal" data-t="chat_terminal">Open in a terminal</button>
+        <button type="button" class="quiet small" id="chat-new" data-t="chat_new">New conversation</button>
+      </div>
+      <div class="tasks" id="tasks">
+        <button type="button" data-task="intake" data-t="task_intake">File material</button>
+        <button type="button" data-task="note" data-t="task_note">Quick note</button>
+        <button type="button" data-task="notes" data-t="task_notes">File quick notes</button>
+        <button type="button" data-task="lint" data-t="task_lint">Health check</button>
+        <button type="button" data-task="archive" data-t="task_archive">Archive old versions</button>
+        <button type="button" data-task="resume" data-t="task_resume">Continue intake</button>
+      </div>
+      <p class="hint" data-t="chat_one_agent">If OpenCode is also open in a terminal, quit it before filing material, so that only one of them writes to the library.</p>
+      <p class="info" id="chat-info" hidden></p>
+      <pre class="log" id="chat-output" hidden></pre>
+      <div class="messages" id="messages"></div>
+      <div class="cards" id="cards"></div>
+      <form class="composer" id="composer">
+        <textarea id="input" rows="3" spellcheck="false"></textarea>
+        <div class="buttons">
+          <span class="hint" data-t="chat_keys">Enter sends, Shift+Enter starts a new line.</span>
+          <button type="button" class="quiet" id="chat-stop" data-t="chat_stop" hidden>Stop</button>
+          <button type="submit" class="primary" id="chat-send" data-t="chat_send">Send</button>
+        </div>
+      </form>
     </div>
   </section>
 </main>
 
 <div class="modal" id="browser" hidden>
   <div class="browser" role="dialog" aria-modal="true" aria-labelledby="browse-title">
-    <h2 id="browse-title" data-t="browse_title">Choose a folder</h2>
+    <h2 id="browse-title">Choose a folder</h2>
     <div class="places" id="places"></div>
     <div class="pathbar">
       <button type="button" class="quiet" id="up" data-t="up">Up</button>
@@ -64,7 +89,8 @@
     <ul class="entries" id="entries"></ul>
     <p class="hint" id="more" hidden></p>
     <p class="error" id="fs-error" hidden></p>
-    <label class="newname"><span data-t="new_name">New folder inside it (made when the step writes; leave empty to use the folder itself)</span>
+    <p class="hint" id="picked" hidden></p>
+    <label class="newname" id="newname-row"><span data-t="new_name">New folder inside it (made when the step writes; leave empty to use the folder itself)</span>
       <input type="text" id="newname" spellcheck="false" autocomplete="off"></label>
     <p class="hint" id="chosen"></p>
     <div class="buttons">

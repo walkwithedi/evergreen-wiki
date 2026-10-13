@@ -5,14 +5,19 @@ commands as a page in the browser, served from this computer.
   python3 kb_client.py          start the local server and open the page in the default browser
 Options: --lang en|zh (default: the system language), --port N (default: a free port), --no-browser
 (print the address only), --idle SECONDS (stop after that long without the page; 0 never; default 120),
---log-level (default from LOG_LEVEL); for set up, --agent and --preset life|work answer those questions
-in advance and --descriptions FILE replaces the skill descriptions (as install.py).
+--start-timeout SECONDS (wait that long for OpenCode to start; default 90), --opencode PATH (the
+OpenCode program to use; also KB_CLIENT_OPENCODE; default: found on PATH, in a common install folder
+or through the interactive shell), --log-level (default from LOG_LEVEL); for set up, --agent and
+--preset life|work answer those questions in advance (otherwise a work library is suggested) and
+--descriptions FILE replaces the skill descriptions (as install.py).
 
 The server listens on 127.0.0.1 only and answers only requests that carry the token in the address it
 opens, so other pages in the browser cannot use it. The questions, previews and checks are the ones of
 install.py and kb_manage.py: a step runs in a worker thread, its questions go to the page and wait for
-the answer, and what it prints is streamed to the page. The folder browser only lists folders; nothing
-in this file writes outside what the installer writes. Python 3 standard library only.
+the answer, and what it prints is streamed to the page. The conversation on the page goes to an OpenCode
+server this client starts on 127.0.0.1 (agent.py); the page never talks to OpenCode itself. The folder
+browser only lists folders; this file writes nothing but the current conversation's id. Python 3
+standard library only.
 """
 import argparse
 import getpass
@@ -22,7 +27,6 @@ import os
 import queue
 import re
 import secrets
-import shutil
 import sys
 import threading
 import time
@@ -35,12 +39,18 @@ sys.path.insert(0, ROOT)
 import install  # noqa: E402
 import kb_manage  # noqa: E402
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import agent as agent_mod  # noqa: E402
+
 log = logging.getLogger("kb_client")
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s.%(funcName)s:%(lineno)d - %(message)s"
 WEB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 ACTIONS = ("setup", "backup", "rollback", "move", "uninstall")
 LANGS = ("en", "zh")
 MAX_BODY = 64 * 1024
+CHAT_ACTIONS = {name: name for name in ("start", "send", "new", "stop", "permission", "question", "terminal")}
+MAX_TEXT = 20000  # characters of one message from the page
+MAX_PATHS = 200  # material paths sent with one message
 MAX_ENTRIES = 2000  # entries listed per folder; the page says when a folder holds more
 STATIC = {"index.html": "text/html; charset=utf-8", "app.js": "text/javascript; charset=utf-8",
           "style.css": "text/css; charset=utf-8"}
@@ -51,6 +61,9 @@ MSG = {
         "move_none": "No registered library on this computer can be moved.",
         "move_to": "Choose the folder to move the library into. The library keeps its folder name.",
         "busy": "Another step is still running.",
+        "no_program": "OpenCode was not found on this computer.",
+        "no_model": "OpenCode has no model set yet.",
+        "not_ready": "The conversation is not ready yet.",
         "started": "Knowledge base client: {url}",
         "stopped": "Knowledge base client stopped.",
     },
@@ -59,6 +72,9 @@ MSG = {
         "move_none": "本机没有可以移动的已登记知识库。",
         "move_to": "选择要把知识库移到哪个文件夹里。知识库的文件夹名不变。",
         "busy": "还有一个步骤在运行。",
+        "no_program": "本机没有找到 OpenCode。",
+        "no_model": "OpenCode 还没有配置模型。",
+        "not_ready": "对话还没有准备好。",
         "started": "知识库客户端：{url}",
         "stopped": "知识库客户端已停止。",
     },
@@ -173,10 +189,12 @@ class Output:
 
 
 class App:
-    def __init__(self, lang, options, idle):
+    def __init__(self, lang, options, idle, start_timeout=90):
         self.lang = lang
         self.options = options
         self.idle = idle
+        self.start_timeout = start_timeout
+        self.agent = None
         self.token = secrets.token_urlsafe(24)
         self.job = None
         self.lock = threading.Lock()
@@ -236,10 +254,28 @@ class App:
             "job": None if job is None else {"id": job.id, "action": job.action, "done": job.done},
         }
 
+    # ---------- the conversation ----------
+
+    def start_agent(self):
+        """The Agent, started on first use; None and the reason when OpenCode cannot be used."""
+        with self.lock:
+            if self.agent is None:
+                st = agent_status()
+                if not st["program"]:
+                    return None, "no_program"
+                if not st["model"]:
+                    return None, "no_model"
+                self.agent = agent_mod.Agent(OPENCODE["program"], os.path.expanduser("~"), agent_places,
+                                             os.path.join(kb_manage.state_dir(), "kb-client.json"),
+                                             self.start_timeout)
+        self.agent.start()
+        return self.agent, None
+
     def idle_watch(self):
         while self.idle:
             time.sleep(min(5, self.idle))
             busy = self.job is not None and not self.job.done
+            busy = busy or (self.agent is not None and self.agent.status != "idle")
             if not busy and time.time() - self.last_seen > self.idle:
                 log.info("no page for %s seconds, stopping", self.idle)
                 threading.Thread(target=self.server.shutdown, daemon=True).start()
@@ -250,7 +286,8 @@ def run_action(action, asker, lang, options, lib_id=None):
     """Runs one step; returns the exit code of kb_manage (0 when it went through), None for set up."""
     m = MSG[lang]
     if action == "setup":
-        install.wizard(asker, lang, options.get("agent"), options.get("preset"), options.get("descriptions"))
+        install.wizard(asker, lang, options.get("agent"), options.get("preset"), options.get("descriptions"),
+                       preset_default="work")
         return None
     if action == "move":
         libs = [(i, label, root) for i, label, root in kb_manage.registered_libs()
@@ -283,6 +320,16 @@ def libraries():
                     "exists": bool(root) and os.path.isdir(root),
                     "movable": bool(root) and kb_manage.lib_check(root, install.MANAGE_DEFAULTS) is None})
     return out
+
+
+def agent_places():
+    """Where OpenCode may act without asking (agent.decide): write in the registered local libraries;
+    read also the skills and the agent's own settings; run the skills' scripts."""
+    write = [lib["root"] for lib in libraries() if lib["root"] and lib["exists"]]
+    skills = [os.path.join(s["folder"], name) for s in skills_installed() for name in s["skills"]]
+    read = skills + [install.AGENT_HOMES["opencode"], os.path.dirname(kb_manage.registry_path())]
+    return {"write": write, "read": [p for p in read if os.path.isdir(p)],
+            "scripts": [os.path.join(p, "scripts") for p in skills if os.path.isdir(os.path.join(p, "scripts"))]}
 
 
 def skills_installed():
@@ -319,10 +366,20 @@ def strip_jsonc(text):
     return re.sub(r",(\s*[}\]])", r"\1", "".join(out))
 
 
+OPENCODE = {"program": None}  # agent.Program, looked up once at start (find_opencode)
+
+
+def find_opencode(explicit=""):
+    OPENCODE["program"] = agent_mod.find_opencode(explicit)
+    log.info("opencode: %s (%s)", OPENCODE["program"].describe() or "not found", OPENCODE["program"].how)
+    return OPENCODE["program"]
+
+
 def agent_status():
-    """OpenCode on this computer: the program, and whether its settings name a model."""
+    """OpenCode on this computer: how it is run, and whether its settings name a model."""
     folder = install.AGENT_HOMES["opencode"]
-    status = {"program": shutil.which("opencode") or "", "config": "", "model": False, "error": ""}
+    prog = OPENCODE["program"] or find_opencode()
+    status = {"program": prog.describe(), "how": prog.how, "config": "", "model": False, "error": ""}
     for name in ("opencode.jsonc", "opencode.json"):
         path = os.path.join(folder, name)
         if not os.path.isfile(path):
@@ -471,6 +528,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(400, {"error": str(e)})
         if path == "/api/events":
             return self.events(query)
+        if path == "/api/chat/state":
+            return self.chat_state()
+        if path == "/api/chat/events":
+            return self.chat_events(query)
         return self.static(path)
 
     def do_POST(self):
@@ -506,6 +567,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, {"ok": True})
             ok = job.answer(body.get("seq"), body.get("value"))
             return self.send(200 if ok else 409, {"ok": ok})
+        if path.startswith("/api/chat/"):
+            return self.chat_post(path[len("/api/chat/"):], body)
         if path == "/api/quit":
             self.send(200, {"ok": True})
             job = self.app.job
@@ -547,6 +610,100 @@ class Handler(BaseHTTPRequestHandler):
             log.debug("event stream closed by the page")
         return None
 
+    # ----- the conversation -----
+
+    def chat_state(self):
+        ag = self.app.agent
+        if ag is None:
+            return self.send(200, {"agent": {"state": "off"}, "seq": 0, "history": []})
+        seq = ag.feed.last()  # before the history, so nothing falls between the two
+        try:
+            history = ag.history()
+        except OSError as e:
+            log.warning("history: %s", e)
+            history = []
+        return self.send(200, {"agent": ag.snapshot(), "seq": seq, "history": history})
+
+    def chat_events(self, query):
+        ag = self.app.agent
+        if ag is None:
+            return self.send(404, {"error": "not started"})
+        try:
+            seq = int(self.headers.get("Last-Event-ID") or (query.get("after") or ["0"])[0])
+        except ValueError:
+            seq = 0
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.close_connection = True
+        try:
+            while True:
+                evs = ag.feed.since(seq, 15)
+                if not evs:
+                    self.wfile.write(b": keep-alive\n\n")
+                for ev in evs:
+                    seq = ev["seq"]
+                    data = json.dumps(ev, ensure_ascii=False)
+                    self.wfile.write(f"id: {seq}\ndata: {data}\n\n".encode("utf-8"))
+                self.wfile.flush()
+                self.app.last_seen = time.time()
+        except (BrokenPipeError, ConnectionResetError):
+            log.debug("chat stream closed by the page")
+        return None
+
+    def chat_post(self, path_part, body):
+        what = CHAT_ACTIONS.get(path_part)  # a fixed name from here on, never the request's own text
+        if what is None:
+            return self.send(404, {"error": "not found"})
+        m = MSG[self.app.lang]
+        if what == "start":
+            ag, why = self.app.start_agent()
+            if ag is None:
+                return self.send(409, {"error": m[why], "reason": why})
+            return self.send(200, {"agent": ag.snapshot()})
+        ag = self.app.agent
+        if ag is None or ag.state not in ("ready", "simple"):
+            return self.send(409, {"error": m["not_ready"]})
+        try:
+            if what == "send":
+                text, material = body.get("text"), body.get("material") or []
+                if not isinstance(text, str) or not text.strip() or len(text) > MAX_TEXT:
+                    return self.send(400, {"error": "text"})
+                if not isinstance(material, list) or len(material) > MAX_PATHS or \
+                        not all(isinstance(x, str) and os.path.isabs(x) for x in material):
+                    return self.send(400, {"error": "material"})
+                ag.send(text.strip(), material)
+                return self.send(200, {"ok": True})
+            if what == "new":
+                ag.new()
+                return self.send(200, {"ok": True, "session": ag.session})
+            if what == "stop":
+                ag.stop()
+                return self.send(200, {"ok": True})
+            if what == "terminal":
+                try:
+                    return self.send(200, {"ok": True, "terminal": ag.open_terminal()})
+                except RuntimeError as e:
+                    return self.send(409, {"error": str(e), "reason": "no_terminal" if "terminal" in str(e) else "no_session"})
+            if what == "permission":
+                ok = ag.reply_permission(str(body.get("id", "")), body.get("allow") is True)
+                return self.send(200 if ok else 409, {"ok": ok})
+            if what == "question":
+                answers = body.get("answers")
+                if answers is not None and not (isinstance(answers, list) and all(
+                        isinstance(a, list) and all(isinstance(x, str) for x in a) for a in answers)):
+                    return self.send(400, {"error": "answers"})
+                ok = ag.reply_question(str(body.get("id", "")), answers)
+                return self.send(200 if ok else 409, {"ok": ok})
+        except RuntimeError:
+            return self.send(409, {"error": m["not_ready"]})
+        except OSError as e:
+            log.warning("chat %s failed: %s", what, type(e).__name__)
+            return self.send(502, {"error": " ".join(str(e).split())[:300]})
+        return self.send(404, {"error": "not found"})
+
     def static(self, path):
         """Only the page's own files, by fixed name and type."""
         name = "index.html" if path == "/" else path[1:]
@@ -574,6 +731,8 @@ def serve(app, port, open_browser):
         log.info("stopped from the terminal")
     finally:
         server.server_close()
+        if app.agent:
+            app.agent.shutdown()
     print(MSG[app.lang]["stopped"], flush=True)
 
 
@@ -583,6 +742,8 @@ def main():
     ap.add_argument("--port", type=int, default=0)
     ap.add_argument("--no-browser", action="store_true")
     ap.add_argument("--idle", type=int, default=120, metavar="SECONDS")
+    ap.add_argument("--start-timeout", type=int, default=90, metavar="SECONDS")
+    ap.add_argument("--opencode", default=os.environ.get("KB_CLIENT_OPENCODE", ""), metavar="PATH")
     ap.add_argument("--agent", choices=sorted(install.TARGETS))
     ap.add_argument("--preset", choices=["life", "work"])
     ap.add_argument("--descriptions", metavar="FILE")
@@ -604,7 +765,9 @@ def main():
     # Answers on the page are typed like answers in a terminal opened in the home folder: a relative
     # folder is taken from there, never from wherever the program was started.
     os.chdir(os.path.expanduser("~"))
-    app = App(lang, {"agent": a.agent, "preset": a.preset, "descriptions": a.descriptions}, a.idle)
+    find_opencode(a.opencode)
+    app = App(lang, {"agent": a.agent, "preset": a.preset, "descriptions": a.descriptions}, a.idle,
+              a.start_timeout)
     app.output = Output(sys.stdout)
     sys.stdout = app.output
     serve(app, a.port, not a.no_browser)
