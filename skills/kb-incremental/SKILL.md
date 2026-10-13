@@ -5,7 +5,7 @@ description: Files material (Office, PDF, mail, pictures, text) into an evergree
 
 # Knowledge base intake, archive, health check and init
 
-Version: 1.11.0
+Version: 1.12.0
 
 ## Modes
 
@@ -50,12 +50,13 @@ You file and judge; you do not advise, recommend or evaluate. These rules apply 
 12. Replies follow the library language and preferences.output (references/environment.md). YAML front matter and the Bases block in entity pages are file formats and keep their syntax.
 13. No wiki links in body text. Links appear only in front matter, in the basis lines of summary files, and in entity pages.
 14. Working notes stay out of knowledge files: cleaning results, term fixes, duplicate and trigger judgements appear only in the reply and the readme.
+15. Library folder and material folder are different things (references/config.md, section 3). Material may sit anywhere; read it where it is. Never offer to change a library's folder because the material is elsewhere, and name the two folders to the user only in the words that section gives.
 
 ## Input checks
 
 Check 1: material is readable. Handle several items one by one, never merged. Read images and scans as text first; record unreadable parts as they are and log them as issues. Keep the path of each original upload (the file itself, not a converted copy) for the hash in step 4; pasted text has no original file and step 4 runs without --file.
 
-No material given: the user asks for intake but names no path and uploads or pastes nothing. For a local library where you can run commands, open the desktop picker (references/pick-material.md, material); otherwise ask where the material is. When the user named a path or uploaded files, never open the picker.
+No material given: the user asks for intake but names no path and uploads or pastes nothing. For a local library where you can run commands, open the desktop picker (references/pick-material.md, material); otherwise ask where the material folder is (the folder with the original files). When the user named a path or uploaded files, never open the picker.
 
 Many files: when the material is files or folders on disk and commands can run, plan the batches before reading any of it (references/batches.md). One batch: go on here as usual. More than one: follow batches.md.
 

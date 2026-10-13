@@ -24,6 +24,7 @@ When a local library folder is needed and the user has not named one: no registr
 
 It opens one folder chooser. Exit code 0 prints the chosen folder; 3, 4 and 5 mean the same as above: ask the user for the path in one sentence (for 4, first ask whether to go on). Then look at the folder before going on:
 - It holds _kb.json or a spec (a file starting with 00_ whose name contains Spec or 规范): an existing library. Init mode, existing-library branch.
-- It is empty or holds no .md files: a new library there. Init mode, new-library branch, with this folder as the answer to question 1.
+- It is empty, or holds neither .md files nor original files: a new library there. Init mode, new-library branch, with this folder as the answer to question 1.
 - It holds other Markdown files: say so and ask whether to choose another folder or treat it as an existing library.
+- It holds original files (Office, PDF, pictures) but no _kb.json or spec: it is a material folder, not a library folder. Say so in the words of references/config.md, section 3, and ask for an empty folder for the library; the original files can be filed from where they are later.
 Choosing a folder writes nothing; the init preview and the user's "confirm" still come before any file is written.

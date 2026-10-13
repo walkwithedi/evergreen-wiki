@@ -2,8 +2,11 @@
 
 All three skills share one version number. To release, update this file, the "Version:" line of every SKILL.md and the plugin manifests together and merge to main; the release workflow then publishes v<version>.
 
-## Unreleased
+## 1.12.0
 
+Library folder and material folder kept apart.
+- All three skills (shared config.md, section 3): the folder holding the filed knowledge base and the folder holding the user's original files are named to the user as "library folder" and "material folder" (知识库文件夹, 资料文件夹), each with a short explanation; registry, root and backend are not said to the user outside the init preview. Material outside the library folder is normal and is read where it is; a library's folder changes only on an explicit request to move it. A fixed two-option question for when it is unclear which folder the user means.
+- kb-incremental: hard rule 15 on the two folders; init mode and the folder chooser treat a folder of original files as material, never as a library, and ask for an empty folder for a new library.
 - README (English and Chinese): a section on how the pieces fit together (skills, library folders, registry, instructions line), what each release download is for and which path to take in which situation; a quick-start path for a Linux desktop without a terminal.
 - Every release's notes end with the same download guide (docs/release-downloads.md, version filled in).
 

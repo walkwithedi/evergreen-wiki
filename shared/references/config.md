@@ -110,3 +110,22 @@ In kb-incremental, scripts/kbconf.py prints the resolved configuration: python3 
 ### Ignored files
 
 Every search and every read of knowledge files skips: the archive folder; names that start with an underscore (run logs, _kb.json, _kb-params.md, an inbox configuration file, the batch progress file); names that start with snapshot_prefix; names that contain old_suffix followed by a time stamp.
+
+## 3. Two folders: words to use with the user
+
+Users do not know the inner workings, so two folders must never be confused, and the reply names them the same way every time:
+
+- Library folder: where the filed Markdown files, the spec, the status card and the file index live. The assistant writes here. The registry records only this folder (backend.root). In Chinese: 知识库文件夹（整理好的结果，助手维护）.
+- Material folder: where the user's own original files are (Word, PDF, spreadsheets, mail, pictures). The assistant only reads from it and never changes it. It can be anywhere: a folder next to the library named <library>-待整理 or <library>-inbox, a network or removable drive, the user's usual work folder. In Chinese: 资料文件夹（你的原始文件，只读不改）.
+
+Rules:
+1. To the user, say only "library folder" and "material folder" (知识库文件夹, 资料文件夹), with the short explanation in brackets the first time each appears in a conversation. Never say registry, root, backend, _kb.json or 注册表 to the user, except in the init preview and when the user uses the word first.
+2. Material outside the library folder is normal. Never offer to change a registered library's folder because the material is somewhere else. A folder the user names that holds original files is material: read it from there. Change a library's folder only when the user explicitly asks to move the library or points it at a folder that already holds that library (_kb.json or a 00_ spec file); a move of a local library goes through install.py move.
+3. When it is unclear which folder the user means, ask once with this question, each option saying what follows:
+   "Is <folder> where your original files are, or where the filed knowledge base should be?
+   1. Original files (material folder): I read them from there and file the results into <library label>; nothing in that folder changes.
+   2. Knowledge base (library folder): <library label> will be kept there from now on; only choose this when the folder holds no original files."
+   In Chinese:
+   「<文件夹> 是放你原始文件的地方，还是放整理结果的知识库？
+   1. 原始文件（资料文件夹）：我从这里读取，整理结果放进<库名>，这个文件夹里的东西不会被改动。
+   2. 知识库（知识库文件夹）：今后<库名>的整理结果放在这里；只有这个文件夹里没有原始文件时才选。」
