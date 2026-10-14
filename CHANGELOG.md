@@ -4,6 +4,8 @@ All three skills share one version number. To release, update this file, the "Ve
 
 ## Unreleased
 
+- kb-incremental: topic files are assembled by script (scripts/assemble.py: the head with metadata and key conclusions, one blank line, then the cleaned body file as it is), so the body is never typed out again; clean.py writes the body file, and masking and term fixes are made in it in place. Refuses an existing output file, an empty body and unclosed front matter.
+- kb-incremental batch intake: within one conversation, the spec, summary files, params, _kb.json and references read for the first batch are not read again for later batches (every summary rewrite waits for the final step); the file index is copied to the work folder again for every batch and read by index_tool.
 - tools/kb-client: Set up chooses OpenCode beforehand (install.py wizard and choose_dest: agent_default, which only changes the default answer); when Set up has finished, the client restarts the OpenCode it started (after the current work when the assistant is busy), so the conversation uses the new skills and instructions line without restarting the client. The page says so while OpenCode restarts.
 - tools/kb-client: a skill script whose quoted arguments hold shell characters, such as batch_plan.py add --text "Projects: Atlas (new topic; a.docx)", is allowed without a card; outside quotes the rule is unchanged, and a double-quoted argument with $, a backquote or a backslash still goes to the user.
 - All three skills (shared environment.md): scripts are run by their full path in the skill's folder or as cd <skill folder> && python3 scripts/<name>.py, one command per call, with text arguments in quotes.

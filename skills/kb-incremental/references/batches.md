@@ -42,7 +42,8 @@ marks the batch started and prints the batch number, its group and one "file: <p
 - Exit code 4, "missing folder: <folder>" lines: every file of the batch is gone, usually a removable or network drive that is not connected. Stop, nothing is marked; ask the user to connect it and say "continue intake", or to skip that batch (skip --batch <n>).
 File the "file:" paths through Check 1 to step 4 and delivery, as in SKILL.md, with these changes:
 
-1. Read the file index from the library again for every batch: earlier batches have added to it.
+1. Copy the file index from the library into the work folder again for every batch: earlier batches have added to it. index_tool reads it; there is no need to read it yourself.
+1a. Within one conversation, what you read for the first batch stays current until the final step, because this mode defers every summary rewrite: the spec, the status card, the other summary files, the params, _kb.json and the references. Do not read them again for later batches; take the topics and entities added since from the progress file (rule 2). In a new conversation ("continue intake"), read them once, as for a first batch.
 2. Topics and entities: before step 1, take the topics and entities recorded in the progress file (status lists them) as part of Table A and Table E. A new topic is used at once and recorded, not written into the spec:
    python3 scripts/batch_plan.py add --plan <progress file> --batch <n> --kind topic --text "<partition>: <new topic> (reason; source file)"
    A new entity is recorded the same way with --kind entity; its entity page is delivered with the batch.

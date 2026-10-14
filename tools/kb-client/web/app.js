@@ -1070,7 +1070,7 @@
   var SCRIPT_STAGE = {
     "pick_materials": "count", "batch_plan plan": "count", "batch_plan next": "count",
     "convert": "convert", "index_tool check": "dedup", "clean": "clean", "card_check": "compare",
-    "index_tool add": "write", "index_tool update": "write", "index_tool write": "write", "package": "write",
+    "assemble": "write", "index_tool add": "write", "index_tool update": "write", "index_tool write": "write", "package": "write",
     "batch_plan done": "write", "batch_plan skip": "write", "archive_plan": "write", "batch_plan finish": "final"
   };
   var stages = { current: "", shown: "", hideTimer: null, poll: null, seen: null, runs: {}, announced: {} };

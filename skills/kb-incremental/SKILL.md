@@ -103,16 +103,18 @@ Applies when material is in scope but no topic in Table A fits. Not for items th
 
 ## Step 2: clean the body
 
-2.1 Structural cleanup, by script, not by hand:
+2.1 Structural cleanup, by script, not by hand. Its output is the body file of this item, <work>/body_<n>.md (n numbers the items of this run):
 
-  python3 scripts/clean.py <input> <output> --max-heading-len <Table D>
+  python3 scripts/clean.py <input> <work>/body_<n>.md --max-heading-len <Table D>
 
-It drops a converter's extraction header, empty table columns, demotes over-long headings and headings ending in punctuation, and squeezes blank lines. Copy its result line into the reply. If the log shows body text removed (not just a tool header), revert that file and clean it by hand. Material under about two thousand characters that is clearly clean may be checked by eye, but still give the result line in the same format.
+It drops a converter's extraction header, empty table columns, demotes over-long headings and headings ending in punctuation, and squeezes blank lines. Copy its result line into the reply. If the log shows body text removed (not just a tool header), revert that file and clean it by hand. Material under about two thousand characters that is clearly clean may be checked by eye (copy it to the body file as it is), but still give the result line in the same format. Material with no text file to clean (pasted text, a transcribed picture): write its text to the body file yourself.
 Without Python: do the five actions by eye and mark the result line "manual".
 
 2.2 Extra cleaning required by params (for example masking class-A data).
 
-2.3 Term fixes: go through Table B one entry at a time, never with a bulk regex; check context to confirm each hit is the term. Record each change: original -> fixed -> section heading. None: "Term fixes: none".
+2.3 Term fixes: go through Table B one entry at a time, never with a bulk regex; check context to confirm each hit is the term.
+
+Make the changes of 2.2 and 2.3 in the body file with your edit tool, one place at a time; never write the body file out again whole. Record each change: original -> fixed -> section heading. None: "Term fixes: none".
 
 ## Step 3: key conclusions
 
@@ -186,6 +188,12 @@ Glossary and issue list: read and rewrite only when something is added; categori
 ## Output and delivery
 
 Each topic file starts with its metadata: YAML front matter per entity-yaml.md and the spec, or the text header from params. Then the key conclusions, then the cleaned body. New or changed basis lines in summary files are links to the source file (YAML mode).
+
+Assemble topic files by script; never type the body out again. Write the metadata and the key conclusions to <work>/head_<n>.md, then:
+
+  python3 scripts/assemble.py <work>/head_<n>.md <work>/body_<n>.md <work>/out/<file name>
+
+It writes the head, one blank line and the body file as it is, and refuses an existing output file, an empty body and unclosed front matter. Without Python: write the whole file yourself.
 
 Write everything to <work>/out/. Entity pages go to <work>/out/<entities_dir>/, the only allowed subfolder. The output always holds: the new or updated topic files, the file index and the readme (names.readme); plus any rewritten summary files (including a spec rewritten for expansion or new entities) and entity pages. Never include archived files, old copies or delete lists.
 

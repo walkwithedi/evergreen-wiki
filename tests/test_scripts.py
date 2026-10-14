@@ -99,6 +99,38 @@ class CleanTest(Tmp):
         self.assertNotIn("\n\n\n", text)
 
 
+class AssembleTest(Tmp):
+    BODY = "# Release review\n\nThe launch moves to May. | a | b |\n\n| 1 | 2 |\n"
+
+    def test_yaml_and_text_heads(self):
+        write(self.p("body.md"), "\n" + self.BODY)
+        for head in ('---\npartition: "05"\ntopic: "Release"\n---\n\n- Launch in May (source: Release review)\n',
+                     "Partition: 05\nTopic: Release\n\n- Launch in May (source: Release review)"):
+            with self.subTest(head=head[:12]):
+                out = self.p("out", head[:3].strip("-\n") or "yaml", "05_Release_minutes_Review.md")
+                os.makedirs(os.path.dirname(out), exist_ok=True)
+                write(self.p("head.md"), head)
+                line = run("assemble.py", self.p("head.md"), self.p("body.md"), out).stdout.strip()
+                self.assertEqual(line, f"assembled: 05_Release_minutes_Review.md | head {head.rstrip().count(chr(10)) + 1}"
+                                       f" lines | body {len(self.BODY.strip())} characters")
+                text = read(out)
+                self.assertEqual(text, head.rstrip("\n") + "\n\n" + self.BODY)
+                self.assertTrue(text.endswith(self.BODY))  # the body is copied as it is
+
+    def test_refused(self):
+        write(self.p("head.md"), "---\ntopic: \"x\"\n\n- conclusion\n")
+        write(self.p("body.md"), "  \n")
+        write(self.p("out.md"), "old")
+        p = run("assemble.py", self.p("head.md"), self.p("body.md"), self.p("out.md"), check=False)
+        self.assertEqual(p.returncode, 3)
+        for reason in ("output file exists", "body is empty", "front matter opened with --- is not closed"):
+            self.assertIn(reason, p.stdout)
+        self.assertEqual(read(self.p("out.md")), "old")
+        p = run("assemble.py", self.p("missing.md"), self.p("body.md"), self.p("new.md"), check=False)
+        self.assertEqual(p.returncode, 2)
+        self.assertFalse(os.path.exists(self.p("new.md")))
+
+
 class IndexTest(Tmp):
     def setUp(self):
         super().setUp()
