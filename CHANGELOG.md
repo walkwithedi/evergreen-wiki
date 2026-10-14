@@ -5,6 +5,7 @@ All three skills share one version number. To release, update this file, the "Ve
 ## Unreleased
 
 - tools/desktop-setup removed: tools/kb-client does the same steps in a page in the browser, double-clicked from kb-client.desktop at the top of the folder. READMEs and the download guide point there.
+- tools/kb-client: the local server no longer looks up the host name of 127.0.0.1 when it starts, which could hold the page back for a DNS timeout on some systems.
 
 ## 1.13.0
 
