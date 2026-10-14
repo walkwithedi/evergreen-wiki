@@ -106,7 +106,7 @@ def utf8_stdio():
         try:
             s.reconfigure(encoding="utf-8", errors="replace")
         except (AttributeError, ValueError):
-            pass
+            pass  # not a reconfigurable text stream (redirected or replaced); left as it is
 
 
 def setup_logging(level):
@@ -340,7 +340,7 @@ def check_timezone(name):
     try:
         tzinfo(name)
     except TimezoneUnavailable:
-        pass
+        pass  # the name is well formed; this Python only lacks the zone data to load it
     except ConfigError as e:
         return [str(e)]
     return []
