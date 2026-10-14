@@ -198,6 +198,7 @@ class App:
         self.idle = idle
         self.start_timeout = start_timeout
         self.agent = None
+        self.started = time.time()  # files changed after this count as new in the graph
         # The skills' work folder for this client: outside every library (mkdtemp makes it private), so
         # that their copies and output files are written there without a permission card each time.
         self.work = tempfile.mkdtemp(prefix="kb-client-work-")
@@ -362,6 +363,90 @@ def progress():
                               "result": b.get("result") or {}} for b in done],
                     "final_step": str(plan.get("final_step", ""))})
     return out
+
+
+GRAPH_MAX_NODES = 2000
+GRAPH_MAX_READ = 1024 * 1024  # bytes read of one file
+LINK_RE = re.compile(r"\[\[([^\[\]|#\n]+)(?:#[^\[\]|\n]*)?(?:\|[^\[\]\n]*)?\]\]")
+ENTITY_TYPE_RE = re.compile(r"^type:\s*[\"']?entity[\"']?\s*$", re.M)
+STAMP_RE = re.compile(r"\d{8}")
+
+
+def library_names(root):
+    il = kb_manage.init_library()
+    try:
+        return il.kbconf.load_library(root)["names"]
+    except Exception as e:  # an incomplete library falls back to the default names
+        log.info("cannot read the settings of %s: %s", root, e)
+        return il.kbconf.resolve_names()
+
+
+def graph(root, since=0.0):
+    """The links between the Markdown files of a library, for the graph on the page. Skips what the skills
+    skip when searching (the archive folder, names starting with an underscore or the snapshot prefix, old
+    versions with a time stamp), links leading out of the library and hidden folders. Nodes are file names
+    without .md: kind entity (in the entities folder or type: entity), summary (the spec and the summary
+    files), topic (any other file) or missing (linked to, no such file). new: changed since `since`."""
+    names = library_names(root)
+    summaries = {names[k].lower() for k in ("spec", "status_card", "index", "open_items", "changelog", "glossary")}
+    real_root = os.path.realpath(root)
+    files, truncated = [], False
+    for here, dirs, fnames in os.walk(real_root):
+        rel_here = os.path.relpath(here, real_root)
+        dirs[:] = sorted(d for d in dirs if not d.startswith(".") and not (rel_here == "." and d == names["archive_dir"])
+                         and os.path.realpath(os.path.join(here, d)).startswith(real_root + os.sep))
+        for f in sorted(fnames):
+            if not f.lower().endswith(".md") or f.startswith(("_", ".", names["snapshot_prefix"])):
+                continue
+            stem = f[:-3]
+            if names["old_suffix"] in stem and STAMP_RE.search(stem.split(names["old_suffix"])[-1]):
+                continue
+            full = os.path.join(here, f)
+            if not os.path.realpath(full).startswith(real_root + os.sep):
+                continue
+            if len(files) >= GRAPH_MAX_NODES:
+                truncated = True
+                break
+            files.append((stem, os.path.relpath(full, real_root), full))
+    nodes, edges = {}, set()
+    for stem, rel, full in files:
+        try:
+            with open(full, encoding="utf-8", errors="replace") as fh:
+                text = fh.read(GRAPH_MAX_READ)
+            mtime = os.path.getmtime(full)
+        except OSError as e:
+            log.info("cannot read %s: %s", rel, e)
+            continue
+        top = rel.split(os.sep)[0]
+        if top == names["entities_dir"] or ENTITY_TYPE_RE.search(text.split("\n---", 1)[0] if text.startswith("---") else ""):
+            kind = "entity"
+        elif (stem + ".md").lower() in summaries:
+            kind = "summary"
+        else:
+            kind = "topic"
+        nodes.setdefault(stem, {"id": stem, "kind": kind, "path": rel, "new": mtime >= since > 0})
+        if (stem + ".md").lower() == names["spec"].lower():
+            continue  # the spec's links are examples of the rules, not links between files
+        for m in LINK_RE.finditer(text):
+            target = m.group(1).strip()
+            target = target[:-3] if target.lower().endswith(".md") else target
+            target = target.rsplit("/", 1)[-1]
+            if target and target != stem:
+                edges.add((stem, target))
+    for _, target in sorted(edges):
+        if target not in nodes:
+            if len(nodes) >= GRAPH_MAX_NODES:
+                truncated = True
+                continue
+            nodes[target] = {"id": target, "kind": "missing", "path": "", "new": False}
+    links = [{"source": a, "target": b} for a, b in sorted(edges) if a in nodes and b in nodes]
+    degree = {}
+    for e in links:
+        degree[e["source"]] = degree.get(e["source"], 0) + 1
+        degree[e["target"]] = degree.get(e["target"], 0) + 1
+    for n in nodes.values():
+        n["links"] = degree.get(n["id"], 0)
+    return {"nodes": list(nodes.values()), "links": links, "truncated": truncated}
 
 
 def agent_places():
@@ -559,6 +644,12 @@ class Handler(BaseHTTPRequestHandler):
         path, query = g
         if path == "/api/state":
             return self.send(200, self.app.state())
+        if path == "/api/graph":
+            lib_id = (query.get("lib") or [""])[0]
+            lib = next((x for x in libraries() if x["id"] == lib_id and x["root"] and x["exists"]), None)
+            if lib is None:
+                return self.send(404, {"error": "library"})
+            return self.send(200, dict(graph(lib["root"], self.app.started), label=lib["label"], root=lib["root"]))
         if path == "/api/progress":
             return self.send(200, {"progress": progress()})
         if path == "/api/places":

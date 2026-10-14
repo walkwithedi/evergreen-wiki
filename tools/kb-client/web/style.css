@@ -246,3 +246,40 @@ textarea {
 .stage-why { margin: 6px 0 0; font-size: 13px; }
 .progress { margin: 4px 0 0; font-size: 13px; font-weight: 600; }
 .note.batch { color: var(--good); border-left: 3px solid var(--good); padding-left: 8px; }
+
+/* library graph */
+:root { --k-entity: #8a5a00; --k-summary: #2f6b4f; --k-topic: #3b5b8c; --k-missing: #9aa0a6; --k-new: #c2410c; }
+@media (prefers-color-scheme: dark) {
+  :root { --k-entity: #e0b45a; --k-summary: #7fc29d; --k-topic: #8fb2e8; --k-missing: #6b7177; --k-new: #fb923c; }
+}
+.graph-box { background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 8px;
+  padding: 12px 16px; width: min(1200px, 96vw); height: min(860px, 92vh); display: flex; flex-direction: column; gap: 8px; }
+.graph-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.graph-head h2 { margin: 0; font-size: 17px; margin-right: auto; }
+.graph-filters { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; }
+.graph-filters .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin: 0 4px; }
+.graph-filters .kind-entity .dot { background: var(--k-entity); }
+.graph-filters .kind-summary .dot { background: var(--k-summary); }
+.graph-filters .kind-topic .dot { background: var(--k-topic); }
+.graph-filters .kind-missing .dot { background: var(--k-missing); }
+.graph-body { flex: 1; min-height: 0; display: flex; gap: 8px; }
+#graph-svg { flex: 1; min-width: 0; height: 100%; background: var(--log); border: 1px solid var(--line); border-radius: 6px;
+  cursor: grab; touch-action: none; user-select: none; }
+.graph-side { width: 260px; overflow: auto; font-size: 13px; overflow-wrap: anywhere; }
+.graph-side:empty { display: none; }
+.graph-side ul { margin: 2px 0 8px; padding-left: 16px; }
+.side-head { margin: 8px 0 0; font-weight: 600; }
+.side-link { cursor: pointer; color: var(--accent); }
+.graph-obsidian { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+.edge { stroke: var(--line); stroke-width: 1; }
+.edge.hot { stroke: var(--accent); stroke-width: 2; }
+.node { cursor: pointer; }
+.node circle { stroke: var(--panel); stroke-width: 1.5; }
+.node.kind-entity circle { fill: var(--k-entity); }
+.node.kind-summary circle { fill: var(--k-summary); }
+.node.kind-topic circle { fill: var(--k-topic); }
+.node.kind-missing circle { fill: var(--k-missing); }
+.node circle.ring { fill: none; stroke: var(--k-new); stroke-width: 2.5; }
+.node.sel circle:not(.ring) { stroke: var(--ink); stroke-width: 2.5; }
+.node text { fill: var(--ink); paint-order: stroke; stroke: var(--log); stroke-width: 3px; pointer-events: none; }
+@media (max-width: 700px) { .graph-body { flex-direction: column; } .graph-side { width: auto; max-height: 30%; } }

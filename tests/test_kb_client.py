@@ -17,6 +17,7 @@ FAKE = os.path.join(ROOT, "tests", "kb_client_fake_opencode.py")
 CANCEL = object()
 sys.path.insert(0, os.path.join(ROOT, "tools", "kb-client"))
 import agent  # noqa: E402
+import kb_client  # noqa: E402
 
 
 def write(path, text):
@@ -324,6 +325,17 @@ class KbClientTest(unittest.TestCase):
         self.assertNotIn("/x/a.docx", json.dumps(p))  # counts, not file paths
         write(self.p("home", "kb", "work", "_intake-batches.json"), "{broken")
         self.assertEqual(self.server.get("/api/progress")[1], {"progress": []})
+
+    def test_graph_of_a_registered_library(self):
+        self.assertEqual(self.server.get("/api/graph?lib=work")[0], 404)
+        result, out, _ = self.setup_library()
+        self.assertEqual(result, "ok", out)
+        status, g = self.server.get("/api/graph?lib=work")
+        self.assertEqual(status, 200)
+        self.assertEqual((g["label"], g["root"]), ("Work", self.p("home", "kb", "work")))
+        self.assertIn("00_Status-Card", {n["id"] for n in g["nodes"]})
+        self.assertTrue(all(n["new"] for n in g["nodes"] if n["kind"] == "summary"))  # written after the start
+        self.assertEqual(self.server.get("/api/graph?lib=../etc")[0], 404)
 
     def test_quit(self):
         work = self.server.get("/api/state")[1]["work"]
@@ -776,6 +788,64 @@ class DecideTest(unittest.TestCase):
                     f'python3 {script} --text "line\nbreak"'):
             with self.subTest(bad=bad):
                 self.assertFalse(self.ok("bash", bad))
+
+
+@unittest.skipUnless(os.name == "posix", "the client runs on Linux desktops")
+class GraphTest(unittest.TestCase):
+    """The links between a library's files (kb_client.graph)."""
+
+    def setUp(self):
+        self.tmp = os.path.realpath(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.lib = os.path.join(self.tmp, "lib")
+        files = {
+            "00_Spec.md": "Cite sources as basis: [[02_Example]].\n",
+            "00_Status-Card.md": "- Release in May. basis: [[02_Plan]]\n- Owner. basis: [[02_Minutes|the minutes]]\n",
+            "02_Plan.md": '---\nentities: ["[[Atlas]]"]\n---\nSee [[Riverside Clinic#Address]] and [[02_Plan]].\n',
+            "02_Minutes.md": "---\ntype: topic\n---\nNo links.\n",
+            "03_Atlas-Team.md": '---\ntype: "entity"\n---\nTeam page.\n',
+            "Entities/Atlas.md": "---\ntype: entity\n---\n",
+            "Archive/02_Plan_old20260101-0900.md": "[[Archived Link]]\n",
+            "02_Plan_old20261001-1200.md": "[[Old Link]]\n",
+            "_run-log_2026.md": "[[Log Link]]\n",
+            "snapshot_00_Status-Card.md": "[[Snapshot Link]]\n",
+            ".hidden/x.md": "[[Hidden Link]]\n",
+            "notes.txt": "[[Text Link]]\n",
+        }
+        for rel, text in files.items():
+            write(os.path.join(self.lib, rel), text)
+        write(os.path.join(self.tmp, "outside", "secret.md"), "[[Outside Link]]\n")
+        os.symlink(os.path.join(self.tmp, "outside"), os.path.join(self.lib, "out"))
+        os.symlink(os.path.join(self.tmp, "outside", "secret.md"), os.path.join(self.lib, "02_Link.md"))
+        old = time.time() - 3600
+        for rel in ("00_Spec.md", "00_Status-Card.md", "02_Minutes.md", "03_Atlas-Team.md", "Entities/Atlas.md"):
+            os.utime(os.path.join(self.lib, rel), (old, old))
+
+    def test_nodes_and_links(self):
+        g = kb_client.graph(self.lib, time.time() - 60)
+        kinds = {n["id"]: n["kind"] for n in g["nodes"]}
+        self.assertEqual(kinds, {"00_Spec": "summary", "00_Status-Card": "summary", "02_Plan": "topic",
+                                 "02_Minutes": "topic", "03_Atlas-Team": "entity", "Atlas": "entity",
+                                 "Riverside Clinic": "missing"})
+        links = {(x["source"], x["target"]) for x in g["links"]}
+        self.assertEqual(links, {("00_Status-Card", "02_Plan"), ("00_Status-Card", "02_Minutes"),
+                                 ("02_Plan", "Atlas"), ("02_Plan", "Riverside Clinic")})
+        nodes = {n["id"]: n for n in g["nodes"]}
+        self.assertEqual([i for i, n in nodes.items() if n["new"]], ["02_Plan"])
+        self.assertEqual((nodes["02_Plan"]["links"], nodes["Atlas"]["path"]), (3, os.path.join("Entities", "Atlas.md")))
+        self.assertFalse(g["truncated"])
+        self.assertNotIn(self.tmp, json.dumps(g))  # paths relative to the library
+
+    def test_nothing_new_without_a_start_time(self):
+        self.assertFalse(any(n["new"] for n in kb_client.graph(self.lib)["nodes"]))
+
+    def test_node_limit(self):
+        limit = kb_client.GRAPH_MAX_NODES
+        self.addCleanup(setattr, kb_client, "GRAPH_MAX_NODES", limit)
+        kb_client.GRAPH_MAX_NODES = 3
+        g = kb_client.graph(self.lib)
+        self.assertTrue(g["truncated"])
+        self.assertLessEqual(len(g["nodes"]), 3)
 
 
 @unittest.skipUnless(os.name == "posix", "the client runs on Linux desktops")

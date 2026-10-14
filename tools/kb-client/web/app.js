@@ -16,6 +16,18 @@
       move: "Move a library",
       uninstall: "Uninstall",
       move_this: "Move",
+      graph: "Graph",
+      close: "Close",
+      graph_title: "Graph: {lib}",
+      kind_entity: "Entities", kind_summary: "Summary files", kind_topic: "Documents", kind_missing: "No page yet",
+      only_new: "Only new or changed",
+      graph_obsidian: "Open this folder in Obsidian for a fuller graph and backlinks:",
+      copy_path: "Copy path", copied: "Copied",
+      graph_truncated: "Too many files: only part of the library is shown.",
+      graph_empty: "The library has no files to show yet.",
+      graph_new: "New or changed since the client started",
+      links_out: "Links to", links_in: "Linked from",
+      view_graph: "View in the graph",
       welcome_title: "Welcome",
       welcome: "Set up installs the skills, makes a library and tells your agent about it; choose it again to add another library. Back up, Roll back, Move and Uninstall manage what Set up wrote. Every step shows a preview before it changes anything.",
       cancel_step: "Cancel this step",
@@ -144,6 +156,18 @@
       move: "移动知识库",
       uninstall: "卸载",
       move_this: "移动",
+      graph: "关系图",
+      close: "关闭",
+      graph_title: "关系图：{lib}",
+      kind_entity: "实体", kind_summary: "汇总文件", kind_topic: "文档", kind_missing: "未建页",
+      only_new: "只看本次新增或更新",
+      graph_obsidian: "用 Obsidian 打开这个文件夹，可以看到更完整的关系图和反向链接：",
+      copy_path: "复制路径", copied: "已复制",
+      graph_truncated: "文件太多，只显示了库的一部分。",
+      graph_empty: "库里还没有可以显示的文件。",
+      graph_new: "客户端启动后新增或更新",
+      links_out: "链接到", links_in: "被链接",
+      view_graph: "在关系图中查看",
       welcome_title: "欢迎",
       welcome: "「安装与建库」会装好技能、建一个知识库并告诉助手；要再加一个库时再选一次。备份、回滚、移动和卸载用来管理安装写下的内容。每一步改动前都会先给预览。",
       cancel_step: "取消这一步",
@@ -333,6 +357,11 @@
         var b = el("button", { type: "button", "class": "quiet small" }, t("move_this"));
         b.addEventListener("click", function () { startAction("move", lib.id); });
         li.appendChild(b);
+      }
+      if (lib.root && lib.exists) {
+        var g = el("button", { type: "button", "class": "quiet small" }, t("graph"));
+        g.addEventListener("click", function () { openGraph(lib.id); });
+        li.appendChild(g);
       }
       libs.appendChild(li);
     });
@@ -830,6 +859,209 @@
     else if (ev.type === "reset") clearChat();
   }
 
+  // ---------- graph ----------
+  // The links between the library's files, laid out by a small force simulation and drawn as SVG; nothing
+  // is loaded from elsewhere. Files changed since the client started get a ring.
+
+  var KINDS = ["entity", "summary", "topic", "missing"];
+  var SVGNS = "http://www.w3.org/2000/svg";
+  var graph = null;
+
+  function svgEl(name, attrs) {
+    var e = document.createElementNS(SVGNS, name);
+    Object.keys(attrs || {}).forEach(function (k) { e.setAttribute(k, attrs[k]); });
+    return e;
+  }
+
+  function layout(nodes, links) {
+    var n = nodes.length, byId = {};
+    nodes.forEach(function (d, i) {
+      var a = i * 2.399963, r = 12 * Math.sqrt(i + 1);  // a sunflower spiral as the start
+      d.x = r * Math.cos(a); d.y = r * Math.sin(a); d.vx = 0; d.vy = 0;
+      byId[d.id] = d;
+    });
+    var edges = links.map(function (l) { return [byId[l.source], byId[l.target]]; });
+    var rounds = n > 800 ? 60 : n > 300 ? 150 : 300;
+    for (var it = 0; it < rounds; it++) {
+      var cool = 1 - it / rounds;
+      for (var i = 0; i < n; i++) {
+        var p = nodes[i];
+        for (var j = i + 1; j < n; j++) {
+          var q = nodes[j], dx = p.x - q.x, dy = p.y - q.y, d2 = dx * dx + dy * dy + 0.01;
+          if (d2 > 90000) continue;
+          var f = 900 / d2;
+          p.vx += dx * f; p.vy += dy * f; q.vx -= dx * f; q.vy -= dy * f;
+        }
+      }
+      edges.forEach(function (e) {
+        var dx = e[1].x - e[0].x, dy = e[1].y - e[0].y, d = Math.sqrt(dx * dx + dy * dy) || 1;
+        var f = (d - 60) * 0.02;
+        e[0].vx += dx / d * f; e[0].vy += dy / d * f; e[1].vx -= dx / d * f; e[1].vy -= dy / d * f;
+      });
+      nodes.forEach(function (d) {
+        var pull = d.links ? 0.004 : 0.02;  // files without links stay near the rest instead of drifting off
+        d.vx -= d.x * pull; d.vy -= d.y * pull;
+        var v = Math.sqrt(d.vx * d.vx + d.vy * d.vy), cap = 20 * cool + 1;
+        if (v > cap) { d.vx *= cap / v; d.vy *= cap / v; }
+        d.x += d.vx; d.y += d.vy; d.vx *= 0.5; d.vy *= 0.5;
+      });
+    }
+    return byId;
+  }
+
+  function openGraph(libId, onlyNew) {
+    api("GET", "/api/graph?lib=" + encodeURIComponent(libId)).then(function (g) {
+      graph = { data: g, byId: null, shown: {}, onlyNew: !!onlyNew, view: { x: 0, y: 0, k: 1 }, selected: "" };
+      KINDS.forEach(function (k) { graph.shown[k] = true; });
+      $("graph-title").textContent = t("graph_title", { lib: g.label });
+      $("graph-root").textContent = g.root;
+      $("graph-copy").textContent = t("copy_path");
+      var msg = !g.nodes.length ? t("graph_empty") : (g.truncated ? t("graph_truncated") : "");
+      $("graph-note").textContent = msg;
+      show($("graph-note"), !!msg);
+      graph.byId = layout(g.nodes, g.links);
+      graphFilters();
+      show($("graph"), true);
+      fitGraph();
+      drawGraph();
+    }).catch(function (e) { note(String(e.message || e), "error"); });
+  }
+
+  function graphFilters() {
+    var box = $("graph-filters");
+    box.textContent = "";
+    KINDS.forEach(function (k) {
+      if (!graph.data.nodes.some(function (d) { return d.kind === k; })) return;
+      var c = el("input", { type: "checkbox" });
+      c.checked = graph.shown[k];
+      c.addEventListener("change", function () { graph.shown[k] = c.checked; drawGraph(); });
+      var l = el("label", { "class": "check kind-" + k });
+      l.appendChild(c); l.appendChild(el("span", { "class": "dot" })); l.appendChild(document.createTextNode(t("kind_" + k)));
+      box.appendChild(l);
+    });
+    if (graph.data.nodes.some(function (d) { return d.new; })) {
+      var c = el("input", { type: "checkbox" });
+      c.checked = graph.onlyNew;
+      c.addEventListener("change", function () { graph.onlyNew = c.checked; drawGraph(); });
+      var l = el("label", { "class": "check" });
+      l.appendChild(c); l.appendChild(document.createTextNode(t("only_new")));
+      box.appendChild(l);
+    }
+  }
+
+  function visible(d) {
+    if (!graph.shown[d.kind]) return false;
+    if (!graph.onlyNew) return true;
+    if (d.new) return true;
+    return graph.data.links.some(function (l) {  // the neighbours of a new file stay, for context
+      return (l.source === d.id && graph.byId[l.target].new) || (l.target === d.id && graph.byId[l.source].new);
+    });
+  }
+
+  function fitGraph() {
+    var svg = $("graph-svg"), w = svg.clientWidth || 800, h = svg.clientHeight || 500;
+    var xs = graph.data.nodes.map(function (d) { return d.x; }), ys = graph.data.nodes.map(function (d) { return d.y; });
+    if (!xs.length) { graph.view = { x: w / 2, y: h / 2, k: 1 }; return; }
+    var minX = Math.min.apply(null, xs), maxX = Math.max.apply(null, xs);
+    var minY = Math.min.apply(null, ys), maxY = Math.max.apply(null, ys);
+    var k = Math.min(2, 0.9 * Math.min(w / (maxX - minX + 240), h / (maxY - minY + 80)));
+    graph.view = { k: k, x: w / 2 - k * (minX + maxX) / 2, y: h / 2 - k * (minY + maxY) / 2 };
+  }
+
+  function radius(d) { return 4 + Math.min(10, Math.sqrt(d.links) * 2); }
+
+  function drawGraph() {
+    var svg = $("graph-svg");
+    svg.textContent = "";
+    var v = graph.view, root = svgEl("g", { transform: "translate(" + v.x + "," + v.y + ") scale(" + v.k + ")" });
+    svg.appendChild(root);
+    var on = {};
+    graph.data.nodes.forEach(function (d) { on[d.id] = visible(d); });
+    var sel = graph.selected;
+    graph.data.links.forEach(function (l) {
+      if (!on[l.source] || !on[l.target]) return;
+      var a = graph.byId[l.source], b = graph.byId[l.target];
+      root.appendChild(svgEl("line", { x1: a.x, y1: a.y, x2: b.x, y2: b.y,
+        "class": "edge" + (sel && (l.source === sel || l.target === sel) ? " hot" : "") }));
+    });
+    graph.data.nodes.forEach(function (d) {
+      if (!on[d.id]) return;
+      var g = svgEl("g", { "class": "node kind-" + d.kind + (d.new ? " new" : "") + (d.id === sel ? " sel" : ""),
+                           transform: "translate(" + d.x + "," + d.y + ")" });
+      if (d.new) g.appendChild(svgEl("circle", { r: radius(d) + 4, "class": "ring" }));
+      g.appendChild(svgEl("circle", { r: radius(d) }));
+      var title = svgEl("title");
+      title.textContent = d.id + (d.new ? " (" + t("graph_new") + ")" : "");
+      g.appendChild(title);
+      if (d.kind !== "topic" || d.links >= 3 || d.id === sel || v.k > 1.4) {
+        var label = svgEl("text", { x: radius(d) + 3, y: 4, "font-size": (12 / Math.max(v.k, 0.6)).toFixed(1) });
+        label.textContent = d.id.length > 40 ? d.id.slice(0, 40) + "…" : d.id;
+        g.appendChild(label);
+      }
+      g.addEventListener("pointerdown", function (e) { dragNode(e, d); });
+      root.appendChild(g);
+    });
+    graphSide();
+  }
+
+  function graphSide() {
+    var side = $("graph-side"), d = graph.byId && graph.byId[graph.selected];
+    side.textContent = "";
+    if (!d) return;
+    side.appendChild(el("strong", {}, d.id));
+    side.appendChild(el("div", { "class": "hint" }, t("kind_" + d.kind) + (d.path ? " · " + d.path : "")));
+    if (d.new) side.appendChild(el("div", { "class": "hint" }, t("graph_new")));
+    [["links_out", "source", "target"], ["links_in", "target", "source"]].forEach(function (x) {
+      var ids = graph.data.links.filter(function (l) { return l[x[1]] === d.id; }).map(function (l) { return l[x[2]]; });
+      if (!ids.length) return;
+      side.appendChild(el("p", { "class": "side-head" }, t(x[0]) + " (" + ids.length + ")"));
+      var ul = el("ul");
+      ids.forEach(function (id) {
+        var a = el("li", { "class": "side-link" }, id);
+        a.addEventListener("click", function () { graph.selected = id; drawGraph(); });
+        ul.appendChild(a);
+      });
+      side.appendChild(ul);
+    });
+  }
+
+  // Dragging a node moves it; a click without movement selects it.
+  function dragNode(e, d) {
+    e.stopPropagation();
+    var v = graph.view, sx = e.clientX, sy = e.clientY, ox = d.x, oy = d.y, moved = false;
+    function move(m) {
+      if (Math.abs(m.clientX - sx) + Math.abs(m.clientY - sy) > 3) moved = true;
+      if (!moved) return;
+      d.x = ox + (m.clientX - sx) / v.k; d.y = oy + (m.clientY - sy) / v.k;
+      drawGraph();
+    }
+    function up() {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      if (!moved) { graph.selected = graph.selected === d.id ? "" : d.id; drawGraph(); }
+    }
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+
+  function panGraph(e) {
+    var v = graph.view, sx = e.clientX, sy = e.clientY, ox = v.x, oy = v.y;
+    function move(m) { v.x = ox + m.clientX - sx; v.y = oy + m.clientY - sy; drawGraph(); }
+    function up() { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); }
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+
+  function zoomGraph(e) {
+    e.preventDefault();
+    var v = graph.view, r = $("graph-svg").getBoundingClientRect();
+    var px = e.clientX - r.left, py = e.clientY - r.top, k = Math.max(0.1, Math.min(6, v.k * (e.deltaY < 0 ? 1.15 : 1 / 1.15)));
+    v.x = px - (px - v.x) * k / v.k; v.y = py - (py - v.y) * k / v.k; v.k = k;
+    drawGraph();
+  }
+
+  function closeGraph() { show($("graph"), false); graph = null; }
+
   // ---------- intake stages and progress ----------
   // The stage comes from the skill script a tool step runs (agent.py stage_script), never from the
   // model's wording, so it costs no tokens and cannot drift.
@@ -885,6 +1117,9 @@
     if (stages.announced[p.id]) return;
     stages.announced[p.id] = true;
     note(t("run_card", { lib: p.label, total: p.batches, written: p.written }), "batch");
+    var b = el("button", { type: "button", "class": "quiet small" }, t("view_graph"));
+    b.addEventListener("click", function () { openGraph(p.id, true); });
+    $("messages").lastChild.appendChild(b);
   }
 
   // Batch cards for batches finished since the page last looked, the run card when a run is wrapped up
@@ -1051,6 +1286,15 @@
 
   translate();
   loadProgress();  // what is already finished is known, so only new batches get a card
+  $("graph-close").addEventListener("click", closeGraph);
+  $("graph-svg").addEventListener("pointerdown", function (e) { if (graph) panGraph(e); });
+  $("graph-svg").addEventListener("wheel", function (e) { if (graph) zoomGraph(e); }, { passive: false });
+  $("graph-copy").addEventListener("click", function () {
+    var text = $("graph-root").textContent;
+    var done = function () { $("graph-copy").textContent = t("copied"); };
+    if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, function () {});
+    else { var r = document.createRange(); r.selectNodeContents($("graph-root")); getSelection().removeAllRanges(); getSelection().addRange(r); }
+  });
   Array.prototype.forEach.call(document.querySelectorAll("[data-action]"), function (b) {
     b.addEventListener("click", function () { startAction(b.getAttribute("data-action")); });
   });
@@ -1081,6 +1325,7 @@
   });
   document.addEventListener("keydown", function (k) {
     if (k.key === "Escape" && browse) closeBrowser();
+    else if (k.key === "Escape" && graph) closeGraph();
   });
   $("quit").addEventListener("click", function () {
     if (job && !window.confirm(t("quit_confirm"))) return;

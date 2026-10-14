@@ -81,6 +81,24 @@
   </section>
 </main>
 
+<div class="modal" id="graph" hidden>
+  <div class="graph-box" role="dialog" aria-modal="true" aria-labelledby="graph-title">
+    <div class="graph-head">
+      <h2 id="graph-title"></h2>
+      <div class="graph-filters" id="graph-filters"></div>
+      <button type="button" class="quiet" id="graph-close" data-t="close">Close</button>
+    </div>
+    <div class="graph-body">
+      <svg id="graph-svg" aria-label="graph"></svg>
+      <aside class="graph-side" id="graph-side"></aside>
+    </div>
+    <p class="hint" id="graph-note" hidden></p>
+    <p class="hint graph-obsidian"><span data-t="graph_obsidian">Open this folder in Obsidian for a fuller graph and backlinks:</span>
+      <code id="graph-root"></code>
+      <button type="button" class="quiet small" id="graph-copy" data-t="copy_path">Copy path</button></p>
+  </div>
+</div>
+
 <div class="modal" id="browser" hidden>
   <div class="browser" role="dialog" aria-modal="true" aria-labelledby="browse-title">
     <h2 id="browse-title">Choose a folder</h2>
