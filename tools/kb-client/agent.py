@@ -838,10 +838,11 @@ class Agent:
         """reply: "once", "always" (OpenCode stops asking for the request's `always` patterns) or "reject"."""
         if rid not in self.permissions or reply not in REPLIES:
             return False
+        ev = self.permissions[rid]  # taken now: OpenCode's "replied" event may remove it before the reply returns
         code, _ = self.call("POST", f"/permission/{quote(rid, safe='')}/reply", {"reply": REPLIES[reply]})
         if code in (200, 204):
-            ev = self.permissions.pop(rid, None)
-            if reply == "always" and ev and ev.get("always"):
+            self.permissions.pop(rid, None)
+            if reply == "always" and ev.get("always"):
                 with self.lock:
                     kept = self.always.setdefault(ev["permission"], [])
                     kept += [x for x in ev["always"] if x not in kept]
