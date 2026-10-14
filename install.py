@@ -202,7 +202,7 @@ MSG = {
 
 class Asker:
     """Reads answers from stdin; works with a terminal and with piped input (tests).
-    tools/desktop-setup puts dialogs behind the same three methods."""
+    tools/kb-client answers the same three methods from a page in the browser."""
 
     def __init__(self, lang="en"):
         self.m = MSG[lang]
