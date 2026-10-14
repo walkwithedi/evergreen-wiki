@@ -1147,6 +1147,7 @@ class SkillsTest(unittest.TestCase):
         self.assertFalse(os.path.exists(self.p("evil")))
 
 
+@unittest.skipUnless(os.name == "posix", "the client runs on Linux desktops")
 class LockedTargetTest(unittest.TestCase):
     def test_locked_target(self):
         tmp = tempfile.mkdtemp()
