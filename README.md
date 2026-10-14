@@ -43,7 +43,7 @@ you --ask--> agent --reads--> instructions line ("I keep knowledge bases: ...")
                      +-- library folder: Markdown files, status card, file index
 ```
 
-The installer (`install.py`) puts these in place and later backs them up, rolls back, moves a library or uninstalls. [tools/desktop-setup](tools/desktop-setup/) shows the same steps as dialogs on a Linux desktop, [tools/kb-client](tools/kb-client/) as a page in the browser. [tools/doc2kb](tools/doc2kb/) converts whole folders of documents to Markdown on its own.
+The installer (`install.py`) puts these in place and later backs them up, rolls back, moves a library or uninstalls. [tools/kb-client](tools/kb-client/) shows the same steps as a page in the browser. [tools/doc2kb](tools/doc2kb/) converts whole folders of documents to Markdown on its own.
 
 ### Which download
 
@@ -53,7 +53,7 @@ Every release on the [Releases](../../releases) page carries these files:
 | --- | --- | --- |
 | `kb-note-<version>.zip`, `kb-query-<version>.zip`, `kb-incremental-<version>.zip` | one skill each, English trigger phrases | uploading the skills to claude.ai or the Claude apps |
 | the same names ending in `-zh.zip` | the same skills with Chinese trigger phrases | the same, in Chinese |
-| `evergreen-wiki-v<version>.zip` | the whole repository: skills, `install.py` with its backup, rollback, move and uninstall commands, tools/desktop-setup, tools/kb-client, tools/doc2kb, the sample library and the docs | installing for a terminal agent without git, on a computer without network, or from the Linux desktop tool |
+| `evergreen-wiki-v<version>.zip` | the whole repository: skills, `install.py` with its backup, rollback, move and uninstall commands, tools/kb-client, tools/doc2kb, the sample library and the docs | installing for a terminal agent without git, on a computer without network, or from the page in the browser on a Linux desktop |
 | `doc2kb-v<version>.zip` | the document converter alone | converting folders of documents to Markdown without the skills |
 
 ### Which path
@@ -90,12 +90,10 @@ Later, from the same folder: `python3 install.py backup`, `rollback`, `move <lib
 ### On a Linux desktop, without a terminal
 
 1. Download `evergreen-wiki-v<version>.zip` from [Releases](../../releases) and unzip it.
-2. In `tools/desktop-setup`, double-click `evergreen-wiki-setup.desktop` (Knowledge base setup); the first time, choose to trust and launch it.
-3. In the menu, choose Set up: pick your agent, install the skills, set up a library and let the agent know about it. The same menu backs up, rolls back, moves a library and uninstalls.
+2. In the top folder, double-click `kb-client.desktop` (Knowledge base); the first time, choose to trust and launch it. The page opens in the default browser.
+3. Choose Set up: pick your agent, install the skills, set up a library and let the agent know about it. The same page backs up, rolls back, moves a library and uninstalls, lists the registered libraries and, with OpenCode set up, lets you talk to OpenCode there.
 
-It needs Python 3.8 or later and zenity for the dialogs (without zenity it asks in the terminal window). Details in [tools/desktop-setup](tools/desktop-setup/).
-
-The same steps also run in the browser: double-click `kb-client.desktop` (Knowledge base) in the top folder instead (the same entry is also in `tools/kb-client`). It needs Python 3.8 or later and a browser, lists the registered libraries on the page and, with OpenCode set up, lets you talk to OpenCode there. Details in [tools/kb-client](tools/kb-client/).
+It needs Python 3.8 or later and a browser. Details in [tools/kb-client](tools/kb-client/).
 
 ### In claude.ai or the Claude apps (Google Drive)
 
@@ -150,9 +148,7 @@ Scripts need Python 3.8+ and nothing outside the standard library. Without Pytho
 
 [tools/doc2kb](tools/doc2kb/) is the converter as a stand-alone tool: it turns whole folders of Office files, PDFs and mail into one Markdown knowledge base with an index, from a Linux desktop dialog or a cron job, incrementally. Each release attaches it as `doc2kb-<version>.zip`.
 
-[tools/desktop-setup](tools/desktop-setup/) runs the installer and its backup, rollback, move and uninstall commands as a menu with dialogs on a Linux desktop, for people who do not use a terminal; it comes with the evergreen-wiki zip.
-
-[tools/kb-client](tools/kb-client/) does the same in a page in the browser, served from your own computer, lists the registered libraries and the state of the skills, and holds a conversation with OpenCode (file material, quick notes, health checks, questions) with permission requests answered on the page; it comes with the evergreen-wiki zip.
+[tools/kb-client](tools/kb-client/) runs the installer and its backup, rollback, move and uninstall commands in a page in the browser, served from your own computer, for people who do not use a terminal, lists the registered libraries and the state of the skills, and holds a conversation with OpenCode (file material, quick notes, health checks, questions) with permission requests answered on the page; it comes with the evergreen-wiki zip.
 
 ## Development
 
