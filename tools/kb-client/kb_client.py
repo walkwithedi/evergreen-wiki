@@ -16,8 +16,10 @@ opens, so other pages in the browser cannot use it. The questions, previews and 
 install.py and kb_manage.py: a step runs in a worker thread, its questions go to the page and wait for
 the answer, and what it prints is streamed to the page. The conversation on the page goes to an OpenCode
 server this client starts on 127.0.0.1 (agent.py); the page never talks to OpenCode itself. The folder
-browser only lists folders; this file writes nothing but the current conversation's id. Python 3
-standard library only.
+browser only lists folders. The Skills section lists the skills OpenCode reads and manages the ones that
+are not the knowledge-base skills (skills_admin.py: backup before an edit, restore, import, a new skill
+from a template); the knowledge-base skills are locked and only upgraded by Set up. Otherwise this file
+writes nothing but the current conversation's id. Python 3 standard library only.
 """
 import argparse
 import getpass
@@ -44,11 +46,13 @@ import kb_manage  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import agent as agent_mod  # noqa: E402
+import skills_admin  # noqa: E402
 
 log = logging.getLogger("kb_client")
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s.%(funcName)s:%(lineno)d - %(message)s"
 WEB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
-ACTIONS = ("setup", "backup", "rollback", "move", "uninstall")
+ACTIONS = ("setup", "backup", "rollback", "move", "uninstall",
+           "skill_backup", "skill_restore", "skill_import", "skill_new")
 LANGS = ("en", "zh")
 MAX_BODY = 64 * 1024
 CHAT_ACTIONS = {name: name for name in ("start", "recheck", "send", "new", "stop", "permission", "question", "terminal", "forget")}
@@ -341,8 +345,15 @@ class App:
 
 
 def run_action(action, asker, lang, options, lib_id=None):
-    """Runs one step; returns the exit code of kb_manage (0 when it went through), None for set up."""
+    """Runs one step; returns the exit code of kb_manage (0 when it went through), None for set up.
+    For the skill steps lib_id is the skill's folder name."""
     m = MSG[lang]
+    if action.startswith("skill_"):
+        try:
+            return skill_action(action, asker(lang), lang, lib_id)
+        except skills_admin.Refused as e:
+            print(str(e))
+            return 1
     if action == "setup":
         install.wizard(asker, lang, options.get("agent"), options.get("preset"), options.get("descriptions"),
                        preset_default="work", agent_default="opencode")
@@ -360,6 +371,60 @@ def run_action(action, asker, lang, options, lib_id=None):
         parent = asker(lang).ask(m["move_to"], kind="folder")
         return kb_manage.main(["move", lib_id, "--to", parent, "--lang", lang], asker, install.MANAGE_DEFAULTS)
     return kb_manage.main([action, "--lang", lang], asker, install.MANAGE_DEFAULTS)
+
+
+def skill_action(action, q, lang, name):
+    """The skill steps of the Skills section; 0 when done, 1 when cancelled."""
+    sm = skills_admin.MSG[lang]
+    if action == "skill_backup":
+        print(sm["backed_up"].format(name=name, path=skills_admin.backup(name, lang)))
+        return 0
+    if action == "skill_restore":
+        skill = skills_admin.find(name, lang)
+        found = skills_admin.backups(name)
+        if not found:
+            raise skills_admin.Refused(sm["no_backups"].format(name=name))
+        when = q.choose(sm["pick_backup"].format(name=name), [(b, b) for b in found], found[0])
+        if not q.yes(sm["restore_confirm"].format(folder=skill["folder"], when=when), default=False):
+            print(sm["cancelled"])
+            return 1
+        skills_admin.restore(name, when, lang)
+        print(sm["restored"].format(name=name, when=when))
+        return 0
+    if action == "skill_new":
+        new = q.ask(sm["new_name"]).strip().lower()
+        skills_admin.taken(new, lang)
+        purpose = q.ask(sm["new_purpose"]).strip()
+        if not purpose:
+            print(sm["cancelled"])
+            return 1
+        path = os.path.join(skills_admin.own_folder(), new)
+        if not q.yes(sm["new_confirm"].format(path=path)):
+            print(sm["cancelled"])
+            return 1
+        print(sm["created"].format(path=skills_admin.create(new, purpose, lang)))
+        print(f"skill: {new}")
+        return 0
+    # skill_import
+    kind = q.choose(sm["source_kind"], [("folder", sm["from_folder"]), ("zip", sm["from_zip"])], "folder")
+    with tempfile.TemporaryDirectory(prefix="kb-client-skill-") as tmp:
+        if kind == "zip":
+            src = skills_admin.unpack_zip(q.ask(sm["zip_path"]).strip(), tmp, lang)
+        else:
+            src = q.ask(sm["pick_folder"], kind="folder")
+        top, info, n, size = skills_admin.check_folder(src, lang)
+        new = os.path.basename(top) if kind == "folder" or top != tmp else info["name"]
+        new = new if skills_admin.NAME_RE.fullmatch(new or "") else info["name"]
+        skills_admin.taken(new, lang)
+        dest = os.path.join(skills_admin.own_folder(), new)
+        print(sm["preview"].format(name=new, desc=info["description"][:300], n=n, size=max(1, size // 1024),
+                                   dest=dest))
+        if not q.yes(sm["import_confirm"]):
+            print(sm["cancelled"])
+            return 1
+        skills_admin.install_copy(top, new)
+    print(sm["imported"].format(name=new, dest=dest))
+    return 0
 
 
 # ---------- what the page shows ----------
@@ -524,7 +589,8 @@ def agent_places():
     read = skills + [install.AGENT_HOMES["opencode"], os.path.dirname(kb_manage.registry_path())]
     read = [p for p in read if os.path.isdir(p)] + open_run_sources()
     return {"write": write, "read": read,
-            "scripts": [os.path.join(p, "scripts") for p in skills if os.path.isdir(os.path.join(p, "scripts"))]}
+            "scripts": [os.path.join(p, "scripts") for p in skills if os.path.isdir(os.path.join(p, "scripts"))],
+            "locked": skills_admin.locked_folders()}
 
 
 def skills_installed():
@@ -794,6 +860,8 @@ class Handler(BaseHTTPRequestHandler):
             if lib is None:
                 return self.send(404, {"error": "library"})
             return self.send(200, dict(graph(lib["root"], self.app.started), label=lib["label"], root=lib["root"]))
+        if path == "/api/skills":
+            return self.send(200, {"skills": skills_admin.list_skills(), "folder": skills_admin.own_folder()})
         if path == "/api/progress":
             return self.send(200, {"progress": progress()})
         if path == "/api/places":
@@ -833,7 +901,8 @@ class Handler(BaseHTTPRequestHandler):
             action = body.get("action")
             if action not in ACTIONS:
                 return self.send(400, {"error": "unknown action"})
-            job = self.app.start(action, body.get("library"))
+            arg = body.get("skill") if action.startswith("skill_") else body.get("library")
+            job = self.app.start(action, arg if isinstance(arg, str) else None)
             if job is None:
                 return self.send(409, {"error": MSG[self.app.lang]["busy"]})
             return self.send(200, {"job": job.id})

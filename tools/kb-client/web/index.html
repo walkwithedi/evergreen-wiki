@@ -33,6 +33,16 @@
       <p class="hint" id="remembered" hidden><span id="remembered-text"></span>
         <button type="button" class="quiet small" id="forget" data-t="forget">Clear</button></p>
     </section>
+    <section class="skills-box">
+      <h2 data-t="skills_title">Skills</h2>
+      <p class="hint skills-intro" data-t="skills_intro">What the assistant can do. Knowledge-base skills are locked and only upgraded; the others can be changed, imported or created.</p>
+      <div class="skill-tools">
+        <button type="button" class="small" id="skill-new" data-t="skill_new">New skill</button>
+        <button type="button" class="small" id="skill-import" data-t="skill_import">Import</button>
+      </div>
+      <ul class="skills" id="skills"></ul>
+      <p class="empty" id="skills-empty" data-t="skills_none_found" hidden>No skills found where OpenCode reads them.</p>
+    </section>
   </aside>
 
   <section class="work">
@@ -54,6 +64,7 @@
         <button type="button" class="quiet" id="cancel" data-t="cancel_step" hidden>Cancel this step</button>
       </div>
       <p class="intro" id="welcome" data-t="welcome">Pick an item on the left.</p>
+      <div class="ideas" id="ideas" role="region" aria-roledescription="carousel"></div>
       <pre class="log" id="log" hidden></pre>
       <form class="ask" id="ask" hidden></form>
       <p class="result" id="result" hidden></p>
@@ -80,6 +91,7 @@
         <ol class="stage-list" id="stage-list"></ol>
         <p class="stage-why" id="stage-why"></p>
         <p class="progress" id="progress" hidden></p>
+        <div class="ideas mini" id="ideas-mini" role="region" aria-roledescription="carousel"></div>
       </div>
       <div class="messages" id="messages"></div>
       <div class="cards" id="cards"></div>

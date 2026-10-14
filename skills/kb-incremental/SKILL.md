@@ -1,19 +1,20 @@
 ---
 name: kb-incremental
-description: Files material (Office, PDF, mail, pictures, text) into an evergreen Markdown knowledge base (Google Drive folder or local/Obsidian vault). Five modes. Intake - "file these", "add to the knowledge base", "intake", "continue intake", "finish intake", or uploads: files it by the library spec, a large folder in batches after a plan, removes duplicates, spots new versions, flags changed conclusions, updates the index. Archive - "archive old versions", "clean up duplicates": moves old copies to the archive after a preview, never deletes. Health check - "check the knowledge base", "health check": reports stale, duplicate and missing files only. Init and first-time guide - "get started with the knowledge base", "first time", "set up a knowledge base", "new library", "init": sets up or connects a library step by step. Quick-note filing - "file my quick notes", "notes are filed": files kb-note notes. Use it for any filing or setup, even without these words. Not for questions (kb-query) or saving one note (kb-note).
+description: Files Office, PDF, mail, pictures and text into an evergreen Markdown library (Google Drive or local/Obsidian). Six modes. Intake - "file these", "add to the knowledge base", "intake", "continue intake", "finish intake", or uploads: files each item by the library spec (fast by default: searchable at once), large folders in batches, removes duplicates, spots new versions, updates the index. Consolidation - "consolidate": adds key conclusions to filed items, flags changed conclusions, updates the status card after review. Archive - "archive old versions", "clean up duplicates": moves old copies to the archive after a preview. Health check - "check the knowledge base", "health check": reports only. Init - "get started with the knowledge base", "first time", "set up a knowledge base", "new library", "init": sets up or connects a library Quick-note filing - "file my quick notes", "notes are filed". Use it for any filing or setup even without these words. Not for questions (kb-query) or saving one note (kb-note).
 ---
 
 # Knowledge base intake, archive, health check and init
 
-Version: 1.15.0
+Version: 1.16.0
 
 ## Modes
 
-- Intake: steps 0 to 5 below.
+- Intake: fast by default. When _kb.json intake.mode is fast (also when it is missing) and the request does not ask for a full intake ("full intake", "完整入库"), read references/fast.md after step 0: each item goes through Check 1, steps 1, 2 and 4 and is delivered at once, searchable as soon as it is written; step 3 and step 5 wait for consolidation. intake.mode full, or a request for a full intake: steps 0 to 5 below for every item.
+- Consolidation: "consolidate", "整合", or the choice offered after a fast intake or by the reminder in references/config.md, section 5. After step 0, read references/consolidate.md: it writes the key conclusions of the queued files (step 3), judges the triggers (step 5) and rewrites the summary files once per round after the user reviews the changes.
 - Archive: after step 0, read references/archive.md and follow it instead of the five steps.
 - Health check: after step 0, read references/lint.md. Report only, change nothing.
-- Quick-note filing: read references/notes.md and follow its two rounds; its intake part still uses step 0 and the five steps.
-- Batch mode: intake of files or folders on disk that make more than one batch, or "continue intake" / "finish intake". After step 0 and Check 1, read references/batches.md: it plans the batches, runs steps 1 to 4 and delivery once per batch, and keeps step 5 and topic expansion's spec rewrite for one final step.
+- Quick-note filing: read references/notes.md and follow its two rounds; its intake part still uses step 0 and the intake mode of the library.
+- Batch mode: intake of files or folders on disk that make more than one batch, or "continue intake" / "finish intake". After step 0 and Check 1, read references/batches.md: it plans the batches, runs steps 1 to 4 and delivery per batch (per item in fast mode), and keeps step 5 and topic expansion's spec rewrite for one final step (consolidation in fast mode).
 - Init and getting started: read references/init.md and follow it (getting started looks at the environment first; the existing-library branch runs step 0 first; the new-library branch skips it).
 - One request asking for intake and archive: do the intake first. With delivery = direct there is nothing to archive afterwards. With delivery = zip, wait until the user confirms the upload, then run archive mode (or let the user's inbox script do it if _kb.json has an inbox entry).
 

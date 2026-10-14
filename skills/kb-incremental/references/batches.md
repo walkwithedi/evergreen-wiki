@@ -57,9 +57,15 @@ File the "file:" paths through Check 1 to step 4 and delivery, as in SKILL.md, w
 
 A failure inside a batch (a script error, a write that cannot be made): stop the run, report it, and leave the batch pending; nothing of a batch is marked done before its delivery.
 
+### Fast mode (intake.mode fast, the default)
+
+Inside each batch, file every "file:" path as references/fast.md says, items numbered across the whole run, with --run <work>/run.json kept for the whole conversation: each file is delivered on its own and gets its own progress line, so it is searchable at once. Rules 3 and 5 above change: step 5 is not judged now (consolidation does it), and delivery happens per file, not per batch. Rule 2 still records new topics and entities with batch_plan.py add. After the last file of a batch, mark the batch done as rule 6 says, with its progress line after the per-file lines.
+
 ## 3. Final step
 
 When next reports no pending batch, or the user says "finish intake" ("收尾"):
+
+In fast mode the final step is consolidation (references/consolidate.md): say how many files the run filed, then ask once, as a choice: Consolidate now (recommended) / Later. Now: consolidation writes the recorded topics and entities into the spec in its first round and then runs batch_plan.py finish (step 3 below). Later: run finish now with the spec rewrite only (step 1 for topics and entities, no trigger rewrite), and the queue keeps the files for consolidation. Steps 1 and 2 below apply to full mode.
 
 1. status prints everything recorded. Rewrite the summary files once, as in SKILL.md steps 5 and topic expansion: the spec once for all recorded topics and entities (one version step), the status card, change log and open items for all recorded triggers, entity-page overviews where a trigger names a core entity. Re-check each recorded trigger against the current status card first; later batches may have changed it. Run the rewrite check for every file.
 2. Deliver these rewrites with the normal preview and confirmation: they change existing conclusions, so this one step still waits for the user.

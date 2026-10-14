@@ -54,6 +54,7 @@ DEFAULT_NAMES = {
     "readme": "README.txt",
     "run_log_prefix": "_run-log_",
     "batch_plan": "_intake-batches.json",
+    "consolidation_queue": "_Consolidation-Queue.md",
     "note_marker": "Quick note:",
     "assistant_label": "Assistant",
     "user_label": "User",
@@ -73,9 +74,13 @@ FALLBACK_LIMITS = (90, 120)
 CONVERT_DEFAULTS = {"enabled": False, "image_limit": 10, "min_pdf_chars_per_page": 200,
                     "min_chars_per_image": 100, "outline_chars": 6000}
 
-# Intake of many files at once (kb-incremental scripts/batch_plan.py): a batch closes at
-# batch_files files or batch_mb megabytes; more than one batch turns batch mode on.
-INTAKE_DEFAULTS = {"batch_files": 10, "batch_mb": 20}
+# Intake (kb-incremental). mode: fast files each item at once and leaves key conclusions and the
+# trigger check to consolidation (scripts/prep.py, scripts/consolidate.py); full runs every step per
+# item. consolidate_files: files handled in one consolidation round. Many files at once
+# (scripts/batch_plan.py): a batch closes at batch_files files or batch_mb megabytes; more than one
+# batch turns batch mode on.
+INTAKE_MODES = ("fast", "full")
+INTAKE_DEFAULTS = {"mode": "fast", "batch_files": 10, "batch_mb": 20, "consolidate_files": 10}
 
 # Originals kept in the library (local libraries with direct delivery only): keep copies each
 # filed original into names.sources_dir under its topic file's name; one larger than max_mb
@@ -300,6 +305,9 @@ def check_intake(intake):
     for k, v in intake.items():
         if k not in INTAKE_DEFAULTS:
             problems.append(f"unknown intake key {k!r}")
+        elif k == "mode":
+            if v not in INTAKE_MODES:
+                problems.append("intake.mode must be fast or full")
         elif not (isinstance(v, int) and not isinstance(v, bool) and v >= 1):
             problems.append(f"intake.{k} must be a whole number of 1 or more")
     return problems

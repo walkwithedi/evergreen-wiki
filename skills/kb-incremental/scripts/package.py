@@ -2,7 +2,8 @@
 """Check and deliver the output of an intake run.
 
 Output directory layout (the only accepted shape):
-  OUT/*.md, OUT/README.txt        knowledge files, summary files and the readme
+  OUT/*.md, OUT/README.txt        knowledge files, summary files and the readme (names starting with an
+                                  underscore are refused, except the consolidation queue)
   OUT/<entities_dir>/*.md         entity pages (optional, no deeper folders)
   OUT/<sources_dir>/*             copies of originals, any format, named after their topic files
                                   (optional, preview and deliver only: a local library that keeps
@@ -28,6 +29,11 @@ Subcommands:
            [{"rel": "<name or entities_dir/name>", "id": "<file id>", "modified": "<time>"}].
            The plan says, for each file, which copies move to the archive folder under which
            name, and then which file to write; the assistant carries it out with the connector.
+  --run RUN.json (preview and remote-preview): fast intake delivers each item on its own. Within one
+           run the file index and the consolidation queue are archived the first time only and then
+           replaced (their copy from before the run is in the archive folder already); deliver
+           appends to one readme and one run log per run. RUN.json lives in the work folder and is
+           started on first use.
   remote-log --plan plan.json --results results.json
            Drive backend, round 2: print the run log (and its file name) from the results
            {"<rel>": "ok" | "<error>"}, for the assistant to write into the archive folder.
@@ -81,7 +87,8 @@ def check_output(out, names, max_len, allow_sources=False):
         errors.append(f"missing {names['readme']}")
     for r, p in files:
         b = os.path.basename(r)
-        if names["old_suffix"] in b or b.startswith(names["snapshot_prefix"]) or b.startswith("_"):
+        if names["old_suffix"] in b or b.startswith(names["snapshot_prefix"]) or \
+                (b.startswith("_") and r != names["consolidation_queue"]):
             errors.append(f"file that must not be delivered: {r}")
         elif r.startswith(src + "/"):  # an original: any format, kept as it is
             if not os.path.getsize(p):
@@ -143,6 +150,10 @@ def cmd_preview(a):
         print("Result: check failed, nothing planned")
         sys.exit(3)
     stamp0 = kbconf.now(cfg["timezone"]).replace(microsecond=0)
+    run = load_run(a.run, cfg["timezone"])
+    if run and not os.path.isfile(a.run):
+        save_run(a.run, run)  # fixes the run's start time, which names its readme and run log
+    again = rewritten(names) & set(run["archived"]) if run else set()
     items, seq = [], 0
     for r, p in files + stale_originals(root, names, files):
         if r == names["readme"]:
@@ -152,21 +163,27 @@ def cmd_preview(a):
                 "src_size": os.path.getsize(p) if p else 0, "exists": os.path.exists(target)}
         if item["exists"]:
             st = os.stat(target)
-            stem, ext = os.path.splitext(os.path.basename(target))
-            stamp = (stamp0 + timedelta(seconds=seq)).strftime("%Y%m%d%H%M%S")
-            seq += 1
-            item.update(old_size=st.st_size, old_mtime=st.st_mtime,
-                        archive_as=f"{stem}{names['old_suffix']}{stamp}{ext}")
+            item.update(old_size=st.st_size, old_mtime=st.st_mtime)
+            if r in again and p:
+                item["replace"] = True
+            else:
+                stem, ext = os.path.splitext(os.path.basename(target))
+                stamp = (stamp0 + timedelta(seconds=seq)).strftime("%Y%m%d%H%M%S")
+                seq += 1
+                item["archive_as"] = f"{stem}{names['old_suffix']}{stamp}{ext}"
         items.append(item)
     plan = {"library": cfg.get("label") or os.path.basename(root), "root": root,
             "archive_dir": os.path.join(root, names["archive_dir"]),
             "readme": os.path.abspath(os.path.join(a.out, names["readme"])),
             "timezone": cfg["timezone"], "log_prefix": names["run_log_prefix"],
-            "base_time": stamp0.strftime("%Y-%m-%d %H:%M:%S"), "items": items}
+            "base_time": stamp0.strftime("%Y-%m-%d %H:%M:%S"), "items": items,
+            "run": os.path.abspath(a.run) if a.run else "", "run_start": run["start"] if run else "",
+            "rewritten": sorted(rewritten(names))}
     with open(a.plan, "w", encoding="utf-8", newline="\n") as f:
         json.dump(plan, f, ensure_ascii=False, indent=1)
     new = [i for i in items if not i["exists"]]
-    upd = [i for i in items if i["exists"]]
+    upd = [i for i in items if i["exists"] and not i.get("replace")]
+    again_items = [i for i in items if i.get("replace")]
     print("=== Preview ===")
     print(f"Library: {plan['library']} ({root})")
     print(f"New files: {len(new)}")
@@ -176,6 +193,10 @@ def cmd_preview(a):
     for i in upd:
         what = "old" if i["src"] else "old original, no new copy"
         print(f"  ~ {i['rel']}  {what} -> {names['archive_dir']}/{i['archive_as']}")
+    if again_items:
+        print(f"Updated again in this run (its copy from before the run is archived already): {len(again_items)}")
+        for i in again_items:
+            print(f"  = {i['rel']}")
     print(f"Plan written to {a.plan}. Nothing has changed yet.")
 
 
@@ -213,6 +234,35 @@ def archive_names(stamp0, seq, base, old_suffix, count):
     return out
 
 
+def load_run(path, tz):
+    """The run file of a fast intake (package.py --run): the files already archived in this run.
+    Started on first use."""
+    if not path:
+        return None
+    try:
+        with open(path, encoding="utf-8") as f:
+            run = json.load(f)
+        if isinstance(run, dict) and isinstance(run.get("archived"), list) and run.get("start"):
+            return run
+        log.warning("run file %s has no archived list; starting it again", path)
+    except FileNotFoundError:
+        log.debug("no run file yet at %s: a new run starts", path)
+    except (OSError, json.JSONDecodeError) as e:
+        log.error("cannot read run file %s: %s", path, e)
+        sys.exit(2)
+    return {"start": kbconf.now(tz).strftime("%Y%m%d_%H%M%S"), "archived": []}
+
+
+def save_run(path, run):
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(run, f, ensure_ascii=False, indent=1)
+
+
+def rewritten(names):
+    """Files every delivery of a fast intake rewrites: archived once per run, then replaced."""
+    return {names["index"], names["consolidation_queue"]}
+
+
 def cmd_remote_preview(a):
     cfg = load_names(a.library)
     names = cfg["names"]
@@ -234,23 +284,34 @@ def cmd_remote_preview(a):
     for c in existing:
         copies.setdefault(c.get("rel"), []).append(c)
     stamp0 = kbconf.now(cfg["timezone"]).replace(microsecond=0)
+    run = load_run(a.run, cfg["timezone"])
+    if run and not os.path.isfile(a.run):
+        save_run(a.run, run)  # fixes the run's start time, which names its readme and run log
+    again = rewritten(names) & set(run["archived"]) if run else set()
     items, seq = [], 0
     for r, p in files:
         if r == names["readme"]:
             continue
         old = sorted(copies.get(r, []), key=lambda c: str(c.get("modified", "")))
+        item = {"rel": r, "src": os.path.abspath(p), "folder": "entities" if "/" in r else "root"}
+        if r in again and old:  # archived earlier in this run: overwrite the newest copy in place
+            item.update(archive=[], replace=old[-1].get("id"))
+            old = old[:-1]
         names_for = archive_names(stamp0, seq, os.path.basename(r), names["old_suffix"], len(old))
         seq += len(old)
-        items.append({"rel": r, "src": os.path.abspath(p), "folder": "entities" if "/" in r else "root",
-                      "archive": [{"id": c.get("id"), "archive_as": n} for c, n in zip(old, names_for)]})
+        item.setdefault("archive", [])
+        item["archive"] += [{"id": c.get("id"), "archive_as": n} for c, n in zip(old, names_for)]
+        items.append(item)
     plan = {"library": cfg.get("label") or "library", "backend": "gdrive",
             "archive_dir": names["archive_dir"], "entities_dir": names["entities_dir"],
             "readme": os.path.abspath(os.path.join(a.out, names["readme"])),
             "timezone": cfg["timezone"], "log_prefix": names["run_log_prefix"],
-            "base_time": stamp0.strftime("%Y-%m-%d %H:%M:%S"), "items": items}
+            "base_time": stamp0.strftime("%Y-%m-%d %H:%M:%S"), "items": items,
+            "run": os.path.abspath(a.run) if a.run else "", "run_start": run["start"] if run else "",
+            "rewritten": sorted(rewritten(names))}
     with open(a.plan, "w", encoding="utf-8", newline="\n") as f:
         json.dump(plan, f, ensure_ascii=False, indent=1)
-    new = [i for i in items if not i["archive"]]
+    new = [i for i in items if not i["archive"] and not i.get("replace")]
     upd = [i for i in items if i["archive"]]
     print("=== Preview ===")
     print(f"Library: {plan['library']} (Google Drive)")
@@ -261,6 +322,9 @@ def cmd_remote_preview(a):
     for i in upd:
         for o in i["archive"]:
             print(f"  ~ {i['rel']}  old -> {names['archive_dir']}/{o['archive_as']}")
+    for i in items:
+        if i.get("replace"):
+            print(f"  = {i['rel']}  updated again in this run: write it over the copy {i['replace']}")
     print(f"Plan written to {a.plan}. Nothing has changed yet.")
 
 
@@ -287,6 +351,13 @@ def cmd_remote_log(a):
             lines.append(f"  failed  | {i['rel']} | {res}")
     end = kbconf.now(plan["timezone"]).strftime("%Y%m%d_%H%M%S")
     lines += ["", f"Written {ok}, failed {fail}.", "", "=== End ==="]
+    if plan.get("run"):  # a fast intake: one run log and one readme per run; append to them
+        end = plan["run_start"]
+        run = load_run(plan["run"], plan["timezone"])
+        done = {i["rel"] for i in plan["items"] if results.get(i["rel"]) == "ok"}
+        run["archived"] = sorted(set(run["archived"]) | (done & set(plan.get("rewritten", ()))))
+        save_run(plan["run"], run)
+        print("Append to the run log and the readme below when they exist already.")
     print("\n".join(lines))
     print(f"Run log file name: {plan['log_prefix']}{end}.txt")
     print(f"Readme file name: _delivery_{end}_README.txt")
@@ -305,6 +376,7 @@ def cmd_deliver(a):
     os.makedirs(arch, exist_ok=True)
     lines = ["=== Delivery ===", f"Library: {plan['library']}", f"Time: {plan['base_time']}", ""]
     ok = fail = 0
+    archived = []
     for i in plan["items"]:
         target, rel = i["target"], i["rel"]
         try:
@@ -316,11 +388,19 @@ def cmd_deliver(a):
                 st = os.stat(target)
                 if st.st_size != i["old_size"] or st.st_mtime != i["old_mtime"]:
                     raise RuntimeError("target changed after preview")
+            if i.get("replace"):
+                shutil.copy2(i["src"], target)
+                lines.append(f"  update  | {rel} (archived earlier in this run)")
+                ok += 1
+                continue
+            if i["exists"]:
                 dst = os.path.join(arch, i["archive_as"])
                 if os.path.exists(dst):
                     raise RuntimeError(f"archive name already used: {i['archive_as']}")
                 shutil.move(target, dst)
                 lines.append(f"  archive | {rel} -> {i['archive_as']}")
+                if rel in plan.get("rewritten", ()):
+                    archived.append(rel)
             elif os.path.exists(target):
                 raise RuntimeError("a file with this name appeared after preview")
             if not i["src"]:  # an old original whose topic file moved on: archived only
@@ -328,17 +408,28 @@ def cmd_deliver(a):
             os.makedirs(os.path.dirname(target), exist_ok=True)
             shutil.copy2(i["src"], target)
             lines.append(f"  write   | {rel}")
+            if not i["exists"] and rel in plan.get("rewritten", ()):
+                archived.append(rel)  # new in this run: there is no earlier copy to keep
             ok += 1
         except (OSError, RuntimeError) as e:
             fail += 1
             lines.append(f"  failed  | {rel} | {e}")
             log.error("%s: %s", rel, e)
     end = kbconf.now(plan["timezone"]).strftime("%Y%m%d_%H%M%S")
-    if os.path.isfile(plan["readme"]):
-        shutil.copy2(plan["readme"], os.path.join(arch, f"_delivery_{end}_README.txt"))
     lines += ["", f"Written {ok}, failed {fail}.", "", "=== End ==="]
+    if plan.get("run"):  # a fast intake: one readme and one run log per run, appended to
+        end = plan["run_start"]
+        run = load_run(plan["run"], plan["timezone"])
+        run["archived"] = sorted(set(run["archived"]) | set(archived))
+        save_run(plan["run"], run)
+    mode = "a" if plan.get("run") else "w"
+    if os.path.isfile(plan["readme"]):
+        with open(plan["readme"], encoding="utf-8") as f:
+            text = f.read()
+        with open(os.path.join(arch, f"_delivery_{end}_README.txt"), mode, encoding="utf-8", newline="\n") as f:
+            f.write(text.rstrip("\n") + "\n\n")
     log_name = f"{plan['log_prefix']}{end}.txt"
-    with open(os.path.join(arch, log_name), "w", encoding="utf-8", newline="\n") as f:
+    with open(os.path.join(arch, log_name), mode, encoding="utf-8", newline="\n") as f:
         f.write("\n".join(lines) + "\n")
     print("\n".join(lines))
     print(f"Run log: {os.path.basename(arch)}/{log_name}")
@@ -354,10 +445,13 @@ def main():
     p.add_argument("--library", required=True); p.add_argument("--max-name-len", type=int, default=0)
     p = sub.add_parser("preview"); p.add_argument("out"); p.add_argument("--library", required=True)
     p.add_argument("--plan", required=True); p.add_argument("--max-name-len", type=int, default=0)
+    p.add_argument("--run", help="run file of a fast intake (work folder): the index and the queue are "
+                   "archived once per run, and the readme and run log are one file per run")
     p = sub.add_parser("deliver"); p.add_argument("--plan", required=True)
     p = sub.add_parser("remote-preview"); p.add_argument("out"); p.add_argument("--library", required=True)
     p.add_argument("--existing", required=True); p.add_argument("--plan", required=True)
     p.add_argument("--max-name-len", type=int, default=0)
+    p.add_argument("--run", help="run file of a fast intake, as for preview")
     p = sub.add_parser("remote-log"); p.add_argument("--plan", required=True); p.add_argument("--results", required=True)
     a = ap.parse_args()
     kbconf.setup_logging(a.log_level)

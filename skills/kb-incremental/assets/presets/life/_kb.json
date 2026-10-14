@@ -9,6 +9,7 @@
   "partitions": {"max": 10, "topic_start": 2, "fallback": "06"},
   "delivery": "",
   "convert": {"enabled": true, "image_limit": 10},
+  "intake": {"mode": "fast"},
   "sources": {"keep": false, "max_mb": 50},
   "names": {}
 }

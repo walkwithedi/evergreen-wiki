@@ -24,7 +24,7 @@ This mode groups notes by partition and topic into material, files that material
 7. File each item through the five steps, with these additions:
    - Step 1: type from Table A; if params allow a free type, use "quick notes"; otherwise the closest listed type, noted in the delivery note (expansion adds topics, never types). The document date is the latest note time in the item; an event date comes from the words, else "date not in material". Put the batch date in the short title ("quick notes to 2026-10-08") so it never matches an existing file.
    - Step 2: normal cleanup; with sensitivity enabled, check masking again even though kb-note masked on capture.
-   - Step 3: always close-read. Key conclusions only from words stated plainly and not marked "unconfirmed". Unconfirmed notes stay in the body but never become conclusions or trigger evidence.
+   - Step 3: always close-read (in fast mode: prep.py file --close-read, and consolidation writes the conclusions). Key conclusions only from words stated plainly and not marked "unconfirmed". Unconfirmed notes stay in the body but never become conclusions or trigger evidence.
    - Step 4: names never match by construction, so this is new material. A note that repeats the library exactly is marked "already recorded" but stays in the item.
    - Step 5: as usual. A note may be trigger evidence; quote its words and cite "source: quick note <file>".
 8. Deliver as SKILL.md says. Add to the readme's change section: "Quick notes: N filed, M left"; list any added topics.
