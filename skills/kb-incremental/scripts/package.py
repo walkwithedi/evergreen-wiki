@@ -246,7 +246,7 @@ def load_run(path, tz):
             return run
         log.warning("run file %s has no archived list; starting it again", path)
     except FileNotFoundError:
-        pass
+        log.debug("no run file yet at %s: a new run starts", path)
     except (OSError, json.JSONDecodeError) as e:
         log.error("cannot read run file %s: %s", path, e)
         sys.exit(2)

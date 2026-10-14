@@ -41,10 +41,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 PENDING_MARK = "<!-- kb:conclusions-pending -->"
 TEXT_EXT = (".md", ".txt", ".markdown")
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$")
+QUEUE_NOTE_EN = ("Files filed by fast intake whose key conclusions and status-card check are still due. "
+                 "Consolidation (kb-incremental) removes each row when it is done.")
 QUEUE_HEAD = {
-    "en": ["# Consolidation queue", "",
-           "Files filed by fast intake whose key conclusions and status-card check are still due. "
-           "Consolidation (kb-incremental) removes each row when it is done.", "",
+    "en": ["# Consolidation queue", "", QUEUE_NOTE_EN, "",
            "| File | Source file | Filed | Close-read |", "| --- | --- | --- | --- |"],
     "zh": ["# 待整合清单", "",
            "快速入库已落库、还没有补关键结论和核对状态卡的文件。整合（kb-incremental）完成后逐行删去。", "",
