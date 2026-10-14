@@ -30,6 +30,31 @@
       links_out: "Links to", links_in: "Linked from",
       view_graph: "View in the graph",
       welcome_title: "Welcome",
+      ideas_label: "Ideas behind the knowledge base",
+      idea_prev: "Previous", idea_next: "Next", idea_more: "More", idea_less: "Less", idea_pause: "Pause", idea_play: "Play",
+      skills_title: "Skills",
+      skills_intro: "What the assistant can do. Knowledge-base skills are locked and only upgraded; the others can be changed, imported or created.",
+      skill_new: "New skill", skill_import: "Import", skills_none_found: "No skills found where OpenCode reads them.",
+      skill_locked: "locked", skill_kb_group: "Knowledge base", skill_other_group: "Other skills",
+      skill_try: "Try it", skill_upgrade: "Upgrade", skill_modify: "Change", skill_restore_btn: "Restore",
+      skill_shadowed: "Not used: a skill with this name in {folder} comes first.",
+      skill_triggers: "Say: ", skill_version: "version {v}",
+      skill_backup: "Back up a skill", skill_restore: "Restore a skill",
+      skill_upgrade_hint: "Knowledge-base skills change only by installing a newer release: choose Set up with the new version.",
+      try_req: "{phrase}",
+      modify_title: "Change {name}",
+      modify_how: "What should change?",
+      modify_triggers: "When it is used: the phrases and situations that start it",
+      modify_steps: "What it does: add, remove or reorder steps",
+      modify_examples: "Examples: add an example of a request and of the answer",
+      modify_output: "The answer: its format, length or tone",
+      modify_other: "Something else",
+      modify_detail: "Describe the change in a sentence or two (what, and why):",
+      modify_tips: "A good request names one change, says what should happen instead, and gives a short example. Keep the front matter (name, description) valid. A backup is made first; Restore puts it back.",
+      modify_go: "Back up and prepare the request",
+      modify_req: "Change the skill {name} (its folder: {folder}). Change: {how}. Details: {detail}\nEdit only the files in that folder, keep the SKILL.md front matter (name, description) valid, and tell me what you changed. A backup was made before this request.",
+      new_req: "Fill in the new skill {name} (its folder: {folder}): complete the steps and the output section of its SKILL.md so that it does what its description says, keep the description to one clear sentence with two or three example phrases, and tell me how to use it.",
+      locked_note: "Refused without asking: the knowledge-base skills are locked and only upgraded ({what}).",
       welcome: "Set up installs the skills, makes a library and tells your agent about it; choose it again to add another library. Back up, Roll back, Move and Uninstall manage what Set up wrote. Every step shows a preview before it changes anything.",
       cancel_step: "Cancel this step",
       chat_title: "Conversation",
@@ -197,6 +222,31 @@
       links_out: "链接到", links_in: "被链接",
       view_graph: "在关系图中查看",
       welcome_title: "欢迎",
+      ideas_label: "知识库背后的思路",
+      idea_prev: "上一张", idea_next: "下一张", idea_more: "详情", idea_less: "收起", idea_pause: "暂停", idea_play: "播放",
+      skills_title: "技能",
+      skills_intro: "助手能做的事。知识库技能已锁定，只能升级；其他技能可以修改、导入或新建。",
+      skill_new: "新建技能", skill_import: "导入", skills_none_found: "OpenCode 能读到的位置没有找到技能。",
+      skill_locked: "已锁定", skill_kb_group: "知识库", skill_other_group: "其他技能",
+      skill_try: "试一试", skill_upgrade: "升级", skill_modify: "修改", skill_restore_btn: "回滚",
+      skill_shadowed: "未生效：{folder} 里的同名技能优先。",
+      skill_triggers: "口令：", skill_version: "版本 {v}",
+      skill_backup: "备份技能", skill_restore: "回滚技能",
+      skill_upgrade_hint: "知识库技能只能通过安装新版本来升级：用新版本选「安装与建库」。",
+      try_req: "{phrase}",
+      modify_title: "修改 {name}",
+      modify_how: "要改哪方面？",
+      modify_triggers: "什么时候用：触发它的说法和场合",
+      modify_steps: "做什么：增加、删除或调整步骤",
+      modify_examples: "例子：加一个请求和回答的例子",
+      modify_output: "回答：格式、篇幅或语气",
+      modify_other: "其他",
+      modify_detail: "用一两句话说明要怎么改、为什么：",
+      modify_tips: "好的修改请求一次只改一件事，写清改成什么样，并给一个简短的例子；SKILL.md 开头的 name 和 description 要保持完整。修改前会先备份，「回滚」可以恢复。",
+      modify_go: "备份并准备请求",
+      modify_req: "修改技能 {name}（文件夹：{folder}）。要改的方面：{how}。具体说明：{detail}\n只改这个文件夹里的文件，保持 SKILL.md 开头的 name 和 description 完整有效，改完告诉我改了什么。提出这个请求前已经做了备份。",
+      new_req: "补全新技能 {name}（文件夹：{folder}）：把 SKILL.md 的步骤和输出两节写完整，让它做到描述里说的事；描述保持一句清楚的话，带两三个示例口令；最后告诉我怎么用。",
+      locked_note: "已直接拒绝：知识库技能已锁定，只能升级（{what}）。",
       welcome: "「安装与建库」会装好技能、建一个知识库并告诉助手；要再加一个库时再选一次。备份、回滚、移动和卸载用来管理安装写下的内容。每一步改动前都会先给预览。",
       cancel_step: "取消这一步",
       chat_title: "对话",
@@ -340,6 +390,124 @@
     }
   };
 
+  // The ideas the knowledge base is built on, shown in turn in the welcome area and, shorter, while an
+  // intake runs: [title, one line, a few more sentences].
+  var IDEAS = {
+    en: [
+      ["LLM wiki", "Reconcile when material arrives, not when a question is asked.",
+       "Searching raw documents at question time returns whatever matches best, even an outdated plan. A wiki that an assistant maintains does the reconciling once, at intake, and keeps the result, so answers come from pages that are kept current."],
+      ["Evergreen notes", "Pages that are kept up to date instead of piling up.",
+       "One page per subject, revised as understanding changes. The archive keeps every earlier state, so the page itself can stay short and current."],
+      ["Name equals version", "A new version lands on the old name.",
+       "File names carry no date. The next version of a document replaces the previous one under the same name and the old copy moves to the archive, so “which one is current?” stops being a question."],
+      ["One status card", "The current answer to every recurring question, in one place.",
+       "Each line links to the file it comes from. It changes only when new material actually contradicts it, and the change log keeps how it changed."],
+      ["Evidence or no change", "Every judgement quotes its source.",
+       "Duplicate, new version, changed fact: each needs a quotation. Without one, the conservative choice wins and the question is listed for you."],
+      ["Checked rewrites", "A script compares the old summary with the new one.",
+       "Every item that disappears must be explained in the change list, and a summary that shrinks a lot needs your consent. Nothing is lost silently."],
+      ["Archive, never delete", "Old versions move aside; nothing is thrown away.",
+       "History stays readable, every change can be traced back, and a mistake can always be undone by hand."],
+      ["A spec that grows", "Each library keeps its own rules and extends them with care.",
+       "Partitions, topics, terms and thresholds live in the library's spec. Material that fits no topic adds one, and every addition is reported for review."],
+      ["Entities and backlinks", "People, systems and projects get pages of their own.",
+       "Documents link to the entities they mention, so one page shows everything about a subject. Obsidian draws the graph from the same links."],
+      ["File fast, consolidate after", "Searchable in seconds, reconciled in rounds.",
+       "Filing a document is mechanical and happens one file at a time. Comparing it with the status card needs close reading and your review, so it happens later, for many files at once."],
+      ["Library first", "Answers come from the library and name their file.",
+       "The assistant searches the library before it answers, cites the basis file for each fact, and says plainly when the library holds no record."]
+    ],
+    zh: [
+      ["LLM Wiki", "在材料进来时理清，而不是在提问时检索。",
+       "提问时直接检索原始文档，返回的是最匹配的那份，可能是过时的方案。由助手维护的 wiki 在入库时一次理清并保存结果，回答来自持续更新的页面。"],
+      ["常青笔记", "页面持续更新，而不是越堆越多。",
+       "一个主题一页，随认识变化而修订；历次旧状态都在归档里，页面本身保持简短、最新。"],
+      ["名称即版本", "新版本落在旧名字上。",
+       "文件名不带日期。同一份文件的新版本用同一个名字替换旧版，旧版移入归档，「哪份是最新的」就不再是问题。"],
+      ["一张状态卡", "所有常问问题的当前答案，集中在一处。",
+       "每一条都链接到出处。只有新材料确实与它矛盾时才改，变更日志记下怎么改的。"],
+      ["有证据才改", "每个判断都要引原文。",
+       "重复、新版本、事实变化，都要有引文；没有引文就取保守结论，并列出来请你确认。"],
+      ["改写有核对", "脚本逐条比对新旧汇总文件。",
+       "消失的每一条都要在变更清单里说明，篇幅大幅缩水要你同意，不会悄悄丢内容。"],
+      ["只归档不删除", "旧版本移到一边，什么都不扔。",
+       "历史随时可查，每次变化都能追溯，出了错也总能手工恢复。"],
+      ["规范随材料生长", "每个库有自己的规则，谨慎地扩充。",
+       "分区、主题、术语和阈值写在库自己的规范里。材料放不进现有主题时新增一个，每次新增都报告给你审阅。"],
+      ["实体与反链", "人、系统、项目各有自己的页面。",
+       "文档链接到它提到的实体，一个页面就能看到某个主题的全部材料；Obsidian 用同样的链接画出关系图。"],
+      ["先快收，后整合", "几秒钟可查，分轮次理清。",
+       "入库是机械的，一个文件一个文件地做；和状态卡比对需要精读和你的确认，所以之后对许多文件一起做。"],
+      ["先查库再回答", "回答来自知识库，并注明依据文件。",
+       "助手回答前先检索知识库，每条事实注明依据文件，查不到就直说知识库里没有记录。"]
+    ]
+  };
+
+  // A carousel of the ideas in box. mini: title and one line only, for the stage area. It turns every 8
+  // seconds, waits while the pointer or the keyboard focus is on it, and never turns by itself when the
+  // system asks for reduced motion.
+  function carousel(box, mini) {
+    var list = IDEAS[lang] || IDEAS.en;
+    var still = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    var c = { i: Math.floor(Math.random() * list.length), held: false, paused: still, timer: null, open: false };
+    box.textContent = "";
+    box.setAttribute("aria-label", t("ideas_label"));
+    var slide = el("div", { "class": "idea", "aria-live": "polite" });
+    var title = el("p", { "class": "idea-title" });
+    var line = el("p", { "class": "idea-line" });
+    var more = el("p", { "class": "idea-more" });
+    slide.appendChild(title);
+    slide.appendChild(line);
+    if (!mini) slide.appendChild(more);
+    box.appendChild(slide);
+    var nav = el("div", { "class": "idea-nav" });
+    var prev = el("button", { type: "button", "class": "quiet small", "aria-label": t("idea_prev") }, "‹");
+    var next = el("button", { type: "button", "class": "quiet small", "aria-label": t("idea_next") }, "›");
+    var dots = el("div", { "class": "idea-dots" });
+    var toggle = el("button", { type: "button", "class": "quiet small idea-toggle" });
+    var play = el("button", { type: "button", "class": "quiet small" });
+    if (!mini) {
+      nav.appendChild(prev);
+      list.forEach(function (_, k) {
+        var d = el("button", { type: "button", "class": "idea-dot", "aria-label": (k + 1) + " / " + list.length });
+        d.addEventListener("click", function () { go(k); });
+        dots.appendChild(d);
+      });
+      nav.appendChild(dots);
+      nav.appendChild(next);
+      nav.appendChild(toggle);
+      nav.appendChild(play);
+      box.appendChild(nav);
+    }
+    function draw() {
+      var x = list[c.i];
+      title.textContent = x[0];
+      line.textContent = x[1];
+      more.textContent = x[2];
+      show(more, c.open);
+      toggle.textContent = c.open ? t("idea_less") : t("idea_more");
+      play.textContent = c.paused ? t("idea_play") : t("idea_pause");
+      Array.prototype.forEach.call(dots.children, function (d, k) { d.classList.toggle("on", k === c.i); });
+    }
+    function go(k) { c.i = (k + list.length) % list.length; draw(); arm(); }
+    function arm() {
+      clearTimeout(c.timer);
+      if (c.paused || c.held || c.open) return;
+      c.timer = setTimeout(function () { if (!box.hidden && box.offsetParent !== null) c.i = (c.i + 1) % list.length; draw(); arm(); }, 8000);
+    }
+    prev.addEventListener("click", function () { go(c.i - 1); });
+    next.addEventListener("click", function () { go(c.i + 1); });
+    toggle.addEventListener("click", function () { c.open = !c.open; draw(); arm(); });
+    play.addEventListener("click", function () { c.paused = !c.paused; draw(); arm(); });
+    box.addEventListener("mouseenter", function () { c.held = true; arm(); });
+    box.addEventListener("mouseleave", function () { c.held = false; arm(); });
+    box.addEventListener("focusin", function () { c.held = true; arm(); });
+    box.addEventListener("focusout", function () { c.held = false; arm(); });
+    if (mini) slide.addEventListener("click", function () { go(c.i + 1); });
+    draw();
+    arm();
+  }
+
   var token = new URLSearchParams(location.search).get("t") || "";
   var lang = (navigator.language || "en").toLowerCase().indexOf("zh") === 0 ? "zh" : "en";
   var state = null;
@@ -391,6 +559,7 @@
       var first = state === null;
       state = s;
       if (first && s.lang !== lang) { lang = s.lang; translate(); }
+      if (first) { carousel($("ideas"), false); carousel($("ideas-mini"), true); }
       render();
       if (first && s.job && !s.job.done) follow(s.job.id, s.job.action);
     }).catch(lost);
@@ -522,7 +691,8 @@
   }
 
   function setBusy(on) {
-    Array.prototype.forEach.call(document.querySelectorAll("[data-action], .lib button, #check-list button"), function (b) {
+    Array.prototype.forEach.call(document.querySelectorAll("[data-action], .lib button, #check-list button, " +
+        ".skills-box button"), function (b) {
       b.disabled = on;
     });
     show($("cancel"), on);
@@ -535,11 +705,15 @@
 
   // ---------- steps ----------
 
-  function startAction(action, library) {
+  // arg: the library of a move, or the skill of a skill step. after(log text) runs when the step went
+  // through.
+  var afterJob = null;
+
+  function startAction(action, arg, after) {
     if (job) return;
     var body = { action: action };
-    if (library) body.library = library;
-    api("POST", "/api/action", body).then(function (r) { follow(r.job, action); })
+    if (arg) body[action.indexOf("skill_") === 0 ? "skill" : "library"] = arg;
+    api("POST", "/api/action", body).then(function (r) { afterJob = after || null; follow(r.job, action); })
       .catch(function (e) { result("error", e.status === 409 ? t("busy") : String(e.message)); });
   }
 
@@ -547,6 +721,7 @@
     job = { id: id, action: action, asking: null };
     $("step-title").textContent = t(action);
     show($("welcome"), false);
+    show($("ideas"), false);
     $("log").textContent = "";
     show($("log"), true);
     show($("result"), false);
@@ -575,9 +750,14 @@
 
   function finish(res) {
     clearAsk();
+    var action = job && job.action;
     job = null;
     setBusy(false);
     result(res, t("result_" + res));
+    var after = afterJob;
+    afterJob = null;
+    if (res === "ok" && after) after($("log").textContent);
+    if (action && action.indexOf("skill_") === 0) loadSkills();
     refresh();
   }
 
@@ -1003,6 +1183,9 @@
       chatEnable();
       if (chat.busy) cancelContinue();
       else { stagesIdle(); loadProgress().then(maybeContinue); }
+    }
+    else if (ev.type === "locked") {
+      note((ev.child ? t("child") : "") + t("locked_note", { what: permName(ev.permission) + " " + permWhat(ev).join(", ") }), "error");
     }
     else if (ev.type === "auto") {
       autoNote((ev.child ? t("child") : "") + t("auto", { what: permName(ev.permission) + " " + permWhat(ev).join(", ") }));
@@ -1508,11 +1691,124 @@
     });
   }
 
+  // ---------- skills ----------
+  // The skills OpenCode reads (GET /api/skills). Knowledge-base skills are locked: Try it and Upgrade
+  // only. The others can be changed (backed up first, then a request is put in the box for the
+  // assistant), restored from a backup, imported or created. The request is never sent by itself.
+
+  var skills = { list: [], folder: "" };
+
+  function loadSkills() {
+    return api("GET", "/api/skills").then(function (r) {
+      skills.list = r.skills || [];
+      skills.folder = r.folder || "";
+      drawSkills();
+    }).catch(function () {});
+  }
+
+  function fillInput(text) {
+    $("input").value = text;
+    $("input").focus();
+    $("chat").scrollIntoView({ block: "nearest" });
+  }
+
+  function skillItem(sk) {
+    var li = el("li", { "class": "skill" + (sk.locked ? " locked" : "") + (sk.used ? "" : " shadowed") });
+    var head = el("div", { "class": "skill-head" });
+    head.appendChild(el("strong", {}, sk.name));
+    if (sk.version) head.appendChild(el("span", { "class": "badge" }, t("skill_version", { v: sk.version })));
+    if (sk.locked) head.appendChild(el("span", { "class": "badge lock" }, t("skill_locked")));
+    li.appendChild(head);
+    var d = el("details", { "class": "skill-desc" });
+    var end = /^[\s\S]*?[.。](?=\s|$)/.exec(sk.description);
+    var first = end ? end[0] : sk.description;
+    d.appendChild(el("summary", {}, first.length > 140 ? first.slice(0, 140) + "…" : first));
+    d.appendChild(el("p", {}, sk.description));
+    li.appendChild(d);
+    if (sk.triggers && sk.triggers.length) {
+      var tr = el("p", { "class": "skill-triggers" }, t("skill_triggers"));
+      sk.triggers.slice(0, 4).forEach(function (q) { tr.appendChild(el("span", { "class": "trigger" }, q)); });
+      li.appendChild(tr);
+    }
+    if (!sk.used) li.appendChild(el("p", { "class": "hint" }, t("skill_shadowed", { folder: sk.folder })));
+    var row = el("div", { "class": "skill-actions" });
+    function btn(label, cls, fn) {
+      var b = el("button", { type: "button", "class": "small " + cls }, label);
+      b.addEventListener("click", fn);
+      row.appendChild(b);
+    }
+    if (sk.used && sk.triggers && sk.triggers.length) {
+      btn(t("skill_try"), "quiet", function () { fillInput(t("try_req", { phrase: sk.triggers[0] })); });
+    }
+    if (sk.locked) {
+      btn(t("skill_upgrade"), "quiet", function () { note(t("skill_upgrade_hint"), "auto"); startAction("setup"); });
+    } else if (sk.used) {
+      btn(t("skill_modify"), "quiet", function () { modifyCard(sk); });
+      if (sk.backups) btn(t("skill_restore_btn"), "quiet", function () { startAction("skill_restore", sk.dir); });
+    }
+    li.appendChild(row);
+    return li;
+  }
+
+  function drawSkills() {
+    var ul = $("skills");
+    ul.textContent = "";
+    var groups = [[t("skill_kb_group"), skills.list.filter(function (x) { return x.locked; })],
+                  [t("skill_other_group"), skills.list.filter(function (x) { return !x.locked; })]];
+    groups.forEach(function (g) {
+      if (!g[1].length) return;
+      ul.appendChild(el("li", { "class": "skill-group" }, g[0]));
+      g[1].forEach(function (sk) { ul.appendChild(skillItem(sk)); });
+    });
+    show($("skills-empty"), skills.list.length === 0);
+    setBusy(job !== null);
+  }
+
+  function modifyCard(sk) {
+    var id = "modify-" + sk.dir;
+    var c = card(id, t("modify_title", { name: sk.name }));
+    c.appendChild(el("p", { "class": "hint" }, t("modify_tips")));
+    c.appendChild(el("p", { "class": "card-label" }, t("modify_how")));
+    ["triggers", "steps", "examples", "output", "other"].forEach(function (k, i) {
+      var label = el("label", { "class": "choice" });
+      var r = el("input", { type: "radio", name: id, value: k });
+      if (i === 0) r.checked = true;
+      label.appendChild(r);
+      label.appendChild(el("span", {}, t("modify_" + k)));
+      c.appendChild(label);
+    });
+    c.appendChild(el("p", { "class": "card-label" }, t("modify_detail")));
+    var box = el("textarea", { rows: "3", spellcheck: "false" });
+    c.appendChild(box);
+    buttonRow(c, [[t("ok_cancel"), "quiet", function () { dropCard(id); }],
+                  [t("modify_go"), "primary", function () {
+                    var how = c.querySelector("input[name='" + id + "']:checked");
+                    var detail = box.value.trim();
+                    if (!detail) { box.focus(); return; }
+                    dropCard(id);
+                    startAction("skill_backup", sk.dir, function () {
+                      fillInput(t("modify_req", { name: sk.name, folder: sk.folder,
+                        how: t("modify_" + (how ? how.value : "other")), detail: detail }));
+                    });
+                  }]]);
+    c.scrollIntoView({ block: "nearest" });
+    box.focus();
+  }
+
+  function newSkill() {
+    startAction("skill_new", null, function (log) {
+      var m = /^skill: (\S+)$/m.exec(log);
+      if (m) fillInput(t("new_req", { name: m[1], folder: skills.folder + "/" + m[1] }));
+    });
+  }
+
   // ---------- start ----------
 
   translate();
   loadProgress();  // what is already finished is known, so only new batches get a card
   $("check-toggle").addEventListener("click", foldChecklist);
+  $("skill-new").addEventListener("click", newSkill);
+  $("skill-import").addEventListener("click", function () { startAction("skill_import"); });
   $("graph-close").addEventListener("click", closeGraph);
   $("graph-svg").addEventListener("pointerdown", function (e) { if (graph) panGraph(e); });
   $("graph-svg").addEventListener("wheel", function (e) { if (graph) zoomGraph(e); }, { passive: false });
@@ -1602,6 +1898,6 @@
   });
   chatEnable();
   if (!token) { result("error", t("no_token")); return; }
-  refresh().then(function () { if (state) chatStart(); });
+  refresh().then(function () { if (state) { chatStart(); loadSkills(); } });
   setInterval(function () { if (!job) refresh(); else api("GET", "/api/state").catch(function () {}); }, 20000);
 })();

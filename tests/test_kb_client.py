@@ -69,11 +69,13 @@ class Server:
     def post(self, path, body, **kw):
         return self.request("POST", path, body, **kw)
 
-    def run(self, action, answers, library=None):
+    def run(self, action, answers, library=None, skill=None):
         """Starts a step and answers its questions in turn; returns (result, printed text, questions)."""
         body = {"action": action}
         if library:
             body["library"] = library
+        if skill:
+            body["skill"] = skill
         status, r = self.post("/api/action", body)
         if status != 200:
             raise AssertionError(f"{status} {r}")
@@ -969,6 +971,122 @@ class DesktopEntryTest(unittest.TestCase):
             args = shlex.split(line[len("Exec="):].replace("exec python3 kb_client.py", "test -f kb_client.py && pwd -P"))
             out = subprocess.run([entry if a == "%k" else a for a in args], capture_output=True, text=True, check=True)
             self.assertEqual(out.stdout.strip(), os.path.realpath(os.path.dirname(TOOL)), entry)
+
+
+
+def skill_md(name, desc, version=""):
+    return f"---\nname: {name}\ndescription: {desc}\n---\n\n# {name}\n" + (f"\nVersion: {version}\n" if version else "")
+
+
+@unittest.skipUnless(os.name == "posix", "the client runs on Linux desktops")
+class SkillsTest(unittest.TestCase):
+    """The Skills section: listing, the lock on the knowledge-base skills, backup and restore, import, new."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.home = self.p("home")
+        self.oc = self.p("home", ".config", "opencode", "skills")
+        write(os.path.join(self.oc, "kb-query", "SKILL.md"), skill_md("kb-query", 'Answers from the library. "check my notes"', "1.16.0"))
+        write(os.path.join(self.oc, "my-tool", "SKILL.md"), skill_md("my-tool", 'Does a thing. Use for "do the thing" or "thing please".'))
+        write(os.path.join(self.p("home", ".claude", "skills", "my-tool", "SKILL.md")), skill_md("my-tool", "Older copy."))
+        os.makedirs(self.p("tmp"))
+        env = dict(os.environ, HOME=self.home, XDG_CONFIG_HOME=self.p("home", ".config"), TMPDIR=self.p("tmp"),
+                   PYTHONIOENCODING="utf-8", PATH=os.path.dirname(sys.executable))
+        for k in ("KB_LIBRARIES", "LANG", "LC_ALL", "LC_MESSAGES", "LANGUAGE"):
+            env.pop(k, None)
+        self.server = Server(env, "--idle", "0")
+        self.addCleanup(self.server.stop)
+
+    def p(self, *parts):
+        return os.path.join(self.tmp, *parts)
+
+    def skills(self):
+        status, r = self.server.get("/api/skills")
+        self.assertEqual(status, 200)
+        return r["skills"]
+
+    def test_list_groups_and_shadowing(self):
+        sk = self.skills()
+        self.assertEqual([(x["dir"], x["locked"], x["used"]) for x in sk],
+                         [("kb-query", True, True), ("my-tool", False, True), ("my-tool", False, False)])
+        self.assertEqual(sk[0]["version"], "1.16.0")
+        self.assertEqual(sk[1]["triggers"], ["do the thing", "thing please"])
+        self.assertEqual(sk[1]["agent"], "opencode")
+
+    def test_knowledge_base_skills_are_locked(self):
+        for action in ("skill_backup", "skill_restore"):
+            res, out, _ = self.server.run(action, [], skill="kb-query")
+            self.assertEqual(res, "stopped")
+            self.assertIn("only upgraded", out)
+
+    def test_backup_and_restore(self):
+        res, out, _ = self.server.run("skill_backup", [], skill="my-tool")
+        self.assertEqual(res, "ok", out)
+        self.assertIn("skill-backups", out)
+        md = os.path.join(self.oc, "my-tool", "SKILL.md")
+        write(md, "changed\n")
+        self.assertEqual(self.skills()[1]["backups"], 1)
+        when = os.listdir(self.p("home", ".config", "evergreen-wiki", "skill-backups", "my-tool"))[0]
+        res, out, asked = self.server.run("skill_restore", [when, True], skill="my-tool")
+        self.assertEqual(res, "ok", out)
+        self.assertIn("Does a thing", read(md))
+        self.assertEqual(self.skills()[1]["backups"], 2)  # the changed version was kept too
+        res, out, _ = self.server.run("skill_restore", [when, False], skill="my-tool")
+        self.assertEqual(res, "stopped")
+
+    def test_new_skill(self):
+        res, out, _ = self.server.run("skill_new", ["weekly-report", "Writes the weekly report", True])
+        self.assertEqual(res, "ok", out)
+        self.assertIn("skill: weekly-report", out)
+        text = read(os.path.join(self.oc, "weekly-report", "SKILL.md"))
+        self.assertIn("name: weekly-report", text)
+        self.assertIn("Writes the weekly report.", text)
+        for name in ("weekly-report", "kb-note", "Bad Name"):
+            res, out, _ = self.server.run("skill_new", [name])
+            self.assertEqual(res, "stopped", name)
+
+    def test_import_folder_and_zip(self):
+        src = self.p("ext", "summarise")
+        write(os.path.join(src, "SKILL.md"), skill_md("summarise", 'Summaries. "sum it up"'))
+        write(os.path.join(src, "scripts", "x.py"), "print(1)\n")
+        res, out, _ = self.server.run("skill_import", ["folder", src, True])
+        self.assertEqual(res, "ok", out)
+        self.assertTrue(os.path.isfile(os.path.join(self.oc, "summarise", "scripts", "x.py")))
+        res, out, _ = self.server.run("skill_import", ["folder", src])
+        self.assertEqual(res, "stopped")
+        self.assertIn("exists already", out)
+        import zipfile
+        good, bad = self.p("good.zip"), self.p("bad.zip")
+        with zipfile.ZipFile(good, "w") as z:
+            z.writestr("notes-helper/SKILL.md", skill_md("notes-helper", "Helps."))
+        with zipfile.ZipFile(bad, "w") as z:
+            z.writestr("../evil/SKILL.md", skill_md("evil", "x"))
+        res, out, _ = self.server.run("skill_import", ["zip", good, True])
+        self.assertEqual(res, "ok", out)
+        self.assertTrue(os.path.isfile(os.path.join(self.oc, "notes-helper", "SKILL.md")))
+        res, out, _ = self.server.run("skill_import", ["zip", bad])
+        self.assertEqual(res, "stopped")
+        self.assertIn("outside", out)
+        self.assertFalse(os.path.exists(self.p("evil")))
+
+
+class LockedTargetTest(unittest.TestCase):
+    def test_locked_target(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        kb = os.path.join(tmp, "skills", "kb-query")
+        other = os.path.join(tmp, "skills", "my-tool")
+        os.makedirs(os.path.join(kb, "scripts"))
+        os.makedirs(other)
+        write(os.path.join(kb, "scripts", "kbfind.py"), "")
+        places = {"locked": [kb], "scripts": [os.path.join(kb, "scripts")], "write": [], "read": []}
+        self.assertTrue(agent.locked_target("edit", [os.path.join(kb, "SKILL.md")], places, tmp))
+        self.assertFalse(agent.locked_target("edit", [os.path.join(other, "SKILL.md")], places, tmp))
+        self.assertTrue(agent.locked_target("bash", [f"rm -rf {kb}"], places, tmp))
+        self.assertFalse(agent.locked_target("bash", [f"python3 {kb}/scripts/kbfind.py find x y"], places, tmp))
+        self.assertFalse(agent.locked_target("read", [os.path.join(kb, "SKILL.md")], places, tmp))
+        self.assertFalse(agent.locked_target("edit", [os.path.join(kb, "SKILL.md")], {}, tmp))
 
 
 if __name__ == "__main__":

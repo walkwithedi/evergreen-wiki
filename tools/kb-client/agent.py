@@ -228,6 +228,35 @@ def decide(permission, patterns, places, cwd):
     return True
 
 
+WRITE_PERMISSIONS = ("edit", "write", "patch", "multiedit")
+
+
+def locked_target(permission, patterns, places, cwd):
+    """True when a request would change a locked folder (the knowledge-base skills): a file edit inside
+    one, or a shell command that names one and is not one of the skills' own scripts. Such requests are
+    rejected without asking: those skills are only upgraded by installing a newer release."""
+    locked = places.get("locked", [])
+    if not locked:
+        return False
+    patterns = [str(p) for p in (patterns or []) if str(p).strip()]
+    if permission in WRITE_PERMISSIONS:
+        for p in patterns:
+            path = pattern_path(p, cwd)
+            if path and any(inside(path, r) for r in locked):
+                return True
+        return False
+    if permission == "bash":
+        home = os.path.expanduser("~")
+        for p in patterns:
+            if skill_command(p, places.get("scripts", []), cwd):
+                continue
+            for r in locked:
+                forms = {r, r.replace(home, "~", 1) if r.startswith(home) else r}
+                if any(f in p for f in forms):
+                    return True
+    return False
+
+
 # ---------- events for the page ----------
 
 class Feed:
@@ -594,13 +623,22 @@ class Agent:
         pl = self.places()
         return {"write": [real(x) for x in pl.get("write", [])],
                 "read": [real(x) for x in pl.get("read", []) + self.material],
-                "scripts": [real(x) for x in pl.get("scripts", [])]}
+                "scripts": [real(x) for x in pl.get("scripts", [])],
+                "locked": [real(x) for x in pl.get("locked", [])]}
 
     def _permission(self, p, child=False):
         rid = p.get("id", "")
         perm = str(p.get("permission", ""))
         patterns = [str(x) for x in p.get("patterns") or []]
-        if decide(perm, patterns, self.allowed_places(), self.cwd):
+        places = self.allowed_places()
+        if locked_target(perm, patterns, places, self.cwd):
+            try:
+                self.call("POST", f"/permission/{quote(rid, safe='')}/reply", {"reply": "reject"})
+                self.feed.emit("locked", permission=perm, patterns=patterns[:5], child=child)
+                return
+            except OSError as e:
+                log.warning("automatic reject failed: %s", type(e).__name__)
+        if decide(perm, patterns, places, self.cwd):
             try:
                 self.call("POST", f"/permission/{quote(rid, safe='')}/reply", {"reply": "once"})
                 self.feed.emit("auto", permission=perm, patterns=patterns[:5], child=child)
