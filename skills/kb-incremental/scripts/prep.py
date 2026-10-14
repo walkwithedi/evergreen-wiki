@@ -287,7 +287,12 @@ def cmd_file(a):
         shutil.rmtree(out_dir, ignore_errors=True)
         return 3
     lines.append(out.strip())
-    today = kbconf.now(cfg["timezone"])
+    try:
+        today = kbconf.now(cfg["timezone"])
+    except kbconf.ConfigError as e:  # this Python cannot resolve the library's time zone name
+        print(f"refused: {e}")
+        shutil.rmtree(out_dir, ignore_errors=True)
+        return 3
     run("index_tool.py", "write", index, "--out", os.path.join(out_dir, names["index"]),
         "--date", today.strftime("%Y-%m-%d"))
 

@@ -1049,6 +1049,10 @@ class FastIntakeTest(Tmp):
         super().setUp()
         self.lib = self.p("lib")
         shutil.copytree(SAMPLE, self.lib)
+        kb = os.path.join(self.lib, "_kb.json")
+        cfg = json.loads(read(kb))
+        cfg["timezone"] = "UTC"  # IANA names need Python 3.9+ (kbconf.tzinfo); the tests run on 3.8 too
+        write(kb, json.dumps(cfg))
         self.work = self.p("work")
         self.mat = self.p("mat")
         write(os.path.join(self.mat, "water.md"), "# Water bill\n\nAmount due 42.10 by 2026-11-01.\n")
