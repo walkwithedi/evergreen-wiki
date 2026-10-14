@@ -11,9 +11,15 @@ The file starts with ---, then one property per line, then ---, a blank line, th
 - Entity fields (whatever the spec lists, for example entities, or systems, people and organizations) and keywords: lists, such as ["[[Payments Gateway]]", "[[Project Atlas]]", "unregistered wording"].
 - Empty entity field: write [] and add a line "<field>_note" that keeps the source wording, such as entities_note: "none".
 - size: "large" only when the file reaches the Table D large-file threshold; otherwise leave the line out.
-- Escape double quotes and backslashes inside strings. Building the front matter with a short script avoids mistakes.
+- Escape double quotes and backslashes inside strings. python3 scripts/meta.py yaml <work>/fields_<n>.json prints the front matter from a JSON object of the fields in the spec's order (strings quoted and escaped; numbers, true/false and ISO dates unquoted; lists; null leaves the line out); put what it prints at the top of the head file.
 
 ## Entity mapping (during step 1)
+
+Where you can run Python, start with
+
+  python3 scripts/meta.py entities <spec> --field <field>="<wording>" [--field ...] --keywords "<wording>"
+
+It does rules 1, 1a (empty-value forms, and noise values Table F quotes) and 2 below and prints a draft of the field lines. For every wording it reports as no match, apply rule 1a for noise Table F describes without quoting and rule 3 yourself; the names it lists as possible aliases are the candidates for 3c. When it says Table E was not found, do all of it by hand.
 
 1. Split entity fields and keywords on commas, semicolons and enumeration marks (not inside brackets).
 1a. If the spec has Table F (value filters), apply it to entity fields (not keywords) first: wording that matches an empty-value form or a noise value is not listed; whenever wording is dropped or the value was empty, add the "<field>_note" line with the full source wording. Wording that is clearly not an entity but missing from Table F (SQL keywords, placeholders, codes, generic terms) is added to Table F under its maintenance clause, which counts as a spec change and is listed in the readme's updated-files section.

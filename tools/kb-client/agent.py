@@ -265,7 +265,8 @@ class Feed:
 # that count (None: any). Only these fixed names reach the page, never the command line itself.
 STAGE_SCRIPTS = {"batch_plan": ("plan", "next", "done", "skip", "finish", "status", "add"), "convert": None,
                  "index_tool": ("check", "add", "update", "write"), "clean": None, "card_check": None,
-                 "assemble": None, "package": None, "archive_plan": None, "pick_materials": None}
+                 "assemble": None, "package": None, "archive_plan": None, "pick_materials": None,
+                 "meta": ("name", "date", "entities", "terms", "yaml")}
 SCRIPT_RE = re.compile(r"(?:^|[\s/'\"])(\w+)\.py['\"]?(?:\s+([a-z]+))?")
 
 

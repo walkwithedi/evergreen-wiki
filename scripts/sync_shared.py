@@ -25,7 +25,7 @@ REFS = ["config.md", "environment.md", "backend-gdrive.md", "backend-local.md"]
 # (file under shared/, folders that receive a copy, relative to the repository root)
 PLAN = [(f"references/{r}", [f"skills/{s}/references" for s in ("kb-note", "kb-query", "kb-incremental")])
         for r in REFS]
-PLAN.append(("scripts/kbconf.py", ["skills/kb-incremental/scripts"]))
+PLAN.append(("scripts/kbconf.py", ["skills/kb-incremental/scripts", "skills/kb-query/scripts"]))
 # the converter: used by kb-incremental (scripts/convert.py) and by the stand-alone tool
 PLAN.append(("scripts/doc2kb_core.py", ["skills/kb-incremental/scripts", "tools/doc2kb"]))
 

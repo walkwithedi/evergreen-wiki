@@ -1293,7 +1293,8 @@
   var STAGES = ["count", "convert", "dedup", "clean", "compare", "write", "final"];
   var SCRIPT_STAGE = {
     "pick_materials": "count", "batch_plan plan": "count", "batch_plan next": "count",
-    "convert": "convert", "index_tool check": "dedup", "clean": "clean", "card_check": "compare",
+    "convert": "convert", "index_tool check": "dedup", "meta name": "dedup", "meta date": "dedup", "meta entities": "dedup",
+    "clean": "clean", "meta terms": "clean", "card_check": "compare", "meta yaml": "write",
     "assemble": "write", "index_tool add": "write", "index_tool update": "write", "index_tool write": "write", "package": "write",
     "batch_plan done": "write", "batch_plan skip": "write", "archive_plan": "write", "batch_plan finish": "final"
   };

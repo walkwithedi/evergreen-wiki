@@ -82,7 +82,8 @@ First apply the spec's scope clause, if there is one. Out of scope: write "Intak
 For material in scope, set the date and fields as params require. Common fields:
 - Partition, topic, type: from Table A; if no topic fits, see "Topic expansion".
 - Short title: a few words naming the material, no version number. Embed what tells similar material apart: the period for recurring material, the reporting party (or family member in a life library) for one template filled by several parties, a distinguishing word for similar topics.
-- Proposed file name: <partition>_<topic>_<type>_<short title>.md, no date suffix, no longer than the Table D limit (shorten the short title if needed). Spaces in topic, type and short title become hyphens in the file name (topic "Primary home" -> 05_Primary-home_...); underscores separate the four parts only.
+- Proposed file name: <partition>_<topic>_<type>_<short title>.md, no date suffix, no longer than the Table D limit (shorten the short title if needed). Spaces in topic, type and short title become hyphens in the file name (topic "Primary home" -> 05_Primary-home_...); underscores separate the four parts only. Build it with python3 scripts/meta.py name --partition <nn> --topic "<topic>" --type "<type>" --title "<short title>" --max-len <Table D file-name limit>; when it reports too long, shorten the short title and run it again.
+- Document date, when params ask for the file's last-modified time: python3 scripts/meta.py date <original file> [<original file> ...] --timezone <library timezone> reads it from the document's own metadata where it has one (copying a file changes its file system time, not that) and says when only the file system time was available.
 
 In YAML mode, map entities as entity-yaml.md says and add one line: Entities: <linked names> | New: <name or none> | Kept as text: <wording or none>.
 
@@ -112,7 +113,7 @@ Without Python: do the five actions by eye and mark the result line "manual".
 
 2.2 Extra cleaning required by params (for example masking class-A data).
 
-2.3 Term fixes: go through Table B one entry at a time, never with a bulk regex: search the body file for each entry with your search tool and check the context of each hit to confirm it is the term; the body need not be read through for this.
+2.3 Term fixes: go through Table B one entry at a time, never with a bulk regex. python3 scripts/meta.py terms <spec> <work>/body_<n>.md lists every line holding a Table B original wording; without Python, search the body file for each entry with your search tool. Check the context of each hit to confirm it is the term; the body need not be read through for this.
 
 Make the changes of 2.2 and 2.3 in the body file with your edit tool, one place at a time; never write the body file out again whole. Record each change: original -> fixed -> section heading. None: "Term fixes: none".
 
