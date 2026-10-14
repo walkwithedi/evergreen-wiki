@@ -108,7 +108,8 @@
       say_notes: "file my quick notes in the {lib} library",
       say_lint: "health check the {lib} library",
       say_archive: "archive old versions in the {lib} library",
-      say_resume: "continue intake in the {lib} library"
+      say_resume: "continue intake in the {lib} library",
+      say_work: "Work folder: {path}"
     },
     zh: {
       title: "知识库",
@@ -214,7 +215,8 @@
       say_notes: "整理随手记（知识库「{lib}」）",
       say_lint: "检查知识库「{lib}」",
       say_archive: "归档旧版（知识库「{lib}」）",
-      say_resume: "继续入库（知识库「{lib}」）"
+      say_resume: "继续入库（知识库「{lib}」）",
+      say_work: "工作文件夹：{path}"
     }
   };
 
@@ -869,12 +871,18 @@
     box.focus();
   }
 
+  // The client's work folder goes with the skills' tasks, so that their copies and output files land
+  // where the client allows writing without a card.
+  function withWork(text) {
+    return state && state.work ? text + "\n" + t("say_work", { path: state.work }) : text;
+  }
+
   function task(name) {
     if (name === "note") { noteCard(); return; }
     pickLibrary(function (lib) {
-      if (name !== "intake") { say(t("say_" + name, { lib: lib.label })); return; }
+      if (name !== "intake") { say(withWork(t("say_" + name, { lib: lib.label }))); return; }
       openBrowser((state && state.home) || "", function (paths) {
-        say(t("say_intake", { lib: lib.label, paths: paths.join("\n") }), paths);
+        say(withWork(t("say_intake", { lib: lib.label, paths: paths.join("\n") })), paths);
       }, true);
     });
   }

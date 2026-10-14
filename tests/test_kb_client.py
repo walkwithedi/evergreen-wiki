@@ -125,7 +125,8 @@ class KbClientTest(unittest.TestCase):
         self.home = self.p("home")
         os.makedirs(self.p("home", ".claude"))
         write(self.p("home", ".claude", "CLAUDE.md"), "# Mine\n")
-        self.env = dict(os.environ, HOME=self.home, XDG_CONFIG_HOME=self.p("home", ".config"),
+        os.makedirs(self.p("tmp"))
+        self.env = dict(os.environ, HOME=self.home, XDG_CONFIG_HOME=self.p("home", ".config"), TMPDIR=self.p("tmp"),
                         PYTHONIOENCODING="utf-8", PATH=os.path.dirname(sys.executable))
         for k in ("KB_LIBRARIES", "LANG", "LC_ALL", "LC_MESSAGES", "LANGUAGE"):
             self.env.pop(k, None)
@@ -302,8 +303,12 @@ class KbClientTest(unittest.TestCase):
         self.assertTrue(agent["config"].endswith("opencode.jsonc"))
 
     def test_quit(self):
+        work = self.server.get("/api/state")[1]["work"]
+        self.assertTrue(os.path.isdir(work))
+        self.assertTrue(work.startswith(self.p("tmp")))
         self.assertEqual(self.server.post("/api/quit", {})[0], 200)
         self.assertEqual(self.server.proc.wait(10), 0)
+        self.assertFalse(os.path.exists(work))  # the work folder goes with the client
 
 
 class ChatEvents:
@@ -344,7 +349,8 @@ class ChatTest(unittest.TestCase):
         write(self.p("bin", "opencode"), read(FAKE).replace("#!/usr/bin/env python3", "#!" + sys.executable, 1))
         os.chmod(self.p("bin", "opencode"), 0o700)
         self.log = self.p("log.jsonl")
-        self.env = dict(os.environ, HOME=self.home, XDG_CONFIG_HOME=self.p("home", ".config"),
+        os.makedirs(self.p("tmp"))
+        self.env = dict(os.environ, HOME=self.home, XDG_CONFIG_HOME=self.p("home", ".config"), TMPDIR=self.p("tmp"),
                         PYTHONIOENCODING="utf-8", FAKE_OPENCODE_LOG=self.log,
                         PATH=self.p("bin") + os.pathsep + os.path.dirname(sys.executable))
         for k in ("KB_LIBRARIES", "LANG", "LC_ALL", "LC_MESSAGES", "LANGUAGE", "FAKE_OPENCODE_MODE"):
@@ -470,6 +476,15 @@ class ChatTest(unittest.TestCase):
         ev.until(lambda e: e["type"] == "part" and e["text"] == "permission: once", "reply")
         # writing there is not allowed: only the library may be written to
         self.send("PERM edit " + os.path.join(material, "a.md"))
+        self.assertEqual(ev.until(lambda e: e["type"] in ("auto", "permission"))["type"], "permission")
+
+    def test_work_folder_is_written_without_a_card(self):
+        ev = self.ready()
+        work = self.server.get("/api/state")[1]["work"]
+        self.send("PERM edit " + os.path.join(work, "out", "a.md"))
+        self.assertEqual(ev.until(lambda e: e["type"] in ("auto", "permission"))["type"], "auto")
+        ev.until(lambda e: e["type"] == "part" and e["text"] == "permission: once", "reply")
+        self.send("PERM edit " + self.p("home", "a.md"))
         self.assertEqual(ev.until(lambda e: e["type"] in ("auto", "permission"))["type"], "permission")
 
     def test_question(self):
@@ -687,6 +702,25 @@ class DecideTest(unittest.TestCase):
                     f"python3 {os.path.join(self.tmp, 'home', 'other.py')}", "ls -la",
                     f"bash {script}", f"cd /tmp && python3 scripts/batch_plan.py",
                     f"python3 -c 'print(1)' {script}"):
+            with self.subTest(bad=bad):
+                self.assertFalse(self.ok("bash", bad))
+
+    def test_mkdir_and_cp(self):
+        work = os.path.join(self.tmp, "work")
+        os.makedirs(work)
+        self.places["write"] = self.places["write"] + [work]
+        index = os.path.join(self.lib, "_index.md")
+        for good in (f"mkdir -p {work}/work {work}/out", f"mkdir {self.lib}/notes",
+                     f"cp {index} {work}/work/_index.md", f"cp -p {self.mat}/a.docx {self.mat}/b.pdf {work}/work/",
+                     f"cp -r {self.mat} {work}/material", f"cp '{self.mat}/a b.docx' {work}/work/",
+                     f"cp {os.path.join(self.skill, 'scripts', 'batch_plan.py')} {work}/x.py"):
+            with self.subTest(good=good):
+                self.assertTrue(self.ok("bash", good))
+        for bad in (f"mkdir -p {self.mat}/x", f"mkdir /etc/x", f"cp {index} {self.mat}/x",
+                    f"cp /etc/passwd {work}/p", f"cp {index}", f"cp {self.mat}/*.docx {work}/",
+                    f"cp {index} {work}/a; rm -rf ~", f"mkdir -p {work}/a && ls", f"mkdir ~/x",
+                    f"cp --target-directory={work} {index}", f"mv {index} {work}/",
+                    f"cp {index} {self.lib}/out/x"):  # a link out of the library
             with self.subTest(bad=bad):
                 self.assertFalse(self.ok("bash", bad))
 

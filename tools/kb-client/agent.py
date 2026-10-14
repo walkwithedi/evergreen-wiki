@@ -168,16 +168,51 @@ def skill_command(command, script_dirs, cwd):
     return os.path.isfile(script) and any(inside(script, d) for d in script_dirs)
 
 
+FILE_COMMANDS = {"mkdir": {"-p"}, "cp": {"-p", "-r", "-R"}}
+
+
+def file_command(command, places, cwd):
+    """True for `mkdir [-p] <folder>...` with every folder in a writable place, and for
+    `cp [-p|-r|-R] <source>... <target>` with every source in a readable place and the target in a writable
+    one; no shell syntax or wildcards outside quoted words, no ~ (the shell's expansion is not followed)."""
+    cmd = str(command).strip()
+    bare = unquoted(cmd)
+    if not cmd or bare is None or SHELL_CHARS & set(bare) or set(GLOB_CHARS) & set(bare):
+        return False
+    try:
+        words = shlex.split(cmd)
+    except ValueError:
+        return False
+    if not words or words[0] not in FILE_COMMANDS:
+        return False
+    rest = words[1:]
+    while rest and rest[0] in FILE_COMMANDS[words[0]]:
+        rest = rest[1:]
+    if not rest or any(w.startswith(("-", "~")) or not w for w in rest):
+        return False
+    paths = [real(w if os.path.isabs(w) else os.path.join(cwd, w)) for w in rest]
+    write = places.get("write", [])
+    readable = write + places.get("read", []) + places.get("scripts", [])
+    if words[0] == "mkdir":
+        return all(any(inside(p, r) for r in write) for p in paths)
+    if len(paths) < 2:
+        return False
+    return any(inside(paths[-1], r) for r in write) and \
+        all(any(inside(p, r) for r in readable) for p in paths[:-1])
+
+
 def decide(permission, patterns, places, cwd):
     """True when the client answers "once" itself. places: {"write": [...], "read": [...],
     "scripts": [...]} as real folder paths. Writing only inside a registered library; reading also in the
-    chosen material, the skills and the agent's own settings; commands only the skills' own scripts.
+    chosen material, the skills and the agent's own settings; commands only the skills' own scripts and
+    plain mkdir and cp within those places.
     Everything else, and anything that cannot be read clearly, goes to the user."""
     patterns = [p for p in (patterns or []) if str(p).strip()]
     if not patterns:
         return False
     if permission == "bash":
-        return all(skill_command(p, places.get("scripts", []), cwd) for p in patterns)
+        return all(skill_command(p, places.get("scripts", []), cwd) or file_command(p, places, cwd)
+                   for p in patterns)
     if permission == "task":
         return all(str(p).strip() in READ_ONLY_AGENTS for p in patterns)
     if permission in ("edit", "write"):

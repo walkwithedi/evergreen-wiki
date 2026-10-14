@@ -27,8 +27,10 @@ import os
 import queue
 import re
 import secrets
+import shutil
 import socketserver
 import sys
+import tempfile
 import threading
 import time
 import webbrowser
@@ -196,6 +198,9 @@ class App:
         self.idle = idle
         self.start_timeout = start_timeout
         self.agent = None
+        # The skills' work folder for this client: outside every library (mkdtemp makes it private), so
+        # that their copies and output files are written there without a permission card each time.
+        self.work = tempfile.mkdtemp(prefix="kb-client-work-")
         self.token = secrets.token_urlsafe(24)
         self.job = None
         self.lock = threading.Lock()
@@ -254,6 +259,7 @@ class App:
             "agent": agent_status(),
             "backups": len(kb_manage.list_backups()),
             "registry": kb_manage.registry_path(),
+            "work": self.work,
             "job": None if job is None else {"id": job.id, "action": job.action, "done": job.done},
         }
 
@@ -268,11 +274,17 @@ class App:
                     return None, "no_program"
                 if not st["model"]:
                     return None, "no_model"
-                self.agent = agent_mod.Agent(OPENCODE["program"], os.path.expanduser("~"), agent_places,
+                self.agent = agent_mod.Agent(OPENCODE["program"], os.path.expanduser("~"), self.places,
                                              os.path.join(kb_manage.state_dir(), "kb-client.json"),
                                              self.start_timeout)
         self.agent.start()
         return self.agent, None
+
+    def places(self):
+        pl = agent_places()
+        if os.path.isdir(self.work):
+            pl["write"] = pl["write"] + [self.work]
+        return pl
 
     def idle_watch(self):
         while self.idle:
@@ -750,6 +762,7 @@ def serve(app, port, open_browser):
         server.server_close()
         if app.agent:
             app.agent.shutdown()
+        shutil.rmtree(app.work, ignore_errors=True)
     print(MSG[app.lang]["stopped"], flush=True)
 
 
