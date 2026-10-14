@@ -41,7 +41,10 @@ you --ask--> agent --reads--> instructions line ("I keep knowledge bases: ...")
                +-- skill (kb-query, kb-note, kb-incremental)
                      +-- registry kb-libraries.json: which library, and where
                      +-- library folder: Markdown files, status card, file index
+                           (+ Sources/: copies of the filed originals, in a local library that keeps them)
 ```
+
+A local library can keep a copy of each filed original in its Sources folder, named after the topic file that holds its text and linked from it (`sources.keep` in `_kb.json`; new work libraries start with it on, life libraries off, because originals are not masked). The material you choose for an intake stays where it is.
 
 The installer (`install.py`) puts these in place and later backs them up, rolls back, moves a library or uninstalls. [tools/kb-client](tools/kb-client/) shows the same steps as a page in the browser. [tools/doc2kb](tools/doc2kb/) converts whole folders of documents to Markdown on its own.
 

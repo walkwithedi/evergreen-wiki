@@ -27,7 +27,10 @@
                +-- 技能（kb-query、kb-note、kb-incremental）
                      +-- 注册表 kb-libraries.json：用哪个库、在哪里
                      +-- 知识库文件夹：Markdown 文件、状态卡、文件索引
+                           （+ Sources/：已入库材料的原件副本，本地库开启时才有）
 ```
+
+本地库可以把每份入库材料的原件复制一份保存在库里的原件文件夹（Sources，可改名），文件名与收录其正文的主题文件相同，并从主题文件链接过去（`_kb.json` 的 `sources.keep`；新建工作库默认开启，生活库默认关闭，因为原件不做打码）。入库时选的资料本身留在原处，不移动也不修改。
 
 安装程序 `install.py` 负责把这些装好，以后还能备份、回滚、移动知识库和卸载。[tools/kb-client](tools/kb-client/README.zh-CN.md) 在浏览器页面里完成同样的步骤。[tools/doc2kb](tools/doc2kb/README.zh-CN.md) 是独立的文档转换器，在桌面或定时任务里把整个目录的文档增量转换成带索引的 Markdown。
 

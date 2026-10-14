@@ -386,14 +386,16 @@ def graph(root, since=0.0):
     skip when searching (the archive folder, names starting with an underscore or the snapshot prefix, old
     versions with a time stamp), links leading out of the library and hidden folders. Nodes are file names
     without .md: kind entity (in the entities folder or type: entity), summary (the spec and the summary
-    files), topic (any other file) or missing (linked to, no such file). new: changed since `since`."""
+    files), topic (any other file), original (a copy in the sources folder that a file links to) or missing
+    (linked to, no such file). new: changed since `since`."""
     names = library_names(root)
     summaries = {names[k].lower() for k in ("spec", "status_card", "index", "open_items", "changelog", "glossary")}
     real_root = os.path.realpath(root)
     files, truncated = [], False
     for here, dirs, fnames in os.walk(real_root):
         rel_here = os.path.relpath(here, real_root)
-        dirs[:] = sorted(d for d in dirs if not d.startswith(".") and not (rel_here == "." and d == names["archive_dir"])
+        dirs[:] = sorted(d for d in dirs if not d.startswith(".")
+                         and not (rel_here == "." and d in (names["archive_dir"], names["sources_dir"]))
                          and os.path.realpath(os.path.join(here, d)).startswith(real_root + os.sep))
         for f in sorted(fnames):
             if not f.lower().endswith(".md") or f.startswith(("_", ".", names["snapshot_prefix"])):
@@ -438,7 +440,12 @@ def graph(root, since=0.0):
             if len(nodes) >= GRAPH_MAX_NODES:
                 truncated = True
                 continue
-            nodes[target] = {"id": target, "kind": "missing", "path": "", "new": False}
+            kept = os.path.join(real_root, names["sources_dir"], target)
+            if "." in target and os.path.isfile(kept):  # an original kept in the sources folder
+                nodes[target] = {"id": target, "kind": "original", "path": os.path.join(names["sources_dir"], target),
+                                 "new": os.path.getmtime(kept) >= since > 0}
+            else:
+                nodes[target] = {"id": target, "kind": "missing", "path": "", "new": False}
     links = [{"source": a, "target": b} for a, b in sorted(edges) if a in nodes and b in nodes]
     degree = {}
     for e in links:

@@ -32,6 +32,6 @@ A folder cannot hold two files with the same name, so versions never pile up and
 1. python3 scripts/package.py preview <output dir> --library <root> --plan <work>/deliver-plan.json --max-name-len <Table D>  
    Show the preview to the user: new files, and existing files whose old version will move to the archive folder. Stop and wait for confirmation.
 2. After the user confirms: python3 scripts/package.py deliver --plan <work>/deliver-plan.json  
-   The script re-checks every target, moves each old version to <archive_dir>/<stem><old_suffix><time stamp>.md, copies the new file in, stores the readme as <archive_dir>/_delivery_<time>_README.txt and writes a run log next to it. Report its last lines.
+   The script re-checks every target, moves each old version to <archive_dir>/<stem><old_suffix><time stamp>.md (originals kept for an old version move there with it, under their own extension), copies the new file in, stores the readme as <archive_dir>/_delivery_<time>_README.txt and writes a run log next to it. Report its last lines.
 
 Without Python, do the same by hand: for each file, if it exists move it to the archive folder under the suffixed name first, then write the new file; finally write a run log with the same lines the script would print.

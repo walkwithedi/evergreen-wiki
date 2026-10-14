@@ -4,6 +4,13 @@
 Output directory layout (the only accepted shape):
   OUT/*.md, OUT/README.txt        knowledge files, summary files and the readme
   OUT/<entities_dir>/*.md         entity pages (optional, no deeper folders)
+  OUT/<sources_dir>/*             copies of originals, any format, named after their topic files
+                                  (optional, preview and deliver only: a local library that keeps
+                                  originals; zip and the Drive preview refuse the folder)
+
+When a topic file gets a new version, the originals kept for its old version (<sources_dir>/<stem>.*)
+move to the archive folder with it, unless the run delivers a copy under exactly the same name,
+which is archived the usual way.
 
 Subcommands:
   zip      OUT DEST.zip --library LIB
@@ -44,24 +51,27 @@ import kbconf  # noqa: E402
 log = logging.getLogger("package")
 
 
-def check_output(out, names, max_len):
+def check_output(out, names, max_len, allow_sources=False):
     """Return (files, errors). files = list of (relative path, absolute path)."""
     errors, files = [], []
     if not os.path.isdir(out):
         return [], [f"output directory not found: {out}"]
-    ent = names["entities_dir"]
+    ent, src = names["entities_dir"], names["sources_dir"]
     for entry in sorted(os.listdir(out)):
         p = os.path.join(out, entry)
         if os.path.isdir(p):
-            if entry != ent:
-                errors.append(f"folder not allowed in the output: {entry} (only {ent}/)")
+            if entry == src and not allow_sources:
+                errors.append(f"{src}/ (originals) is delivered only into a local library that keeps originals")
+                continue
+            if entry not in (ent, src):
+                errors.append(f"folder not allowed in the output: {entry} (only {ent}/ and {src}/)")
                 continue
             for sub in sorted(os.listdir(p)):
                 sp = os.path.join(p, sub)
                 if os.path.isdir(sp):
-                    errors.append(f"{ent}/ must not contain folders: {sub}")
+                    errors.append(f"{entry}/ must not contain folders: {sub}")
                 else:
-                    files.append((f"{ent}/{sub}", sp))
+                    files.append((f"{entry}/{sub}", sp))
         else:
             files.append((entry, p))
     rel = [r for r, _ in files]
@@ -73,6 +83,11 @@ def check_output(out, names, max_len):
         b = os.path.basename(r)
         if names["old_suffix"] in b or b.startswith(names["snapshot_prefix"]) or b.startswith("_"):
             errors.append(f"file that must not be delivered: {r}")
+        elif r.startswith(src + "/"):  # an original: any format, kept as it is
+            if not os.path.getsize(p):
+                errors.append(f"empty file: {r}")
+            log.info("included: %s (%d bytes)", r, os.path.getsize(p))
+            continue
         elif not (b.lower().endswith(".md") or r == names["readme"]):
             errors.append(f"only .md files and {names['readme']} may be delivered: {r}")
         try:
@@ -121,7 +136,7 @@ def cmd_preview(a):
     cfg = load_names(a.library)
     names = cfg["names"]
     root = os.path.dirname(cfg["_path"])
-    files, errors = check_output(a.out, names, a.max_name_len)
+    files, errors = check_output(a.out, names, a.max_name_len, allow_sources=True)
     for e in errors:
         print(f"Error: {e}")
     if errors:
@@ -129,12 +144,12 @@ def cmd_preview(a):
         sys.exit(3)
     stamp0 = kbconf.now(cfg["timezone"]).replace(microsecond=0)
     items, seq = [], 0
-    for r, p in files:
+    for r, p in files + stale_originals(root, names, files):
         if r == names["readme"]:
             continue
         target = os.path.join(root, *r.split("/"))
-        item = {"rel": r, "src": os.path.abspath(p), "target": target,
-                "src_size": os.path.getsize(p), "exists": os.path.exists(target)}
+        item = {"rel": r, "src": os.path.abspath(p) if p else None, "target": target,
+                "src_size": os.path.getsize(p) if p else 0, "exists": os.path.exists(target)}
         if item["exists"]:
             st = os.stat(target)
             stem, ext = os.path.splitext(os.path.basename(target))
@@ -159,8 +174,33 @@ def cmd_preview(a):
         print(f"  + {i['rel']}")
     print(f"New versions (old copy goes to {names['archive_dir']}/): {len(upd)}")
     for i in upd:
-        print(f"  ~ {i['rel']}  old -> {names['archive_dir']}/{i['archive_as']}")
+        what = "old" if i["src"] else "old original, no new copy"
+        print(f"  ~ {i['rel']}  {what} -> {names['archive_dir']}/{i['archive_as']}")
     print(f"Plan written to {a.plan}. Nothing has changed yet.")
+
+
+def stale_originals(root, names, files):
+    """Originals in the library that go to the archive folder with this run: those of a topic file that
+    gets a new version, and those of a delivered original's topic under another extension. A copy under
+    exactly a delivered name is left out here: it is archived as that name's old version. Returns
+    [(relative path, None)]."""
+    src = names["sources_dir"]
+    folder = os.path.join(root, src)
+    if not os.path.isdir(folder):
+        return []
+    rel = {r for r, _ in files}
+    updated = {os.path.splitext(r)[0] for r in rel if "/" not in r and r.lower().endswith(".md")
+               and os.path.isfile(os.path.join(root, r))}
+    delivered = {os.path.splitext(r.split("/", 1)[1])[0] for r in rel if r.startswith(src + "/")}
+    out = []
+    for name in sorted(os.listdir(folder)):
+        r = f"{src}/{name}"
+        stem = os.path.splitext(name)[0]
+        if r in rel or not os.path.isfile(os.path.join(folder, name)):
+            continue
+        if stem in updated or stem in delivered:
+            out.append((r, None))
+    return out
 
 
 def archive_names(stamp0, seq, base, old_suffix, count):
@@ -268,7 +308,7 @@ def cmd_deliver(a):
     for i in plan["items"]:
         target, rel = i["target"], i["rel"]
         try:
-            if not os.path.isfile(i["src"]) or os.path.getsize(i["src"]) != i["src_size"]:
+            if i["src"] and (not os.path.isfile(i["src"]) or os.path.getsize(i["src"]) != i["src_size"]):
                 raise RuntimeError("output file changed after preview")
             if i["exists"]:
                 if not os.path.isfile(target):
@@ -283,6 +323,8 @@ def cmd_deliver(a):
                 lines.append(f"  archive | {rel} -> {i['archive_as']}")
             elif os.path.exists(target):
                 raise RuntimeError("a file with this name appeared after preview")
+            if not i["src"]:  # an old original whose topic file moved on: archived only
+                continue
             os.makedirs(os.path.dirname(target), exist_ok=True)
             shutil.copy2(i["src"], target)
             lines.append(f"  write   | {rel}")

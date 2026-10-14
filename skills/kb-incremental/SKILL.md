@@ -47,11 +47,11 @@ You file and judge; you do not advise, recommend or evaluate. These rules apply 
 8. Every judgement needs evidence. If you cannot quote the source text a step asks for, take the conservative conclusion.
 9. Read in full before you rewrite. Before rewriting any summary file, read the existing version completely; after rewriting, compare both with scripts/card_check.py and do not deliver until it passes.
 10. Searches are capped. Each required file gets one search and one retry; do not keep trying new keywords.
-11. Never use as a source: anything in the archive folder; names starting with an underscore or with names.snapshot_prefix; names containing names.old_suffix plus a time stamp.
+11. Never use as a source: anything in the archive folder or the sources folder (names.sources_dir); names starting with an underscore or with names.snapshot_prefix; names containing names.old_suffix plus a time stamp.
 12. Replies follow the library language and preferences.output (references/environment.md). YAML front matter and the Bases block in entity pages are file formats and keep their syntax.
 13. No wiki links in body text. Links appear only in front matter, in the basis lines of summary files, and in entity pages.
 14. Working notes stay out of knowledge files: cleaning results, term fixes, duplicate and trigger judgements appear only in the reply and the readme.
-15. The library folder and the material are different things (references/config.md, section 3). Material may come from any number of folders and files anywhere, chosen anew for every intake; read it where it is. Never choose or suggest a folder for the user, never offer to change a library's folder because the material is elsewhere, and name the two to the user only in the words that section gives.
+15. The library folder and the material are different things (references/config.md, section 3). Material may come from any number of folders and files anywhere, chosen anew for every intake; read it where it is, and never move or change it. A local library that keeps originals (sources.keep) gets a copy of each filed original in its sources folder at delivery; the user's own file stays where it is. Never choose or suggest a folder for the user, never offer to change a library's folder because the material is elsewhere, and name the two to the user only in the words that section gives.
 
 ## Input checks
 
@@ -194,6 +194,8 @@ Assemble topic files by script; never type the body out again. Write everything 
   python3 scripts/assemble.py <work>/head_<n>.md <work>/body_<n>.md <work>/out/<file name>
 
 It writes the head, one blank line and the body file as it is, and refuses an existing output file, an empty body and unclosed front matter. Without Python: write the whole file yourself.
+
+Originals: when the library keeps them (sources.keep is true, the library is local and delivery is direct; python3 scripts/kbconf.py show tells), add --source <original file> --sources-dir <work>/out/<sources_dir> --max-mb <sources.max_mb> for every item that has an original upload. The script copies it into the sources folder under the topic file's name with its own extension and links it from the front matter (original); delivery archives the old version's originals with it. Its result line says "original kept" or "original not kept: <reason>"; list every original not kept, with the reason, in the readme's issue section. Pasted text has no original. With zip or Drive delivery, or sources.keep off, leave these options out.
 
 Write everything to <work>/out/. Entity pages go to <work>/out/<entities_dir>/, the only allowed subfolder. The output always holds: the new or updated topic files, the file index and the readme (names.readme); plus any rewritten summary files (including a spec rewritten for expansion or new entities) and entity pages. Never include archived files, old copies or delete lists.
 

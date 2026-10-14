@@ -17,7 +17,8 @@ Subcommands (results on stdout, logs on stderr):
             print the one line for claude.ai Project instructions when the registry lives in
             Google Drive (kb-libraries.json in that folder); it never changes when libraries are added
 
-Options for plan/write/render: --label --id --scope --language --timezone --sensitivity on|off --date.
+Options for plan/write/render: --label --id --scope --language --timezone --sensitivity on|off --convert on|off
+--sources on|off (keep a copy of each filed original in the library; local libraries) --date.
 Missing options take the values printed by defaults.
 
 Exit codes: 0 ok, 2 bad input, 3 refused (folder holds Markdown files, id already used).
@@ -127,7 +128,8 @@ def defaults(preset=None, language=None):
         kb = load_preset_kb(preset)
         out.update({"preset": preset, "id": preset, "label": label, "scope": scope,
                     "sensitivity": kb["sensitivity"]["enabled"],
-                    "convert": kb.get("convert", {}).get("enabled", False)})
+                    "convert": kb.get("convert", {}).get("enabled", False),
+                    "sources": kb.get("sources", {}).get("keep", False)})
     return out
 
 
@@ -155,6 +157,8 @@ def settings(a):
     s["sensitivity"] = d["sensitivity"] if sens is None else sens == "on"
     conv = getattr(a, "convert", None)
     s["convert"] = d["convert"] if conv is None else conv == "on"
+    src = getattr(a, "sources", None)
+    s["sources"] = d["sources"] if src is None else src == "on"
     s["date"] = getattr(a, "date", None) or datetime.now(local_tz(s["timezone"])).strftime("%Y-%m-%d")
     problems = kbconf.check_timezone(s["timezone"])
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", s["id"]):
@@ -179,6 +183,7 @@ def build_files(s):
     kb.update({"label": s["label"], "preset": s["preset"], "language": s["language"], "timezone": s["timezone"]})
     kb["sensitivity"] = dict(kb["sensitivity"], enabled=bool(s["sensitivity"]))
     kb["convert"] = dict(kb.get("convert", {}), enabled=bool(s.get("convert", False)))
+    kb["sources"] = dict(kb.get("sources", {}), keep=bool(s.get("sources", False)))
     problems = kbconf.validate(kb)
     if problems:
         raise kbconf.ConfigError("generated _kb.json: " + "; ".join(problems))
@@ -205,6 +210,8 @@ def build_files(s):
     folders = [names["archive_dir"], names["notes_dir"]]
     if kb.get("metadata", "yaml") == "yaml":
         folders.append(names["entities_dir"])
+    if kb["sources"]["keep"]:
+        folders.append(names["sources_dir"])
     return files, folders
 
 
@@ -225,7 +232,8 @@ def plan_text(root, s, files, folders):
              f"Scope: {s['scope']}",
              f"Language: {s['language']} | timezone: {s['timezone']} | "
              f"sensitivity and masking: {'on' if s['sensitivity'] else 'off'} | "
-             f"convert uploads to Markdown: {'on' if s.get('convert') else 'off'}",
+             f"convert uploads to Markdown: {'on' if s.get('convert') else 'off'} | "
+             f"keep originals in the library: {'on' if s.get('sources') else 'off'}",
              "Files:"]
     lines += [f"  {p}" for p, _ in files]
     lines.append("Folders: " + ", ".join(folders))
@@ -373,6 +381,7 @@ def main():
             p.add_argument("--" + opt)
         p.add_argument("--sensitivity", choices=["on", "off"])
         p.add_argument("--convert", choices=["on", "off"])
+        p.add_argument("--sources", choices=["on", "off"])
     p = sub.add_parser("register")
     p.add_argument("--registry")
     for opt in ("id", "label", "scope", "root"):

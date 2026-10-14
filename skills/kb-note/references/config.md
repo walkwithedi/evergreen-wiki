@@ -79,6 +79,7 @@ The spec is the source of every rule about partitions, topics, terms and thresho
 - delivery: direct or zip. Empty means direct: the assistant writes the files into the library after you confirm a preview, and archives the old versions at the same time. A Drive library with an inbox entry (its own unpack script) defaults to zip.
 - convert: kb-incremental turns uploaded Office, PDF and mail files into Markdown with a script before reading them (fewer tokens, faster). enabled: true or false (false when the key is missing; new libraries from a preset start with true). image_limit: pictures in one batch that are read without asking (default 10); over it the user decides once for the batch. min_pdf_chars_per_page (default 200) and min_chars_per_image (default 100): below these a file is read as the original instead (a scan, or a document that is mostly pictures). outline_chars (default 6000; 0 turns it off): converted text longer than this also gets an outline (opening text, headings with line numbers), which is read first; the full text only where it is needed (references/convert.md in kb-incremental).
 - intake: kb-incremental files many files in batches (references/batches.md in kb-incremental). A batch closes at batch_files files (default 10) or batch_mb megabytes (default 20); material that makes more than one batch is planned first and filed batch by batch. Lower them when one batch takes too long.
+- sources: a local library with direct delivery can keep a copy of each filed original (section 3, Originals). keep: true or false (false when the key is missing; new work libraries start with true, life libraries with false, since originals bypass masking). max_mb (default 50; 0 means no limit): larger originals are not copied and the readme says so. Ignored for zip and Google Drive delivery.
 - names: overrides for any default name below. Leave out the keys you do not change.
 
 ### Names
@@ -93,6 +94,7 @@ The spec is the source of every rule about partitions, topics, terms and thresho
 | glossary | 01_Glossary-Issues.md | term fixes, masking log, open issues |
 | archive_dir | Archive | where older versions go |
 | entities_dir | Entities | entity pages |
+| sources_dir | Sources | copies of filed originals (only when sources.keep is on) |
 | notes_dir | Quick-Notes | quick notes waiting to be filed |
 | notes_done_dir | Filed | quick notes already filed (inside notes_dir) |
 | old_suffix | _old | archived copies: <stem>_old<YYYYMMDDHHMMSS>.md |
@@ -109,7 +111,7 @@ In kb-incremental, scripts/kbconf.py prints the resolved configuration: python3 
 
 ### Ignored files
 
-Every search and every read of knowledge files skips: the archive folder; names that start with an underscore (run logs, _kb.json, _kb-params.md, an inbox configuration file, the batch progress file); names that start with snapshot_prefix; names that contain old_suffix followed by a time stamp.
+Every search and every read of knowledge files skips: the archive folder; the sources folder (names.sources_dir, copies of originals: opened only through a topic file's original link, see kb-query); names that start with an underscore (run logs, _kb.json, _kb-params.md, an inbox configuration file, the batch progress file); names that start with snapshot_prefix; names that contain old_suffix followed by a time stamp.
 
 ## 3. Library folder and material: words to use with the user
 
@@ -117,6 +119,7 @@ Users do not know the inner workings, so the library folder and the material mus
 
 - Library folder: where the filed Markdown files, the spec, the status card and the file index live. There is one per library and it matters: the assistant writes here, and the registry records only this folder (backend.root). In Chinese: 知识库文件夹（整理好的结果，助手维护）.
 - Material: the user's own original files (Word, PDF, spreadsheets, mail, pictures), from any number of folders or single files anywhere (a work folder, a network or removable drive, the desktop). The assistant only reads it and never changes it. It is chosen anew for every intake: never registered, remembered or suggested. In Chinese: 资料来源（你的原始文件，可以来自多个文件夹，只读不改）.
+- Originals: in a local library that keeps them (sources.keep), a copy of each filed original stored in the library's sources folder under its topic file's name and linked from it. The material itself stays where it was. In Chinese: 原件（库里保存的原始文件副本）.
 
 Rules:
 1. To the user, say only "library folder" and "material" (知识库文件夹, 资料来源), with the short explanation in brackets the first time each appears in a conversation. Never say registry, root, backend, _kb.json or 注册表 to the user, except in the init preview and when the user uses the word first.

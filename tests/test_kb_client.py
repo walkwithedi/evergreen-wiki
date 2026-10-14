@@ -837,6 +837,18 @@ class GraphTest(unittest.TestCase):
         self.assertFalse(g["truncated"])
         self.assertNotIn(self.tmp, json.dumps(g))  # paths relative to the library
 
+    def test_original_node(self):
+        write(os.path.join(self.lib, "Sources", "02_Minutes.pdf"), "%PDF")
+        write(os.path.join(self.lib, "Sources", "notes.md"), "[[Sources Link]]\n")  # never scanned
+        write(os.path.join(self.lib, "02_Minutes.md"), '---\noriginal: "[[Sources/02_Minutes.pdf]]"\n---\nBody.\n')
+        g = kb_client.graph(self.lib)
+        nodes = {n["id"]: n for n in g["nodes"]}
+        self.assertEqual((nodes["02_Minutes.pdf"]["kind"], nodes["02_Minutes.pdf"]["path"]),
+                         ("original", os.path.join("Sources", "02_Minutes.pdf")))
+        self.assertIn({"source": "02_Minutes", "target": "02_Minutes.pdf"}, g["links"])
+        self.assertNotIn("notes", nodes)
+        self.assertNotIn("Sources Link", nodes)
+
     def test_nothing_new_without_a_start_time(self):
         self.assertFalse(any(n["new"] for n in kb_client.graph(self.lib)["nodes"]))
 

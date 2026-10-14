@@ -19,7 +19,8 @@
       graph: "Graph",
       close: "Close",
       graph_title: "Graph: {lib}",
-      kind_entity: "Entities", kind_summary: "Summary files", kind_topic: "Documents", kind_missing: "No page yet",
+      kind_entity: "Entities", kind_summary: "Summary files", kind_topic: "Documents", kind_original: "Originals",
+      kind_missing: "No page yet",
       only_new: "Only new or changed",
       graph_obsidian: "Open this folder in Obsidian for a fuller graph and backlinks:",
       copy_path: "Copy path", copied: "Copied",
@@ -159,7 +160,8 @@
       graph: "关系图",
       close: "关闭",
       graph_title: "关系图：{lib}",
-      kind_entity: "实体", kind_summary: "汇总文件", kind_topic: "文档", kind_missing: "未建页",
+      kind_entity: "实体", kind_summary: "汇总文件", kind_topic: "文档", kind_original: "原件",
+      kind_missing: "未建页",
       only_new: "只看本次新增或更新",
       graph_obsidian: "用 Obsidian 打开这个文件夹，可以看到更完整的关系图和反向链接：",
       copy_path: "复制路径", copied: "已复制",
@@ -863,7 +865,7 @@
   // The links between the library's files, laid out by a small force simulation and drawn as SVG; nothing
   // is loaded from elsewhere. Files changed since the client started get a ring.
 
-  var KINDS = ["entity", "summary", "topic", "missing"];
+  var KINDS = ["entity", "summary", "topic", "original", "missing"];
   var SVGNS = "http://www.w3.org/2000/svg";
   var graph = null;
 
