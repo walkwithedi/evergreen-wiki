@@ -4,9 +4,13 @@ These skills follow the Agent Skills format and run in any assistant that suppor
 
 ## Work and output folders
 
-- Work folder: a scratch folder for copies of summary files, change lists and plan files. Use your environment's temporary or scratch directory and create work/ and out/ inside it (in claude.ai this is usually /home/claude/; in a coding agent, a temporary directory outside the library).
+- Work folder: a scratch folder for copies of summary files, change lists and plan files. Use your environment's temporary or scratch directory and create work/ and out/ inside it (in claude.ai this is usually /home/claude/; in a coding agent, a temporary directory outside the library). When the request names a work folder ("Work folder: <path>", "工作文件夹：<路径>"), use that folder and create work/ and out/ inside it.
 - Never use the library root as the work folder.
 - Handing a file to the user: use whatever your environment offers (a download link or file card, or the path on disk). For a local library with direct delivery there is nothing to hand over; the files land in the library.
+
+## Running scripts
+
+Paths such as scripts/batch_plan.py are relative to this skill's folder, not to the current directory. Run a script by its full path in the skill's folder, or as cd <skill folder> && python3 scripts/<name>.py ..., one command per call, with no pipes, redirections or chained commands; put text arguments in quotes.
 
 ## Capabilities and fallbacks
 

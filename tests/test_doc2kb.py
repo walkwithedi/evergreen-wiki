@@ -348,10 +348,10 @@ class DedupToolTest(Tmp):
 
 
 class ConvertScriptTest(Tmp):
-    def convert(self, *files, limit=10, lang="en"):
+    def convert(self, *files, limit=10, lang="en", extra=()):
         out = self.p("conv")
         p = run([sys.executable, os.path.join(SKILL_SCRIPTS, "convert.py"), out, *files,
-                 "--lang", lang, "--image-limit", str(limit)])
+                 "--lang", lang, "--image-limit", str(limit), *extra])
         with open(os.path.join(out, "convert.json"), encoding="utf-8") as f:
             return p.stdout, json.load(f)
 
@@ -395,6 +395,39 @@ class ConvertScriptTest(Tmp):
         self.assertIn("mostly pictures", res["files"][0]["reason"])
         self.assertEqual(res["images"], 0)       # pictures of fallback files are not counted
 
+    def long_docx(self, name, paragraphs):
+        body = fx._p("Release plan", "Heading1") + "".join(
+            fx._p(f"Paragraph {i} of the plan, with enough words to count as body text.") for i in range(paragraphs))
+        body += fx._p("Risks", "2") + fx._p("The launch may slip.") + fx._p("Mitigation", "a3") + fx._p("Weekly review.")
+        parts = {"word/document.xml": fx._doc(body), "word/styles.xml": fx.STYLES,
+                 "word/_rels/document.xml.rels": fx._rels([])}
+        return fx._zip(self.p(name), parts)
+
+    def test_outline_for_long_text(self):
+        long_doc, short_doc = self.long_docx("long.docx", 150), self.long_docx("short.docx", 3)
+        out, res = self.convert(long_doc, short_doc)
+        files = {os.path.basename(r["file"]): r for r in res["files"]}
+        self.assertEqual(files["short.docx"]["outline"], "")
+        path = files["long.docx"]["outline"]
+        self.assertEqual(path, self.p("conv", "long.outline.txt"))
+        self.assertIn(f"| outline {path}", out)
+        self.assertEqual(res["outline_chars"], 6000)
+        md_lines = read(self.p("conv", "long.md")).split("\n")
+        outline = read(path)
+        self.assertIn(f"characters: {files['long.docx']['chars']} | lines: {len(md_lines)} | tables: 0 | pictures: 0",
+                      outline)
+        heads = [ln for ln in outline.split("\n") if ln[:1].isdigit()]
+        self.assertEqual([h.split(": ", 1)[1] for h in heads], ["# Release plan", "## Risks", "### Mitigation"])
+        for h in heads:  # every line number points at its heading in the converted text
+            n, text = h.split(": ", 1)
+            self.assertEqual(md_lines[int(n) - 1], text)
+        self.assertIn("Paragraph 0 of the plan", outline)
+
+    def test_outline_off(self):
+        _, res = self.convert(self.long_docx("long.docx", 150), extra=("--outline-chars", "0"))
+        self.assertEqual(res["files"][0]["outline"], "")
+        self.assertFalse(os.path.exists(self.p("conv", "long.outline.txt")))
+
     def test_same_names_kept_apart(self):
         f = fx.build_all(self.p("a"), english=True)
         os.makedirs(self.p("b"))
@@ -410,6 +443,9 @@ class ConfigTest(Tmp):
         self.assertEqual(kbconf.validate({"schema": 1, "convert": {"enabled": True, "image_limit": 5}}), [])
         problems = kbconf.validate({"schema": 1, "convert": {"enabled": "yes", "image_limit": -1, "x": 1}})
         self.assertEqual(len(problems), 3)
+        self.assertEqual(kbconf.validate({"schema": 1, "convert": {"outline_chars": 0}}), [])
+        self.assertEqual(len(kbconf.validate({"schema": 1, "convert": {"outline_chars": -5}})), 1)
+        self.assertEqual(len(kbconf.validate({"schema": 1, "convert": {"outline_chars": "6000"}})), 1)
         self.assertTrue(kbconf.validate({"schema": 1, "convert": True}))
         p = self.p("lib", "_kb.json")
         os.makedirs(os.path.dirname(p))

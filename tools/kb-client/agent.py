@@ -121,16 +121,37 @@ def pattern_path(pattern, cwd):
     return real(p if os.path.isabs(p) else os.path.join(cwd, p))
 
 
+def unquoted(cmd):
+    """The command without the text of its quoted words, for the shell-syntax check: text in single
+    quotes is literal, and so is text in double quotes without $, ` or \\. None when a quote is not closed,
+    a double-quoted part holds one of those three, or the command has a line break."""
+    if "\n" in cmd or "\r" in cmd:
+        return None
+    out, quote = [], None
+    for ch in cmd:
+        if quote is None:
+            if ch in "'\"":
+                quote = ch
+            else:
+                out.append(ch)
+        elif ch == quote:
+            quote = None
+        elif quote == '"' and ch in "$`\\":
+            return None
+    return None if quote else "".join(out)
+
+
 def skill_command(command, script_dirs, cwd):
     """True for `python3 [-I|-B|-u] <script>.py args` (optionally after one `cd <folder> &&`) whose script
-    lies in one of script_dirs, with no other shell syntax at all."""
+    lies in one of script_dirs, with no other shell syntax outside quoted words."""
     cmd = str(command).strip()
     m = re.fullmatch(r"cd\s+(\"[^\"]*\"|'[^']*'|[^\s;&|]+)\s*&&\s*(.*)", cmd, re.S)
     where = cwd
     if m:
         where = os.path.join(cwd, os.path.expanduser(m.group(1).strip("'\"")))
         cmd = m.group(2)
-    if not cmd or SHELL_CHARS & set(cmd):
+    bare = unquoted(cmd)
+    if not cmd or bare is None or SHELL_CHARS & set(bare):
         return False
     try:
         words = shlex.split(cmd)
@@ -147,16 +168,51 @@ def skill_command(command, script_dirs, cwd):
     return os.path.isfile(script) and any(inside(script, d) for d in script_dirs)
 
 
+FILE_COMMANDS = {"mkdir": {"-p"}, "cp": {"-p", "-r", "-R"}}
+
+
+def file_command(command, places, cwd):
+    """True for `mkdir [-p] <folder>...` with every folder in a writable place, and for
+    `cp [-p|-r|-R] <source>... <target>` with every source in a readable place and the target in a writable
+    one; no shell syntax or wildcards outside quoted words, no ~ (the shell's expansion is not followed)."""
+    cmd = str(command).strip()
+    bare = unquoted(cmd)
+    if not cmd or bare is None or SHELL_CHARS & set(bare) or set(GLOB_CHARS) & set(bare):
+        return False
+    try:
+        words = shlex.split(cmd)
+    except ValueError:
+        return False
+    if not words or words[0] not in FILE_COMMANDS:
+        return False
+    rest = words[1:]
+    while rest and rest[0] in FILE_COMMANDS[words[0]]:
+        rest = rest[1:]
+    if not rest or any(w.startswith(("-", "~")) or not w for w in rest):
+        return False
+    paths = [real(w if os.path.isabs(w) else os.path.join(cwd, w)) for w in rest]
+    write = places.get("write", [])
+    readable = write + places.get("read", []) + places.get("scripts", [])
+    if words[0] == "mkdir":
+        return all(any(inside(p, r) for r in write) for p in paths)
+    if len(paths) < 2:
+        return False
+    return any(inside(paths[-1], r) for r in write) and \
+        all(any(inside(p, r) for r in readable) for p in paths[:-1])
+
+
 def decide(permission, patterns, places, cwd):
     """True when the client answers "once" itself. places: {"write": [...], "read": [...],
     "scripts": [...]} as real folder paths. Writing only inside a registered library; reading also in the
-    chosen material, the skills and the agent's own settings; commands only the skills' own scripts.
+    chosen material, the skills and the agent's own settings; commands only the skills' own scripts and
+    plain mkdir and cp within those places.
     Everything else, and anything that cannot be read clearly, goes to the user."""
     patterns = [p for p in (patterns or []) if str(p).strip()]
     if not patterns:
         return False
     if permission == "bash":
-        return all(skill_command(p, places.get("scripts", []), cwd) for p in patterns)
+        return all(skill_command(p, places.get("scripts", []), cwd) or file_command(p, places, cwd)
+                   for p in patterns)
     if permission == "task":
         return all(str(p).strip() in READ_ONLY_AGENTS for p in patterns)
     if permission in ("edit", "write"):
@@ -205,6 +261,27 @@ class Feed:
             return self.events[start:]
 
 
+# The skill scripts whose runs mark a stage of an intake on the page: script name, then the subcommands
+# that count (None: any). Only these fixed names reach the page, never the command line itself.
+STAGE_SCRIPTS = {"batch_plan": ("plan", "next", "done", "skip", "finish", "status", "add"), "convert": None,
+                 "index_tool": ("check", "add", "update", "write"), "clean": None, "card_check": None,
+                 "assemble": None, "package": None, "archive_plan": None, "pick_materials": None}
+SCRIPT_RE = re.compile(r"(?:^|[\s/'\"])(\w+)\.py['\"]?(?:\s+([a-z]+))?")
+
+
+def stage_script(command):
+    """"convert", "index_tool check" and the like for a command running one of STAGE_SCRIPTS, else ""."""
+    for m in SCRIPT_RE.finditer(str(command)):
+        name, sub = m.group(1), m.group(2) or ""
+        if name not in STAGE_SCRIPTS:
+            continue
+        subs = STAGE_SCRIPTS[name]
+        if subs is None:
+            return name
+        return f"{name} {sub}" if sub in subs else ""
+    return ""
+
+
 def part_event(part, role, child=False):
     """What the page needs of one message part: text, reasoning, or a tool step in one line. None for the
     rest. child marks a part of a subagent's conversation."""
@@ -220,8 +297,9 @@ def part_event(part, role, child=False):
         if not detail:
             inp = state.get("input") or {}
             detail = str(inp.get("command") or inp.get("filePath") or inp.get("path") or inp.get("pattern") or "")
+        script = stage_script((state.get("input") or {}).get("command", "")) if part.get("tool") == "bash" else ""
         return dict(base, kind="tool", tool=str(part.get("tool", "")), status=str(state.get("status", "")),
-                    detail=detail[:300], error=str(state.get("error", ""))[:300])
+                    detail=detail[:300], error=str(state.get("error", ""))[:300], script=script)
     return None
 
 
@@ -252,15 +330,18 @@ class Agent:
         self.questions = {}
         self.run_proc = None  # simple mode
         self.stopping = False
+        self.gen = 0  # counts restarts; an event reader of an earlier OpenCode stops
+        self.events_thread = None
+        self.restart_pending = False
 
     # ----- start and stop -----
 
-    def start(self):
+    def start(self, restart=False):
         with self.lock:
             if self.state != "off":
                 return
             self.state = "starting"
-        self.feed.emit("agent", state="starting")
+        self.feed.emit("agent", state="starting", restart=restart)
         threading.Thread(target=self._start, daemon=True).start()
 
     def _start(self):
@@ -297,9 +378,12 @@ class Agent:
             return
         with self.lock:
             self.state = "ready"
-        threading.Thread(target=self._events, args=(stream,), daemon=True).start()
+        self.events_thread = threading.Thread(target=self._events, args=(stream, self.gen), daemon=True)
+        self.events_thread.start()
         self._resume()
         self.feed.emit("agent", state="ready", session=self.session)
+        if self.restart_pending:
+            self.restart()
 
     def _read_output(self, found):
         for line in self.proc.stdout:
@@ -368,8 +452,31 @@ class Agent:
             raise http.client.HTTPException(f"status {r.status}")
         return c, r
 
-    def _events(self, stream=None):
-        while not self.stopping:
+    def restart(self):
+        """Starts OpenCode again, so that it reads skills and instructions installed since it started; the
+        conversation goes on. While OpenCode is starting or the assistant is working, this waits until it is
+        done. Simple mode needs none: each message starts OpenCode anew. False when there is nothing to do."""
+        with self.lock:
+            if self.state in ("off", "simple") or self.stopping:
+                return False
+            if self.state == "starting" or self.status != "idle":
+                self.restart_pending = True
+                return True
+            self.restart_pending = False
+            self.gen += 1
+            self.state = "off"
+        log.info("restarting opencode")
+        self._kill()
+        t = self.events_thread
+        if t and t is not threading.current_thread():
+            t.join(5)
+        self.proc, self.port, self.output = None, None, []
+        self.permissions, self.questions = {}, {}
+        self.start(restart=True)
+        return True
+
+    def _events(self, stream, gen):
+        while not self.stopping and gen == self.gen:
             try:
                 c, r = stream or self._connect()
                 stream = None
@@ -385,6 +492,8 @@ class Agent:
                 c.close()
             except (OSError, http.client.HTTPException) as e:
                 log.debug("event stream: %s", e)
+            if gen != self.gen:  # restarted: the new OpenCode has its own reader
+                return
             if self.proc and self.proc.poll() is not None:
                 with self.lock:
                     self.state = "failed"
@@ -458,6 +567,8 @@ class Agent:
     def _set_status(self, status):
         self.status = status
         self.feed.emit("status", status=status)
+        if status == "idle" and self.restart_pending:
+            threading.Thread(target=self.restart, daemon=True).start()
 
     def allowed_places(self):
         pl = self.places()

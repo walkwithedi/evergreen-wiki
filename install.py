@@ -129,7 +129,8 @@ MSG = {
         "id_taken": "The id {id!r} is already registered; using {new!r}. Change it in the preview if you like.",
         "preview": "Preview",
         "items": ["Folder", "Label", "Id", "Scope", "Language", "Timezone", "Sensitivity and masking",
-                  "Convert uploads to Markdown first (fewer tokens, faster)"],
+                  "Convert uploads to Markdown first (fewer tokens, faster)",
+                  "Keep a copy of each filed original in the library (Sources folder)"],
         "on_off": ("on", "off"),
         "files": "Files to create",
         "folders": "Folders to create",
@@ -174,7 +175,8 @@ MSG = {
         "id_taken": "id {id!r} 已被登记，改用 {new!r}；可以在预览里修改。",
         "preview": "预览",
         "items": ["文件夹", "名称", "id", "范围", "语言", "时区", "敏感信息分级与打码",
-                  "上传材料先转成 Markdown 再入库（省 token、更快）"],
+                  "上传材料先转成 Markdown 再入库（省 token、更快）",
+                  "入库时把原件复制一份保存在知识库里（原件文件夹）"],
         "on_off": ("开", "关"),
         "files": "将创建的文件",
         "folders": "将创建的文件夹",
@@ -237,13 +239,13 @@ class Asker:
                 return ans
 
 
-def choose_dest(q, m, agent=None):
+def choose_dest(q, m, agent=None, agent_default=None):
     if agent:
         if not TARGETS[agent][1]:
             print(m["unverified"])
         return agent, TARGETS[agent][0]
     found = [t for t in AGENT_ORDER if os.path.isdir(AGENT_HOMES[t])]
-    default = found[0] if found else "agents"
+    default = agent_default if agent_default in TARGETS else (found[0] if found else "agents")
     opts = [(t, f"{AGENT_NAMES[t]}  ({TARGETS[t][0]}){'  - ' + m['found'] if t in found else ''}")
             for t in AGENT_ORDER]
     opts.append(("other", m["other"]))
@@ -364,7 +366,8 @@ def library_settings(il, s):
     ns = argparse.Namespace(preset=s["preset"], label=s["label"], id=s["id"], scope=s["scope"],
                             language=s["language"], timezone=s["timezone"],
                             sensitivity="on" if s["sensitivity"] else "off",
-                            convert="on" if s["convert"] else "off", date=None)
+                            convert="on" if s["convert"] else "off",
+                            sources="on" if s.get("sources") else "off", date=None)
     return il.settings(ns)
 
 
@@ -372,7 +375,7 @@ def show_preview(m, il, s, root, reg_path, entry):
     files, folders = il.build_files(s)
     on, off = m["on_off"]
     values = [root, s["label"], s["id"], s["scope"], s["language"], s["timezone"], on if s["sensitivity"] else off,
-              on if s["convert"] else off]
+              on if s["convert"] else off, on if s.get("sources") else off]
     print(f"\n{m['preview']}")
     for i, (k, v) in enumerate(zip(m["items"], values), 1):
         print(f"  {i}. {k}: {v}")
@@ -394,6 +397,8 @@ def edit_item(q, m, il, s, root, n):
         s["sensitivity"] = q.yes(item, s["sensitivity"])
     elif n == 8:
         s["convert"] = q.yes(item, s["convert"])
+    elif n == 9:
+        s["sources"] = q.yes(item, s.get("sources", False))
     else:
         key = ["", "label", "id", "scope", "language", "timezone"][n - 1]
         s[key] = q.ask(item, s[key])
@@ -478,10 +483,12 @@ def add_instructions_line(q, m, il, target, reg, lang):
         print(m["skipped_line"])
 
 
-def wizard(asker=Asker, lang=None, agent=None, preset=None, descriptions=None, preset_default="life"):
+def wizard(asker=Asker, lang=None, agent=None, preset=None, descriptions=None, preset_default="life",
+           agent_default=None):
     """asker(lang) returns the object that asks the questions. lang, agent (a --target name) and preset
     answer those questions in advance; descriptions is a file that replaces the skill descriptions;
-    preset_default is the kind of library chosen beforehand when the question is asked."""
+    preset_default is the kind of library chosen beforehand when the question is asked, agent_default
+    the agent (a --target name) chosen beforehand when that question is asked."""
     sys.path.insert(0, os.path.join(ROOT, "skills", "kb-incremental", "scripts"))
     import init_library as il
     il.kbconf.utf8_stdio()
@@ -493,7 +500,7 @@ def wizard(asker=Asker, lang=None, agent=None, preset=None, descriptions=None, p
     q = asker(lang)
     m = MSG[lang]
     try:
-        target, dest_root = choose_dest(q, m, agent)
+        target, dest_root = choose_dest(q, m, agent, agent_default)
         install_skills(q, m, target, dest_root, lang, descriptions)
         reg = setup_library(q, m, il, lang, preset, preset_default)
         if reg is None:

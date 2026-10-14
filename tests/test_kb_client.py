@@ -17,6 +17,7 @@ FAKE = os.path.join(ROOT, "tests", "kb_client_fake_opencode.py")
 CANCEL = object()
 sys.path.insert(0, os.path.join(ROOT, "tools", "kb-client"))
 import agent  # noqa: E402
+import kb_client  # noqa: E402
 
 
 def write(path, text):
@@ -125,7 +126,8 @@ class KbClientTest(unittest.TestCase):
         self.home = self.p("home")
         os.makedirs(self.p("home", ".claude"))
         write(self.p("home", ".claude", "CLAUDE.md"), "# Mine\n")
-        self.env = dict(os.environ, HOME=self.home, XDG_CONFIG_HOME=self.p("home", ".config"),
+        os.makedirs(self.p("tmp"))
+        self.env = dict(os.environ, HOME=self.home, XDG_CONFIG_HOME=self.p("home", ".config"), TMPDIR=self.p("tmp"),
                         PYTHONIOENCODING="utf-8", PATH=os.path.dirname(sys.executable))
         for k in ("KB_LIBRARIES", "LANG", "LC_ALL", "LC_MESSAGES", "LANGUAGE"):
             self.env.pop(k, None)
@@ -301,9 +303,47 @@ class KbClientTest(unittest.TestCase):
         self.assertTrue(agent["model"])
         self.assertTrue(agent["config"].endswith("opencode.jsonc"))
 
+    def test_progress(self):
+        self.assertEqual(self.server.get("/api/progress")[1], {"progress": []})
+        result, out, _ = self.setup_library()
+        self.assertEqual(result, "ok", out)
+        self.assertEqual(self.server.get("/api/progress")[1], {"progress": []})  # no run open
+        batches = [{"n": 1, "group": "minutes", "part": "", "status": "done", "files": [{"path": "/x/a.docx"}],
+                    "result": {"written": 4, "duplicates": 1, "review": 0}},
+                   {"n": 2, "group": "plans", "part": "1/2", "status": "started", "files": [], "result": {}},
+                   {"n": 3, "group": "plans", "part": "2/2", "status": "pending", "files": [], "result": {}}]
+        write(self.p("home", "kb", "work", "_intake-batches.json"),
+              json.dumps({"schema": 1, "batches": batches, "final_step": "pending"}))
+        p = self.server.get("/api/progress")[1]["progress"]
+        self.assertEqual(len(p), 1)
+        p = p[0]
+        self.assertEqual((p["id"], p["batches"], p["done"], p["skipped"], p["current"], p["current_group"]),
+                         ("work", 3, 1, 0, 2, "plans"))
+        self.assertEqual((p["written"], p["duplicates"], p["review"], p["final_step"]), (4, 1, 0, "pending"))
+        self.assertEqual(p["finished"], [{"n": 1, "group": "minutes", "part": "",
+                                          "result": {"written": 4, "duplicates": 1, "review": 0}}])
+        self.assertNotIn("/x/a.docx", json.dumps(p))  # counts, not file paths
+        write(self.p("home", "kb", "work", "_intake-batches.json"), "{broken")
+        self.assertEqual(self.server.get("/api/progress")[1], {"progress": []})
+
+    def test_graph_of_a_registered_library(self):
+        self.assertEqual(self.server.get("/api/graph?lib=work")[0], 404)
+        result, out, _ = self.setup_library()
+        self.assertEqual(result, "ok", out)
+        status, g = self.server.get("/api/graph?lib=work")
+        self.assertEqual(status, 200)
+        self.assertEqual((g["label"], g["root"]), ("Work", self.p("home", "kb", "work")))
+        self.assertIn("00_Status-Card", {n["id"] for n in g["nodes"]})
+        self.assertTrue(all(n["new"] for n in g["nodes"] if n["kind"] == "summary"))  # written after the start
+        self.assertEqual(self.server.get("/api/graph?lib=../etc")[0], 404)
+
     def test_quit(self):
+        work = self.server.get("/api/state")[1]["work"]
+        self.assertTrue(os.path.isdir(work))
+        self.assertTrue(work.startswith(self.p("tmp")))
         self.assertEqual(self.server.post("/api/quit", {})[0], 200)
         self.assertEqual(self.server.proc.wait(10), 0)
+        self.assertFalse(os.path.exists(work))  # the work folder goes with the client
 
 
 class ChatEvents:
@@ -344,7 +384,8 @@ class ChatTest(unittest.TestCase):
         write(self.p("bin", "opencode"), read(FAKE).replace("#!/usr/bin/env python3", "#!" + sys.executable, 1))
         os.chmod(self.p("bin", "opencode"), 0o700)
         self.log = self.p("log.jsonl")
-        self.env = dict(os.environ, HOME=self.home, XDG_CONFIG_HOME=self.p("home", ".config"),
+        os.makedirs(self.p("tmp"))
+        self.env = dict(os.environ, HOME=self.home, XDG_CONFIG_HOME=self.p("home", ".config"), TMPDIR=self.p("tmp"),
                         PYTHONIOENCODING="utf-8", FAKE_OPENCODE_LOG=self.log,
                         PATH=self.p("bin") + os.pathsep + os.path.dirname(sys.executable))
         for k in ("KB_LIBRARIES", "LANG", "LC_ALL", "LC_MESSAGES", "LANGUAGE", "FAKE_OPENCODE_MODE"):
@@ -413,6 +454,23 @@ class ChatTest(unittest.TestCase):
         saved = json.loads(read(self.p("home", ".config", "evergreen-wiki", "kb-client.json")))
         self.assertEqual(saved, {"session": new})
 
+    def test_setup_restarts_opencode(self):
+        ev = self.ready()
+        self.send("hello there")
+        ev.until(lambda e: e["type"] == "status" and e["status"] == "idle", "idle")
+        result, out, asked = self.server.run("setup", ["opencode", True, True, "work", self.p("home", "kb", "work"),
+                                                       "team projects", "", True])
+        self.assertEqual(result, "ok", out)
+        self.assertEqual(asked[0]["default"], "opencode")  # the client suggests the agent it talks to
+        self.assertTrue(os.path.isfile(self.p("home", ".config", "opencode", "skills", "kb-note", "SKILL.md")))
+        ev.until(lambda e: e["type"] == "agent" and e["state"] == "starting" and e.get("restart"), "restart")
+        ev.until(lambda e: e["type"] == "agent" and e["state"] == "ready", "ready again")
+        serves = [c for c in self.calls() if c.get("args", [])[:1] == ["serve"]]
+        self.assertEqual(len(serves), 2)
+        self.send("after the restart")
+        ev.until(lambda e: e["type"] == "part" and e["role"] == "assistant" and e["text"] == "echo: after the restart",
+                 "answer after the restart")
+
     def test_bad_requests(self):
         self.ready()
         s = self.server
@@ -453,6 +511,21 @@ class ChatTest(unittest.TestCase):
         ev.until(lambda e: e["type"] == "part" and e["text"] == "permission: once", "reply")
         # writing there is not allowed: only the library may be written to
         self.send("PERM edit " + os.path.join(material, "a.md"))
+        self.assertEqual(ev.until(lambda e: e["type"] in ("auto", "permission"))["type"], "permission")
+
+    def test_tool_step_names_the_stage_script(self):
+        ev = self.ready()
+        self.send("RUN cd /skills/kb-incremental && python3 scripts/convert.py a.docx out.md")
+        step = ev.until(lambda e: e["type"] == "part" and e["kind"] == "tool", "tool step")
+        self.assertEqual((step["script"], step["detail"]), ("convert", "Run a script"))
+
+    def test_work_folder_is_written_without_a_card(self):
+        ev = self.ready()
+        work = self.server.get("/api/state")[1]["work"]
+        self.send("PERM edit " + os.path.join(work, "out", "a.md"))
+        self.assertEqual(ev.until(lambda e: e["type"] in ("auto", "permission"))["type"], "auto")
+        ev.until(lambda e: e["type"] == "part" and e["text"] == "permission: once", "reply")
+        self.send("PERM edit " + self.p("home", "a.md"))
         self.assertEqual(ev.until(lambda e: e["type"] in ("auto", "permission"))["type"], "permission")
 
     def test_question(self):
@@ -672,6 +745,120 @@ class DecideTest(unittest.TestCase):
                     f"python3 -c 'print(1)' {script}"):
             with self.subTest(bad=bad):
                 self.assertFalse(self.ok("bash", bad))
+
+    def test_mkdir_and_cp(self):
+        work = os.path.join(self.tmp, "work")
+        os.makedirs(work)
+        self.places["write"] = self.places["write"] + [work]
+        index = os.path.join(self.lib, "_index.md")
+        for good in (f"mkdir -p {work}/work {work}/out", f"mkdir {self.lib}/notes",
+                     f"cp {index} {work}/work/_index.md", f"cp -p {self.mat}/a.docx {self.mat}/b.pdf {work}/work/",
+                     f"cp -r {self.mat} {work}/material", f"cp '{self.mat}/a b.docx' {work}/work/",
+                     f"cp {os.path.join(self.skill, 'scripts', 'batch_plan.py')} {work}/x.py"):
+            with self.subTest(good=good):
+                self.assertTrue(self.ok("bash", good))
+        for bad in (f"mkdir -p {self.mat}/x", f"mkdir /etc/x", f"cp {index} {self.mat}/x",
+                    f"cp /etc/passwd {work}/p", f"cp {index}", f"cp {self.mat}/*.docx {work}/",
+                    f"cp {index} {work}/a; rm -rf ~", f"mkdir -p {work}/a && ls", f"mkdir ~/x",
+                    f"cp --target-directory={work} {index}", f"mv {index} {work}/",
+                    f"cp {index} {self.lib}/out/x"):  # a link out of the library
+            with self.subTest(bad=bad):
+                self.assertFalse(self.ok("bash", bad))
+
+    def test_stage_script(self):
+        for command, script in (("python3 /s/kb-incremental/scripts/convert.py a b", "convert"),
+                                ('cd /s && python3 scripts/index_tool.py check w --orig "x"', "index_tool check"),
+                                ("python3 -I '/a b/scripts/card_check.py' o n", "card_check"),
+                                ("python3 scripts/batch_plan.py finish --plan p", "batch_plan finish"),
+                                ("python3 scripts/assemble.py h.md b.md out/x.md", "assemble"),
+                                ("python3 scripts/batch_plan.py --help", ""), ("python3 other.py", ""),
+                                ("ls scripts", "")):
+            with self.subTest(command=command):
+                self.assertEqual(agent.stage_script(command), script)
+
+    def test_quoted_text(self):
+        script = os.path.join(self.skill, "scripts", "batch_plan.py")
+        for good in (f'python3 {script} add --kind topic --text "Projects: Atlas (new topic; a.docx)"',
+                     f"python3 {script} add --text 'a | b & c > d'",
+                     f'cd {self.skill} && python3 scripts/batch_plan.py add --text "x (y; z)"'):
+            with self.subTest(good=good):
+                self.assertTrue(self.ok("bash", good))
+        for bad in (f'python3 {script} --text "$(id)"', f'python3 {script} --text "`id`"',
+                    f'python3 {script} --text "a\\"; id; echo "', f'python3 {script} --text "open',
+                    f'python3 {script} --text "a" ; id', f"python3 {script} --text 'a'|sh",
+                    f'python3 {script} --text "line\nbreak"'):
+            with self.subTest(bad=bad):
+                self.assertFalse(self.ok("bash", bad))
+
+
+@unittest.skipUnless(os.name == "posix", "the client runs on Linux desktops")
+class GraphTest(unittest.TestCase):
+    """The links between a library's files (kb_client.graph)."""
+
+    def setUp(self):
+        self.tmp = os.path.realpath(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.lib = os.path.join(self.tmp, "lib")
+        files = {
+            "00_Spec.md": "Cite sources as basis: [[02_Example]].\n",
+            "00_Status-Card.md": "- Release in May. basis: [[02_Plan]]\n- Owner. basis: [[02_Minutes|the minutes]]\n",
+            "02_Plan.md": '---\nentities: ["[[Atlas]]"]\n---\nSee [[Riverside Clinic#Address]] and [[02_Plan]].\n',
+            "02_Minutes.md": "---\ntype: topic\n---\nNo links.\n",
+            "03_Atlas-Team.md": '---\ntype: "entity"\n---\nTeam page.\n',
+            "Entities/Atlas.md": "---\ntype: entity\n---\n",
+            "Archive/02_Plan_old20260101-0900.md": "[[Archived Link]]\n",
+            "02_Plan_old20261001-1200.md": "[[Old Link]]\n",
+            "_run-log_2026.md": "[[Log Link]]\n",
+            "snapshot_00_Status-Card.md": "[[Snapshot Link]]\n",
+            ".hidden/x.md": "[[Hidden Link]]\n",
+            "notes.txt": "[[Text Link]]\n",
+        }
+        for rel, text in files.items():
+            write(os.path.join(self.lib, rel), text)
+        write(os.path.join(self.tmp, "outside", "secret.md"), "[[Outside Link]]\n")
+        os.symlink(os.path.join(self.tmp, "outside"), os.path.join(self.lib, "out"))
+        os.symlink(os.path.join(self.tmp, "outside", "secret.md"), os.path.join(self.lib, "02_Link.md"))
+        old = time.time() - 3600
+        for rel in ("00_Spec.md", "00_Status-Card.md", "02_Minutes.md", "03_Atlas-Team.md", "Entities/Atlas.md"):
+            os.utime(os.path.join(self.lib, rel), (old, old))
+
+    def test_nodes_and_links(self):
+        g = kb_client.graph(self.lib, time.time() - 60)
+        kinds = {n["id"]: n["kind"] for n in g["nodes"]}
+        self.assertEqual(kinds, {"00_Spec": "summary", "00_Status-Card": "summary", "02_Plan": "topic",
+                                 "02_Minutes": "topic", "03_Atlas-Team": "entity", "Atlas": "entity",
+                                 "Riverside Clinic": "missing"})
+        links = {(x["source"], x["target"]) for x in g["links"]}
+        self.assertEqual(links, {("00_Status-Card", "02_Plan"), ("00_Status-Card", "02_Minutes"),
+                                 ("02_Plan", "Atlas"), ("02_Plan", "Riverside Clinic")})
+        nodes = {n["id"]: n for n in g["nodes"]}
+        self.assertEqual([i for i, n in nodes.items() if n["new"]], ["02_Plan"])
+        self.assertEqual((nodes["02_Plan"]["links"], nodes["Atlas"]["path"]), (3, os.path.join("Entities", "Atlas.md")))
+        self.assertFalse(g["truncated"])
+        self.assertNotIn(self.tmp, json.dumps(g))  # paths relative to the library
+
+    def test_original_node(self):
+        write(os.path.join(self.lib, "Sources", "02_Minutes.pdf"), "%PDF")
+        write(os.path.join(self.lib, "Sources", "notes.md"), "[[Sources Link]]\n")  # never scanned
+        write(os.path.join(self.lib, "02_Minutes.md"), '---\noriginal: "[[Sources/02_Minutes.pdf]]"\n---\nBody.\n')
+        g = kb_client.graph(self.lib)
+        nodes = {n["id"]: n for n in g["nodes"]}
+        self.assertEqual((nodes["02_Minutes.pdf"]["kind"], nodes["02_Minutes.pdf"]["path"]),
+                         ("original", os.path.join("Sources", "02_Minutes.pdf")))
+        self.assertIn({"source": "02_Minutes", "target": "02_Minutes.pdf"}, g["links"])
+        self.assertNotIn("notes", nodes)
+        self.assertNotIn("Sources Link", nodes)
+
+    def test_nothing_new_without_a_start_time(self):
+        self.assertFalse(any(n["new"] for n in kb_client.graph(self.lib)["nodes"]))
+
+    def test_node_limit(self):
+        limit = kb_client.GRAPH_MAX_NODES
+        self.addCleanup(setattr, kb_client, "GRAPH_MAX_NODES", limit)
+        kb_client.GRAPH_MAX_NODES = 3
+        g = kb_client.graph(self.lib)
+        self.assertTrue(g["truncated"])
+        self.assertLessEqual(len(g["nodes"]), 3)
 
 
 @unittest.skipUnless(os.name == "posix", "the client runs on Linux desktops")

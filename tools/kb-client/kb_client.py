@@ -27,8 +27,10 @@ import os
 import queue
 import re
 import secrets
+import shutil
 import socketserver
 import sys
+import tempfile
 import threading
 import time
 import webbrowser
@@ -196,6 +198,10 @@ class App:
         self.idle = idle
         self.start_timeout = start_timeout
         self.agent = None
+        self.started = time.time()  # files changed after this count as new in the graph
+        # The skills' work folder for this client: outside every library (mkdtemp makes it private), so
+        # that their copies and output files are written there without a permission card each time.
+        self.work = tempfile.mkdtemp(prefix="kb-client-work-")
         self.token = secrets.token_urlsafe(24)
         self.job = None
         self.lock = threading.Lock()
@@ -239,6 +245,8 @@ class App:
                 job.done = True
                 job.events.append({"type": "end", "result": result, "seq": len(job.events) + 1})
                 job.cond.notify_all()
+        if job.action == "setup" and result == "ok" and self.agent is not None:
+            self.agent.restart()  # so that the conversation uses the skills and the instructions line just written
 
     # ---------- state ----------
 
@@ -252,6 +260,7 @@ class App:
             "agent": agent_status(),
             "backups": len(kb_manage.list_backups()),
             "registry": kb_manage.registry_path(),
+            "work": self.work,
             "job": None if job is None else {"id": job.id, "action": job.action, "done": job.done},
         }
 
@@ -266,11 +275,17 @@ class App:
                     return None, "no_program"
                 if not st["model"]:
                     return None, "no_model"
-                self.agent = agent_mod.Agent(OPENCODE["program"], os.path.expanduser("~"), agent_places,
+                self.agent = agent_mod.Agent(OPENCODE["program"], os.path.expanduser("~"), self.places,
                                              os.path.join(kb_manage.state_dir(), "kb-client.json"),
                                              self.start_timeout)
         self.agent.start()
         return self.agent, None
+
+    def places(self):
+        pl = agent_places()
+        if os.path.isdir(self.work):
+            pl["write"] = pl["write"] + [self.work]
+        return pl
 
     def idle_watch(self):
         while self.idle:
@@ -288,7 +303,7 @@ def run_action(action, asker, lang, options, lib_id=None):
     m = MSG[lang]
     if action == "setup":
         install.wizard(asker, lang, options.get("agent"), options.get("preset"), options.get("descriptions"),
-                       preset_default="work")
+                       preset_default="work", agent_default="opencode")
         return None
     if action == "move":
         libs = [(i, label, root) for i, label, root in kb_manage.registered_libs()
@@ -321,6 +336,124 @@ def libraries():
                     "exists": bool(root) and os.path.isdir(root),
                     "movable": bool(root) and kb_manage.lib_check(root, install.MANAGE_DEFAULTS) is None})
     return out
+
+
+def progress():
+    """Batch intake progress of every registered local library that has a progress file, for the progress
+    line and the batch cards on the page: counts and group (folder) names, no file paths."""
+    out = []
+    for lib in libraries():
+        if not lib["root"] or not lib["exists"]:
+            continue
+        plan = kb_manage.read_json(kb_manage.batch_plan(lib["root"]), None)
+        if not isinstance(plan, dict) or not isinstance(plan.get("batches"), list):
+            continue
+        bs = [b for b in plan["batches"] if isinstance(b, dict)]
+        done = [b for b in bs if b.get("status") == "done"]
+        started = [b for b in bs if b.get("status") == "started"]
+
+        def total(key):
+            return sum(int((b.get("result") or {}).get(key) or 0) for b in done)
+        out.append({"id": lib["id"], "label": lib["label"], "batches": len(bs), "done": len(done),
+                    "skipped": sum(1 for b in bs if b.get("status") == "skipped"),
+                    "current": started[0].get("n") if started else None,
+                    "current_group": str(started[0].get("group", "")) if started else "",
+                    "written": total("written"), "duplicates": total("duplicates"), "review": total("review"),
+                    "finished": [{"n": b.get("n"), "group": str(b.get("group", "")), "part": str(b.get("part", "")),
+                              "result": b.get("result") or {}} for b in done],
+                    "final_step": str(plan.get("final_step", ""))})
+    return out
+
+
+GRAPH_MAX_NODES = 2000
+GRAPH_MAX_READ = 1024 * 1024  # bytes read of one file
+LINK_RE = re.compile(r"\[\[([^\[\]|#\n]+)(?:#[^\[\]|\n]*)?(?:\|[^\[\]\n]*)?\]\]")
+ENTITY_TYPE_RE = re.compile(r"^type:\s*[\"']?entity[\"']?\s*$", re.M)
+STAMP_RE = re.compile(r"\d{8}")
+
+
+def library_names(root):
+    il = kb_manage.init_library()
+    try:
+        return il.kbconf.load_library(root)["names"]
+    except Exception as e:  # an incomplete library falls back to the default names
+        log.info("cannot read the settings of %s: %s", root, e)
+        return il.kbconf.resolve_names()
+
+
+def graph(root, since=0.0):
+    """The links between the Markdown files of a library, for the graph on the page. Skips what the skills
+    skip when searching (the archive folder, names starting with an underscore or the snapshot prefix, old
+    versions with a time stamp), links leading out of the library and hidden folders. Nodes are file names
+    without .md: kind entity (in the entities folder or type: entity), summary (the spec and the summary
+    files), topic (any other file), original (a copy in the sources folder that a file links to) or missing
+    (linked to, no such file). new: changed since `since`."""
+    names = library_names(root)
+    summaries = {names[k].lower() for k in ("spec", "status_card", "index", "open_items", "changelog", "glossary")}
+    real_root = os.path.realpath(root)
+    files, truncated = [], False
+    for here, dirs, fnames in os.walk(real_root):
+        rel_here = os.path.relpath(here, real_root)
+        dirs[:] = sorted(d for d in dirs if not d.startswith(".")
+                         and not (rel_here == "." and d in (names["archive_dir"], names["sources_dir"]))
+                         and os.path.realpath(os.path.join(here, d)).startswith(real_root + os.sep))
+        for f in sorted(fnames):
+            if not f.lower().endswith(".md") or f.startswith(("_", ".", names["snapshot_prefix"])):
+                continue
+            stem = f[:-3]
+            if names["old_suffix"] in stem and STAMP_RE.search(stem.split(names["old_suffix"])[-1]):
+                continue
+            full = os.path.join(here, f)
+            if not os.path.realpath(full).startswith(real_root + os.sep):
+                continue
+            if len(files) >= GRAPH_MAX_NODES:
+                truncated = True
+                break
+            files.append((stem, os.path.relpath(full, real_root), full))
+    nodes, edges = {}, set()
+    for stem, rel, full in files:
+        try:
+            with open(full, encoding="utf-8", errors="replace") as fh:
+                text = fh.read(GRAPH_MAX_READ)
+            mtime = os.path.getmtime(full)
+        except OSError as e:
+            log.info("cannot read %s: %s", rel, e)
+            continue
+        top = rel.split(os.sep)[0]
+        if top == names["entities_dir"] or ENTITY_TYPE_RE.search(text.split("\n---", 1)[0] if text.startswith("---") else ""):
+            kind = "entity"
+        elif (stem + ".md").lower() in summaries:
+            kind = "summary"
+        else:
+            kind = "topic"
+        nodes.setdefault(stem, {"id": stem, "kind": kind, "path": rel, "new": mtime >= since > 0})
+        if (stem + ".md").lower() == names["spec"].lower():
+            continue  # the spec's links are examples of the rules, not links between files
+        for m in LINK_RE.finditer(text):
+            target = m.group(1).strip()
+            target = target[:-3] if target.lower().endswith(".md") else target
+            target = target.rsplit("/", 1)[-1]
+            if target and target != stem:
+                edges.add((stem, target))
+    for _, target in sorted(edges):
+        if target not in nodes:
+            if len(nodes) >= GRAPH_MAX_NODES:
+                truncated = True
+                continue
+            kept = os.path.join(real_root, names["sources_dir"], target)
+            if "." in target and os.path.isfile(kept):  # an original kept in the sources folder
+                nodes[target] = {"id": target, "kind": "original", "path": os.path.join(names["sources_dir"], target),
+                                 "new": os.path.getmtime(kept) >= since > 0}
+            else:
+                nodes[target] = {"id": target, "kind": "missing", "path": "", "new": False}
+    links = [{"source": a, "target": b} for a, b in sorted(edges) if a in nodes and b in nodes]
+    degree = {}
+    for e in links:
+        degree[e["source"]] = degree.get(e["source"], 0) + 1
+        degree[e["target"]] = degree.get(e["target"], 0) + 1
+    for n in nodes.values():
+        n["links"] = degree.get(n["id"], 0)
+    return {"nodes": list(nodes.values()), "links": links, "truncated": truncated}
 
 
 def agent_places():
@@ -518,6 +651,14 @@ class Handler(BaseHTTPRequestHandler):
         path, query = g
         if path == "/api/state":
             return self.send(200, self.app.state())
+        if path == "/api/graph":
+            lib_id = (query.get("lib") or [""])[0]
+            lib = next((x for x in libraries() if x["id"] == lib_id and x["root"] and x["exists"]), None)
+            if lib is None:
+                return self.send(404, {"error": "library"})
+            return self.send(200, dict(graph(lib["root"], self.app.started), label=lib["label"], root=lib["root"]))
+        if path == "/api/progress":
+            return self.send(200, {"progress": progress()})
         if path == "/api/places":
             return self.send(200, {"places": places()})
         if path == "/api/fs":
@@ -748,6 +889,7 @@ def serve(app, port, open_browser):
         server.server_close()
         if app.agent:
             app.agent.shutdown()
+        shutil.rmtree(app.work, ignore_errors=True)
     print(MSG[app.lang]["stopped"], flush=True)
 
 

@@ -57,6 +57,30 @@ class KbconfTest(Tmp):
         self.assertEqual(cfg["names"]["archive_dir"], "归档")
         self.assertEqual(cfg["partitions"]["topic_start"], 2)
 
+    def test_sources(self):
+        self.assertEqual(kbconf.validate({"schema": 1, "sources": {"keep": True, "max_mb": 0}}), [])
+        self.assertEqual(len(kbconf.validate({"schema": 1, "sources": {"keep": "yes", "max_mb": -1, "x": 1}})), 3)
+        self.assertEqual(kbconf.resolve_names()["sources_dir"], "Sources")
+        self.assertFalse(kbconf.DEFAULTS["sources"]["keep"])
+        cfg = kbconf.merge(kbconf.DEFAULTS, {"sources": {"keep": True}})
+        self.assertTrue(kbconf.keeps_sources(cfg))
+        self.assertFalse(kbconf.keeps_sources(cfg, "gdrive"))
+        self.assertFalse(kbconf.keeps_sources(dict(cfg, delivery="zip")))
+        self.assertFalse(kbconf.keeps_sources(kbconf.DEFAULTS))
+
+    def test_init_sources_by_preset(self):
+        script = "init_library.py"
+        base = ["--language", "en", "--timezone", "UTC", "--scope", "x"]
+        out = run(script, "write", "--root", self.p("work"), "--preset", "work", *base).stdout
+        self.assertIn("keep originals in the library: on", out)
+        self.assertTrue(json.loads(read(self.p("work", "_kb.json")))["sources"]["keep"])
+        self.assertTrue(os.path.isdir(self.p("work", "Sources")))
+        run(script, "write", "--root", self.p("life"), "--preset", "life", *base)
+        self.assertFalse(json.loads(read(self.p("life", "_kb.json")))["sources"]["keep"])
+        self.assertFalse(os.path.exists(self.p("life", "Sources")))
+        run(script, "write", "--root", self.p("life2"), "--preset", "life", *base, "--sources", "on")
+        self.assertTrue(json.loads(read(self.p("life2", "_kb.json")))["sources"]["keep"])
+
     def test_validate_problems(self):
         problems = kbconf.validate({"schema": 2, "metadata": "xml", "bogus": 1,
                                     "partitions": {"max": 5, "topic_start": 2, "fallback": "07"},
@@ -97,6 +121,89 @@ class CleanTest(Tmp):
         self.assertTrue(text.startswith("# Real title"))
         self.assertIn("| a | b |", text)
         self.assertNotIn("\n\n\n", text)
+
+
+class AssembleTest(Tmp):
+    BODY = "# Release review\n\nThe launch moves to May. | a | b |\n\n| 1 | 2 |\n"
+
+    def test_yaml_and_text_heads(self):
+        write(self.p("body.md"), "\n" + self.BODY)
+        for head in ('---\npartition: "05"\ntopic: "Release"\n---\n\n- Launch in May (source: Release review)\n',
+                     "Partition: 05\nTopic: Release\n\n- Launch in May (source: Release review)"):
+            with self.subTest(head=head[:12]):
+                out = self.p("out", head[:3].strip("-\n") or "yaml", "05_Release_minutes_Review.md")
+                os.makedirs(os.path.dirname(out), exist_ok=True)
+                write(self.p("head.md"), head)
+                line = run("assemble.py", self.p("head.md"), self.p("body.md"), out).stdout.strip()
+                self.assertEqual(line, f"assembled: 05_Release_minutes_Review.md | head {head.rstrip().count(chr(10)) + 1}"
+                                       f" lines | body {len(self.BODY.strip())} characters")
+                text = read(out)
+                self.assertEqual(text, head.rstrip("\n") + "\n\n" + self.BODY)
+                self.assertTrue(text.endswith(self.BODY))  # the body is copied as it is
+
+    def test_refused(self):
+        write(self.p("head.md"), "---\ntopic: \"x\"\n\n- conclusion\n")
+        write(self.p("body.md"), "  \n")
+        write(self.p("out.md"), "old")
+        p = run("assemble.py", self.p("head.md"), self.p("body.md"), self.p("out.md"), check=False)
+        self.assertEqual(p.returncode, 3)
+        for reason in ("output file exists", "body is empty", "front matter opened with --- is not closed"):
+            self.assertIn(reason, p.stdout)
+        self.assertEqual(read(self.p("out.md")), "old")
+        p = run("assemble.py", self.p("missing.md"), self.p("body.md"), self.p("new.md"), check=False)
+        self.assertEqual(p.returncode, 2)
+        self.assertFalse(os.path.exists(self.p("new.md")))
+
+
+class AssembleOriginalTest(Tmp):
+    def setUp(self):
+        super().setUp()
+        write(self.p("body.md"), "Body text.\n")
+        with open(self.p("scan.pdf"), "wb") as f:
+            f.write(b"%PDF-1.4 original bytes")
+        os.makedirs(self.p("out"))
+
+    def assemble(self, head, *extra, out="05_Release_minutes_Review.md"):
+        write(self.p("head.md"), head)
+        return run("assemble.py", self.p("head.md"), self.p("body.md"), self.p("out", out), *extra, check=False)
+
+    def test_original_copied_and_linked(self):
+        p = self.assemble('---\ntopic: "Release"\n---\n\n- Launch in May\n',
+                          "--source", self.p("scan.pdf"), "--sources-dir", self.p("out", "Sources"))
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertIn("| original kept: Sources/05_Release_minutes_Review.pdf", p.stdout)
+        with open(self.p("out", "Sources", "05_Release_minutes_Review.pdf"), "rb") as f:
+            self.assertEqual(f.read(), b"%PDF-1.4 original bytes")
+        text = read(self.p("out", "05_Release_minutes_Review.md"))
+        self.assertTrue(text.startswith('---\ntopic: "Release"\noriginal: "[[Sources/05_Release_minutes_Review.pdf]]"\n---\n'))
+
+    def test_text_head_gets_no_link(self):
+        p = self.assemble("Topic: Release\n\n- Launch in May",
+                          "--source", self.p("scan.pdf"), "--sources-dir", self.p("out", "Sources"))
+        self.assertEqual(p.returncode, 0)
+        self.assertNotIn("original:", read(self.p("out", "05_Release_minutes_Review.md")))
+        self.assertTrue(os.path.isfile(self.p("out", "Sources", "05_Release_minutes_Review.pdf")))
+
+    def test_not_kept(self):
+        p = self.assemble('---\ntopic: "x"\n---\n', "--source", self.p("missing.pdf"),
+                          "--sources-dir", self.p("out", "Sources"))
+        self.assertEqual(p.returncode, 0)
+        self.assertIn("original not kept: file not found", p.stdout)
+        self.assertNotIn("original:", read(self.p("out", "05_Release_minutes_Review.md")))
+        with open(self.p("big.pdf"), "wb") as f:
+            f.write(b"x" * (1024 * 1024 + 1))
+        p = self.assemble('---\ntopic: "x"\n---\n', "--source", self.p("big.pdf"),
+                          "--sources-dir", self.p("out", "Sources"), "--max-mb", "1", out="06_Other.md")
+        self.assertIn("original not kept: larger than 1 MB", p.stdout)
+        self.assertFalse(os.path.exists(self.p("out", "Sources")))
+
+    def test_existing_copy_refused(self):
+        write(self.p("out", "Sources", "05_Release_minutes_Review.pdf"), "old")
+        p = self.assemble('---\ntopic: "x"\n---\n', "--source", self.p("scan.pdf"),
+                          "--sources-dir", self.p("out", "Sources"))
+        self.assertEqual(p.returncode, 3)
+        self.assertIn("original copy exists", p.stdout)
+        self.assertFalse(os.path.exists(self.p("out", "05_Release_minutes_Review.md")))
 
 
 class IndexTest(Tmp):
@@ -245,6 +352,63 @@ class PackageTest(Tmp):
         self.assertTrue(any(n.endswith("_README.txt") for n in arch))
         self.assertTrue(os.path.isfile(os.path.join(self.lib, "Entities", "Self.md")))
         self.assertFalse(os.path.exists(os.path.join(self.lib, "README.txt")))
+
+    def originals(self):
+        """The library keeps originals: A had a .docx original; this run brings A as a .pdf, B new with a
+        .xlsx, and a new version of C (pasted text, no original)."""
+        src = os.path.join(self.lib, "Sources")
+        for name, data in (("02_Health_Report_A.docx", b"old a"), ("02_Health_Report_C.pdf", b"old c"),
+                           ("02_Health_Report_D.pdf", b"untouched")):
+            os.makedirs(src, exist_ok=True)
+            with open(os.path.join(src, name), "wb") as f:
+                f.write(data)
+        write(os.path.join(self.lib, "02_Health_Report_C.md"), "old c\n")
+        write(os.path.join(self.out, "02_Health_Report_C.md"), "new c\n")
+        for name, data in (("02_Health_Report_A.pdf", b"%PDF new a"), ("02_Health_Report_B.xlsx", b"PK\x03\x04 b")):
+            os.makedirs(os.path.join(self.out, "Sources"), exist_ok=True)
+            with open(os.path.join(self.out, "Sources", name), "wb") as f:
+                f.write(data)
+
+    def test_originals_delivered_and_old_ones_archived(self):
+        self.originals()
+        plan = self.p("plan.json")
+        out = run("package.py", "preview", self.out, "--library", self.lib, "--plan", plan).stdout
+        self.assertIn("+ Sources/02_Health_Report_A.pdf", out)
+        self.assertIn("+ Sources/02_Health_Report_B.xlsx", out)
+        self.assertIn("~ Sources/02_Health_Report_A.docx  old original, no new copy -> Archive/", out)
+        self.assertIn("~ Sources/02_Health_Report_C.pdf  old original, no new copy -> Archive/", out)
+        self.assertNotIn("Report_D", out)
+        run("package.py", "deliver", "--plan", plan)
+        src = os.path.join(self.lib, "Sources")
+        self.assertEqual(sorted(os.listdir(src)), ["02_Health_Report_A.pdf", "02_Health_Report_B.xlsx",
+                                                   "02_Health_Report_D.pdf"])
+        with open(os.path.join(src, "02_Health_Report_A.pdf"), "rb") as f:
+            self.assertEqual(f.read(), b"%PDF new a")
+        arch = os.listdir(os.path.join(self.lib, "Archive"))
+        for stem, ext in (("02_Health_Report_A", ".docx"), ("02_Health_Report_C", ".pdf"), ("02_Health_Report_C", ".md")):
+            self.assertTrue(any(n.startswith(stem + "_old") and n.endswith(ext) for n in arch), (stem, ext, arch))
+
+    def test_original_with_the_same_name_is_archived_once(self):
+        self.originals()
+        with open(os.path.join(self.out, "Sources", "02_Health_Report_C.pdf"), "wb") as f:
+            f.write(b"new c")
+        plan = self.p("plan.json")
+        run("package.py", "preview", self.out, "--library", self.lib, "--plan", plan)
+        rels = [i["rel"] for i in json.loads(read(plan))["items"]]
+        self.assertEqual(rels.count("Sources/02_Health_Report_C.pdf"), 1)
+        run("package.py", "deliver", "--plan", plan)
+        with open(os.path.join(self.lib, "Sources", "02_Health_Report_C.pdf"), "rb") as f:
+            self.assertEqual(f.read(), b"new c")
+
+    def test_zip_refuses_originals(self):
+        self.originals()
+        write(os.path.join(self.out, "Sources", "deep", "x.pdf"), "x")
+        p = run("package.py", "zip", self.out, self.p("x.zip"), "--library", self.lib, check=False)
+        self.assertEqual(p.returncode, 3)
+        self.assertIn("delivered only into a local library that keeps originals", p.stdout)
+        p = run("package.py", "preview", self.out, "--library", self.lib, "--plan", self.p("plan.json"), check=False)
+        self.assertEqual(p.returncode, 3)
+        self.assertIn("Sources/ must not contain folders: deep", p.stdout)
 
     def test_remote_preview_and_log(self):
         existing = self.p("existing.json")

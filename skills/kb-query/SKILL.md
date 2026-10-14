@@ -56,6 +56,8 @@ Quick-note fallback: only when the library itself has nothing relevant, search i
 
 History: only when the user asks for old versions, search the archive folder, and say the result is a superseded version.
 
+Originals: a local library may keep a copy of each filed original in its sources folder (names.sources_dir), linked from the topic file's front matter as original. Never search that folder. Open the linked original only when the user asks about something the topic file's text does not hold (a chart, a picture, a scanned page, the exact layout); the answer still names the topic file as its basis and adds "checked against the original <file>".
+
 ## Step 4: answer
 
 1. Priority: status card, then change log and lists, then source material. If source material disagrees with the status card, answer with the status card as current, point out the difference and where it is; do not decide who is right.

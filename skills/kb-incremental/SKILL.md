@@ -47,11 +47,11 @@ You file and judge; you do not advise, recommend or evaluate. These rules apply 
 8. Every judgement needs evidence. If you cannot quote the source text a step asks for, take the conservative conclusion.
 9. Read in full before you rewrite. Before rewriting any summary file, read the existing version completely; after rewriting, compare both with scripts/card_check.py and do not deliver until it passes.
 10. Searches are capped. Each required file gets one search and one retry; do not keep trying new keywords.
-11. Never use as a source: anything in the archive folder; names starting with an underscore or with names.snapshot_prefix; names containing names.old_suffix plus a time stamp.
+11. Never use as a source: anything in the archive folder or the sources folder (names.sources_dir); names starting with an underscore or with names.snapshot_prefix; names containing names.old_suffix plus a time stamp.
 12. Replies follow the library language and preferences.output (references/environment.md). YAML front matter and the Bases block in entity pages are file formats and keep their syntax.
 13. No wiki links in body text. Links appear only in front matter, in the basis lines of summary files, and in entity pages.
 14. Working notes stay out of knowledge files: cleaning results, term fixes, duplicate and trigger judgements appear only in the reply and the readme.
-15. The library folder and the material are different things (references/config.md, section 3). Material may come from any number of folders and files anywhere, chosen anew for every intake; read it where it is. Never choose or suggest a folder for the user, never offer to change a library's folder because the material is elsewhere, and name the two to the user only in the words that section gives.
+15. The library folder and the material are different things (references/config.md, section 3). Material may come from any number of folders and files anywhere, chosen anew for every intake; read it where it is, and never move or change it. A local library that keeps originals (sources.keep) gets a copy of each filed original in its sources folder at delivery; the user's own file stays where it is. Never choose or suggest a folder for the user, never offer to change a library's folder because the material is elsewhere, and name the two to the user only in the words that section gives.
 
 ## Input checks
 
@@ -61,7 +61,7 @@ No material given: the user asks for intake but names no path and uploads or pas
 
 Many files: when the material is files or folders on disk and commands can run, plan the batches before reading any of it (references/batches.md). One batch: go on here as usual. More than one: follow batches.md.
 
-Conversion, before reading anything: when _kb.json convert.enabled is true (or the user asks for it in this request, and not when the user says not to convert this batch), convert the uploaded files with references/convert.md, which says which file to read for each item and what to do with the pictures in them. Off, or without Python: read the originals as before.
+Conversion, before reading anything: when _kb.json convert.enabled is true (or the user asks for it in this request, and not when the user says not to convert this batch), convert the uploaded files with references/convert.md, which says which file to read for each item, when its outline is enough, and what to do with the pictures in them. Off, or without Python: read the originals as before.
 
 Check 2: find the summary files with find_by_name using the search keys (references/config.md).
 - Always read: spec, status card, file index.
@@ -103,16 +103,18 @@ Applies when material is in scope but no topic in Table A fits. Not for items th
 
 ## Step 2: clean the body
 
-2.1 Structural cleanup, by script, not by hand:
+2.1 Structural cleanup, by script, not by hand. Its output is the body file of this item, <work>/body_<n>.md (n numbers the items of this run):
 
-  python3 scripts/clean.py <input> <output> --max-heading-len <Table D>
+  python3 scripts/clean.py <input> <work>/body_<n>.md --max-heading-len <Table D>
 
-It drops a converter's extraction header, empty table columns, demotes over-long headings and headings ending in punctuation, and squeezes blank lines. Copy its result line into the reply. If the log shows body text removed (not just a tool header), revert that file and clean it by hand. Material under about two thousand characters that is clearly clean may be checked by eye, but still give the result line in the same format.
+It drops a converter's extraction header, empty table columns, demotes over-long headings and headings ending in punctuation, and squeezes blank lines. Copy its result line into the reply. If the log shows body text removed (not just a tool header), revert that file and clean it by hand. Material under about two thousand characters that is clearly clean may be checked by eye (copy it to the body file as it is), but still give the result line in the same format. Material with no text file to clean (pasted text, a transcribed picture): write its text to the body file yourself.
 Without Python: do the five actions by eye and mark the result line "manual".
 
 2.2 Extra cleaning required by params (for example masking class-A data).
 
-2.3 Term fixes: go through Table B one entry at a time, never with a bulk regex; check context to confirm each hit is the term. Record each change: original -> fixed -> section heading. None: "Term fixes: none".
+2.3 Term fixes: go through Table B one entry at a time, never with a bulk regex: search the body file for each entry with your search tool and check the context of each hit to confirm it is the term; the body need not be read through for this.
+
+Make the changes of 2.2 and 2.3 in the body file with your edit tool, one place at a time; never write the body file out again whole. Record each change: original -> fixed -> section heading. None: "Term fixes: none".
 
 ## Step 3: key conclusions
 
@@ -186,6 +188,14 @@ Glossary and issue list: read and rewrite only when something is added; categori
 ## Output and delivery
 
 Each topic file starts with its metadata: YAML front matter per entity-yaml.md and the spec, or the text header from params. Then the key conclusions, then the cleaned body. New or changed basis lines in summary files are links to the source file (YAML mode).
+
+Assemble topic files by script; never type the body out again. Write everything that comes before the body to <work>/head_<n>.md: the metadata, any section labels params put before the conclusions or the body, and the key conclusions. Then:
+
+  python3 scripts/assemble.py <work>/head_<n>.md <work>/body_<n>.md <work>/out/<file name>
+
+It writes the head, one blank line and the body file as it is, and refuses an existing output file, an empty body and unclosed front matter. Without Python: write the whole file yourself.
+
+Originals: when the library keeps them (sources.keep is true, the library is local and delivery is direct; python3 scripts/kbconf.py show tells), add --source <original file> --sources-dir <work>/out/<sources_dir> --max-mb <sources.max_mb> for every item that has an original upload. The script copies it into the sources folder under the topic file's name with its own extension and links it from the front matter (original); delivery archives the old version's originals with it. Its result line says "original kept" or "original not kept: <reason>"; list every original not kept, with the reason, in the readme's issue section. Pasted text has no original. With zip or Drive delivery, or sources.keep off, leave these options out.
 
 Write everything to <work>/out/. Entity pages go to <work>/out/<entities_dir>/, the only allowed subfolder. The output always holds: the new or updated topic files, the file index and the readme (names.readme); plus any rewritten summary files (including a spec rewritten for expansion or new entities) and entity pages. Never include archived files, old copies or delete lists.
 

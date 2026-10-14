@@ -46,6 +46,7 @@ DEFAULT_NAMES = {
     "glossary": "01_Glossary-Issues.md",
     "archive_dir": "Archive",
     "entities_dir": "Entities",
+    "sources_dir": "Sources",
     "notes_dir": "Quick-Notes",
     "notes_done_dir": "Filed",
     "old_suffix": "_old",
@@ -68,12 +69,18 @@ FALLBACK_LIMITS = (90, 120)
 # enabled: off unless the library turns it on (new libraries from a preset do).
 # image_limit: pictures in one batch that are read without asking.
 # min_pdf_chars_per_page, min_chars_per_image: below these a file is read as the original.
+# outline_chars: converted text longer than this also gets an outline, read first; 0 turns it off.
 CONVERT_DEFAULTS = {"enabled": False, "image_limit": 10, "min_pdf_chars_per_page": 200,
-                    "min_chars_per_image": 100}
+                    "min_chars_per_image": 100, "outline_chars": 6000}
 
 # Intake of many files at once (kb-incremental scripts/batch_plan.py): a batch closes at
 # batch_files files or batch_mb megabytes; more than one batch turns batch mode on.
 INTAKE_DEFAULTS = {"batch_files": 10, "batch_mb": 20}
+
+# Originals kept in the library (local libraries with direct delivery only): keep copies each
+# filed original into names.sources_dir under its topic file's name; one larger than max_mb
+# megabytes is not copied.
+SOURCES_DEFAULTS = {"keep": False, "max_mb": 50}
 
 DEFAULTS = {
     "schema": SCHEMA,
@@ -87,6 +94,7 @@ DEFAULTS = {
     "delivery": "",
     "convert": CONVERT_DEFAULTS,
     "intake": INTAKE_DEFAULTS,
+    "sources": SOURCES_DEFAULTS,
     "names": {},
 }
 KNOWN_KEYS = set(DEFAULTS) | {"backend", "inbox", "notes"}
@@ -255,6 +263,7 @@ def validate(raw):
         problems.append("delivery must be zip or direct")
     problems += check_convert(raw.get("convert", {}))
     problems += check_intake(raw.get("intake", {}))
+    problems += check_sources(raw.get("sources", {}))
     part = raw.get("partitions", {})
     mx, ts = part.get("max", 9), part.get("topic_start", 2)
     if not (isinstance(mx, int) and isinstance(ts, int) and 0 < ts <= mx <= 99):
@@ -294,6 +303,27 @@ def check_intake(intake):
         elif not (isinstance(v, int) and not isinstance(v, bool) and v >= 1):
             problems.append(f"intake.{k} must be a whole number of 1 or more")
     return problems
+
+
+def check_sources(src):
+    if not isinstance(src, dict):
+        return ["sources must be an object such as {\"keep\": true}"]
+    problems = []
+    for k, v in src.items():
+        if k not in SOURCES_DEFAULTS:
+            problems.append(f"unknown sources key {k!r}")
+        elif k == "keep" and not isinstance(v, bool):
+            problems.append("sources.keep must be true or false")
+        elif k == "max_mb" and not (isinstance(v, int) and not isinstance(v, bool) and v >= 0):
+            problems.append("sources.max_mb must be a whole number of 0 or more")
+    return problems
+
+
+def keeps_sources(cfg, backend_type="local"):
+    """True when intake copies originals into the library: sources.keep is on and the library is a
+    local one delivered directly (zip and Drive deliveries never carry originals)."""
+    return bool((cfg.get("sources") or {}).get("keep")) and backend_type == "local" and \
+        default_delivery(cfg, backend_type) == "direct"
 
 
 class TimezoneUnavailable(ConfigError):
