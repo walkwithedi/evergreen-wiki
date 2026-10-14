@@ -238,6 +238,8 @@ class App:
                 job.done = True
                 job.events.append({"type": "end", "result": result, "seq": len(job.events) + 1})
                 job.cond.notify_all()
+        if job.action == "setup" and result == "ok" and self.agent is not None:
+            self.agent.restart()  # so that the conversation uses the skills and the instructions line just written
 
     # ---------- state ----------
 
@@ -287,7 +289,7 @@ def run_action(action, asker, lang, options, lib_id=None):
     m = MSG[lang]
     if action == "setup":
         install.wizard(asker, lang, options.get("agent"), options.get("preset"), options.get("descriptions"),
-                       preset_default="work")
+                       preset_default="work", agent_default="opencode")
         return None
     if action == "move":
         libs = [(i, label, root) for i, label, root in kb_manage.registered_libs()

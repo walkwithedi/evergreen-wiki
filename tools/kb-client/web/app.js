@@ -69,6 +69,7 @@
       chat_stop: "Stop",
       chat_send: "Send",
       chat_starting: "Starting OpenCode...",
+      chat_restarting: "Restarting OpenCode so that it uses the skills and the library just set up...",
       chat_ready: "Ready",
       chat_busy: "Working...",
       chat_simple: "Simple mode: OpenCode's server could not be used ({reason}). Each message runs once with opencode run; the assistant cannot ask for permission or ask questions on this page. For full use, open OpenCode in a terminal.",
@@ -174,6 +175,7 @@
       chat_stop: "停止",
       chat_send: "发送",
       chat_starting: "正在启动 OpenCode…",
+      chat_restarting: "正在重新启动 OpenCode，以便使用刚装好的技能和知识库…",
       chat_ready: "已就绪",
       chat_busy: "助手正在处理…",
       chat_simple: "简易模式：OpenCode 的服务用不了（{reason}）。每条消息用 opencode run 单独运行一次，助手不能在本页面请求授权或提问。需要完整功能时，请在终端里打开 OpenCode。",
@@ -551,7 +553,7 @@
 
   // ---------- conversation ----------
 
-  var chat = { source: null, ready: false, busy: false, msgs: {}, parts: {}, cards: {} };
+  var chat = { source: null, ready: false, busy: false, restarting: false, msgs: {}, parts: {}, cards: {} };
 
   function chatInfo(text, output) {
     $("chat-info").textContent = text || "";
@@ -573,15 +575,19 @@
   function chatAgent(a) {
     if (a.state === "starting") {
       chat.ready = false;
-      chatInfo(t("chat_starting"), a.line || "");
+      if (a.restart) chat.restarting = true;
+      chatInfo(t(chat.restarting ? "chat_restarting" : "chat_starting"), a.line || "");
     } else if (a.state === "ready") {
       chat.ready = true;
+      chat.restarting = false;
       chatInfo("");
     } else if (a.state === "simple") {
       chat.ready = true;
+      chat.restarting = false;
       chatInfo(t("chat_simple", { reason: a.reason || "" }), a.output || "");
     } else if (a.state === "failed") {
       chat.ready = false;
+      chat.restarting = false;
       chatInfo(t("chat_failed", { reason: a.reason || "" }), a.output || "");
     }
     chatEnable();

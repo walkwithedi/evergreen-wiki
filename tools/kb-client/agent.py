@@ -121,16 +121,37 @@ def pattern_path(pattern, cwd):
     return real(p if os.path.isabs(p) else os.path.join(cwd, p))
 
 
+def unquoted(cmd):
+    """The command without the text of its quoted words, for the shell-syntax check: text in single
+    quotes is literal, and so is text in double quotes without $, ` or \\. None when a quote is not closed,
+    a double-quoted part holds one of those three, or the command has a line break."""
+    if "\n" in cmd or "\r" in cmd:
+        return None
+    out, quote = [], None
+    for ch in cmd:
+        if quote is None:
+            if ch in "'\"":
+                quote = ch
+            else:
+                out.append(ch)
+        elif ch == quote:
+            quote = None
+        elif quote == '"' and ch in "$`\\":
+            return None
+    return None if quote else "".join(out)
+
+
 def skill_command(command, script_dirs, cwd):
     """True for `python3 [-I|-B|-u] <script>.py args` (optionally after one `cd <folder> &&`) whose script
-    lies in one of script_dirs, with no other shell syntax at all."""
+    lies in one of script_dirs, with no other shell syntax outside quoted words."""
     cmd = str(command).strip()
     m = re.fullmatch(r"cd\s+(\"[^\"]*\"|'[^']*'|[^\s;&|]+)\s*&&\s*(.*)", cmd, re.S)
     where = cwd
     if m:
         where = os.path.join(cwd, os.path.expanduser(m.group(1).strip("'\"")))
         cmd = m.group(2)
-    if not cmd or SHELL_CHARS & set(cmd):
+    bare = unquoted(cmd)
+    if not cmd or bare is None or SHELL_CHARS & set(bare):
         return False
     try:
         words = shlex.split(cmd)
@@ -252,15 +273,18 @@ class Agent:
         self.questions = {}
         self.run_proc = None  # simple mode
         self.stopping = False
+        self.gen = 0  # counts restarts; an event reader of an earlier OpenCode stops
+        self.events_thread = None
+        self.restart_pending = False
 
     # ----- start and stop -----
 
-    def start(self):
+    def start(self, restart=False):
         with self.lock:
             if self.state != "off":
                 return
             self.state = "starting"
-        self.feed.emit("agent", state="starting")
+        self.feed.emit("agent", state="starting", restart=restart)
         threading.Thread(target=self._start, daemon=True).start()
 
     def _start(self):
@@ -297,9 +321,12 @@ class Agent:
             return
         with self.lock:
             self.state = "ready"
-        threading.Thread(target=self._events, args=(stream,), daemon=True).start()
+        self.events_thread = threading.Thread(target=self._events, args=(stream, self.gen), daemon=True)
+        self.events_thread.start()
         self._resume()
         self.feed.emit("agent", state="ready", session=self.session)
+        if self.restart_pending:
+            self.restart()
 
     def _read_output(self, found):
         for line in self.proc.stdout:
@@ -368,8 +395,31 @@ class Agent:
             raise http.client.HTTPException(f"status {r.status}")
         return c, r
 
-    def _events(self, stream=None):
-        while not self.stopping:
+    def restart(self):
+        """Starts OpenCode again, so that it reads skills and instructions installed since it started; the
+        conversation goes on. While OpenCode is starting or the assistant is working, this waits until it is
+        done. Simple mode needs none: each message starts OpenCode anew. False when there is nothing to do."""
+        with self.lock:
+            if self.state in ("off", "simple") or self.stopping:
+                return False
+            if self.state == "starting" or self.status != "idle":
+                self.restart_pending = True
+                return True
+            self.restart_pending = False
+            self.gen += 1
+            self.state = "off"
+        log.info("restarting opencode")
+        self._kill()
+        t = self.events_thread
+        if t and t is not threading.current_thread():
+            t.join(5)
+        self.proc, self.port, self.output = None, None, []
+        self.permissions, self.questions = {}, {}
+        self.start(restart=True)
+        return True
+
+    def _events(self, stream, gen):
+        while not self.stopping and gen == self.gen:
             try:
                 c, r = stream or self._connect()
                 stream = None
@@ -385,6 +435,8 @@ class Agent:
                 c.close()
             except (OSError, http.client.HTTPException) as e:
                 log.debug("event stream: %s", e)
+            if gen != self.gen:  # restarted: the new OpenCode has its own reader
+                return
             if self.proc and self.proc.poll() is not None:
                 with self.lock:
                     self.state = "failed"
@@ -458,6 +510,8 @@ class Agent:
     def _set_status(self, status):
         self.status = status
         self.feed.emit("status", status=status)
+        if status == "idle" and self.restart_pending:
+            threading.Thread(target=self.restart, daemon=True).start()
 
     def allowed_places(self):
         pl = self.places()

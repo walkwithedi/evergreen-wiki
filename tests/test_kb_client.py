@@ -413,6 +413,23 @@ class ChatTest(unittest.TestCase):
         saved = json.loads(read(self.p("home", ".config", "evergreen-wiki", "kb-client.json")))
         self.assertEqual(saved, {"session": new})
 
+    def test_setup_restarts_opencode(self):
+        ev = self.ready()
+        self.send("hello there")
+        ev.until(lambda e: e["type"] == "status" and e["status"] == "idle", "idle")
+        result, out, asked = self.server.run("setup", ["opencode", True, True, "work", self.p("home", "kb", "work"),
+                                                       "team projects", "", True])
+        self.assertEqual(result, "ok", out)
+        self.assertEqual(asked[0]["default"], "opencode")  # the client suggests the agent it talks to
+        self.assertTrue(os.path.isfile(self.p("home", ".config", "opencode", "skills", "kb-note", "SKILL.md")))
+        ev.until(lambda e: e["type"] == "agent" and e["state"] == "starting" and e.get("restart"), "restart")
+        ev.until(lambda e: e["type"] == "agent" and e["state"] == "ready", "ready again")
+        serves = [c for c in self.calls() if c.get("args", [])[:1] == ["serve"]]
+        self.assertEqual(len(serves), 2)
+        self.send("after the restart")
+        ev.until(lambda e: e["type"] == "part" and e["role"] == "assistant" and e["text"] == "echo: after the restart",
+                 "answer after the restart")
+
     def test_bad_requests(self):
         self.ready()
         s = self.server
@@ -670,6 +687,20 @@ class DecideTest(unittest.TestCase):
                     f"python3 {os.path.join(self.tmp, 'home', 'other.py')}", "ls -la",
                     f"bash {script}", f"cd /tmp && python3 scripts/batch_plan.py",
                     f"python3 -c 'print(1)' {script}"):
+            with self.subTest(bad=bad):
+                self.assertFalse(self.ok("bash", bad))
+
+    def test_quoted_text(self):
+        script = os.path.join(self.skill, "scripts", "batch_plan.py")
+        for good in (f'python3 {script} add --kind topic --text "Projects: Atlas (new topic; a.docx)"',
+                     f"python3 {script} add --text 'a | b & c > d'",
+                     f'cd {self.skill} && python3 scripts/batch_plan.py add --text "x (y; z)"'):
+            with self.subTest(good=good):
+                self.assertTrue(self.ok("bash", good))
+        for bad in (f'python3 {script} --text "$(id)"', f'python3 {script} --text "`id`"',
+                    f'python3 {script} --text "a\\"; id; echo "', f'python3 {script} --text "open',
+                    f'python3 {script} --text "a" ; id', f"python3 {script} --text 'a'|sh",
+                    f'python3 {script} --text "line\nbreak"'):
             with self.subTest(bad=bad):
                 self.assertFalse(self.ok("bash", bad))
 

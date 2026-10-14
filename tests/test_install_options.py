@@ -120,5 +120,34 @@ class InstallOptionsTest(unittest.TestCase):
             self.assertEqual(p.returncode, 2, args)
 
 
+class AgentDefaultTest(unittest.TestCase):
+    """install.choose_dest: agent_default only changes the agent chosen beforehand."""
+
+    class Asker:
+        def __init__(self):
+            self.asked = []
+
+        def choose(self, question, options, default):
+            self.asked.append((question, [v for v, _ in options], default))
+            return default
+
+    def choose(self, agent=None, agent_default=None):
+        sys.path.insert(0, ROOT)
+        self.addCleanup(sys.path.remove, ROOT)
+        import install
+        q = self.Asker()
+        target, _ = install.choose_dest(q, install.MSG["en"], agent, agent_default)
+        return target, q.asked
+
+    def test_default_only(self):
+        target, asked = self.choose(agent_default="opencode")
+        self.assertEqual(target, "opencode")
+        self.assertEqual(len(asked), 1)  # the question is still asked
+        self.assertIn("claude-code", asked[0][1])
+        plain, _ = self.choose()
+        self.assertEqual(self.choose(agent_default="no-such-agent")[0], plain)
+        self.assertEqual(self.choose(agent="codex", agent_default="opencode"), ("codex", []))
+
+
 if __name__ == "__main__":
     unittest.main()
