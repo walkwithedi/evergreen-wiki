@@ -4,6 +4,7 @@ All three skills share one version number. To release, update this file, the "Ve
 
 ## Unreleased
 
+- tools/kb-client: the local server no longer looks up the host name of 127.0.0.1 when it starts, which could hold the page back for a DNS timeout on some systems.
 ## 1.13.0
 
 Knowledge base client in the browser: the management steps and a conversation with OpenCode on one page.
