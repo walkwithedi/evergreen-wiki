@@ -5,7 +5,7 @@ description: Answers questions from the user's own knowledge base of Markdown fi
 
 # Knowledge base questions
 
-Version: 1.15.0
+Version: 1.16.0
 
 Read-only: search, read and answer. Never create, change, move or delete anything in a library. Partitions, topics and terms are read from the library, never from this file.
 
@@ -21,7 +21,7 @@ Read references/config.md and references/environment.md once before starting.
 
 For each library searched, read its backend file and _kb.json. Start the answer with: Library: <label(s)>.
 
-After the answer, check each local library searched for an unfinished intake (references/config.md, section 4) and remind once per conversation; this skill only reminds and hands "continue intake" to kb-incremental.
+After the answer, check each local library searched for an unfinished intake (references/config.md, section 4), and each library searched for files waiting for consolidation (section 5); remind once per conversation. This skill only reminds and hands "continue intake" and "consolidate" to kb-incremental.
 
 ## Step 2: which file first
 
@@ -78,6 +78,7 @@ Originals: a local library may keep a copy of each filed original in its sources
 4. Numbers and dates exactly as written, with units and the time they refer to; no conversion or estimate. Where files disagree, list each with its source.
 5. No inference. What the library does not record: "not recorded in the knowledge base". If general knowledge is really needed, put it in a separate paragraph headed "not from the knowledge base".
 6. Items still open in the open-items list: state that and the deadline recorded.
+7. A basis file that is still in the consolidation queue (names.consolidation_queue; read the queue once when a source file is the basis): add "this file is not consolidated yet; the status card may not reflect it yet" (「该文件尚未整合，状态卡可能还没有反映它的内容」). When it disagrees with the status card, say which is newer by the filed time in the queue, and still do not decide who is right.
 7. Quick notes: mark "quick note, not yet filed" with the note's file name, and that it has not been checked; keep any "unconfirmed" mark.
 8. Nothing found: say which libraries, files and keywords were searched, conclude "nothing found in the knowledge base", and suggest rewording or checking whether the material was filed.
 9. With sensitivity enabled: never show class-A data in full (ID, card and account numbers, passwords, codes); mask with asterisks, at most the last keep_last characters. No health, money or investment advice and no interpretation of results, diagnoses, returns or coverage; report only what is recorded.

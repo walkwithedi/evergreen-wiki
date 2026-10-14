@@ -2,6 +2,18 @@
 
 All three skills share one version number. To release, update this file, the "Version:" line of every SKILL.md and the plugin manifests together and merge to main; the release workflow then publishes v<version>.
 
+## 1.16.0
+
+Intake is fast by default: each file is written into the library as soon as it is placed, and reconciling it with the summary files waits for consolidation, reviewed change by change.
+- kb-incremental fast intake (new references/fast.md): with _kb.json intake.mode fast (new setting; also when it is missing) each item goes through conversion, cleanup, term fixes and masking, placement, the duplicate and version check, assembly and delivery on its own, with one progress line per file, and is searchable at once. Step 3 (key conclusions) and step 5 (triggers) wait for consolidation. One confirmation at the start covers every delivery of the run. intake.mode full, or "full intake" in a request, keeps the previous per-item process.
+- kb-incremental consolidation (new mode, "consolidate"; new references/consolidate.md): works through the consolidation queue in rounds of intake.consolidate_files (default 10). Close-read files get their key conclusions written into the head of the filed topic file; every file is checked against the status card with quotes as before; the proposed changes to the status card, change log and open items are listed by number and the user accepts all, leaves some out or cancels the round. Rewrites pass card_check before delivery; a filled topic file's previous copy moves to the archive folder.
+- New consolidation queue (names.consolidation_queue, default _Consolidation-Queue.md): a Markdown table in the library root (file, source file, filed time, close-read), kept in Google Drive libraries too. Never searched or used as a source. kb-query, kb-note and kb-incremental remind once per conversation while it holds files (config.md, section 5); kb-query says when a basis file is not consolidated yet. The health check reports its length and age.
+- New scripts/prep.py: scan runs the duplicate check, conversion, cleanup, date and term search for one item and prints one card; file builds the name, stops on a file-name hit until the version is decided, assembles the topic file (with the pending mark for close-read items), updates the index and queue copies and prepares the item's delivery folder.
+- New scripts/consolidate.py: list the queue by filed time, fill a pending topic file with a new head while keeping its body byte for byte (refuses a missing mark, a dropped original line or a changed body), done removes rows from a work-folder copy of the queue.
+- package.py preview, remote-preview and deliver take --run: within one fast-intake run the file index and the queue are archived once and replaced after that, and the readme and run log are one file per run. The queue file is the one underscore name delivery accepts.
+- Batch mode in fast intake delivers each file inside a batch on its own; the final step offers consolidation.
+- tools/kb-client: the stage bar places prep.py and consolidate.py.
+
 ## 1.15.0
 
 The browser client continues a batch intake across conversations and guides first use; queries read only the passages that answer; scripts take over the mechanical parts of placing an item.

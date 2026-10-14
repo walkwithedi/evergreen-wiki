@@ -1296,7 +1296,9 @@
     "convert": "convert", "index_tool check": "dedup", "meta name": "dedup", "meta date": "dedup", "meta entities": "dedup",
     "clean": "clean", "meta terms": "clean", "card_check": "compare", "meta yaml": "write",
     "assemble": "write", "index_tool add": "write", "index_tool update": "write", "index_tool write": "write", "package": "write",
-    "batch_plan done": "write", "batch_plan skip": "write", "archive_plan": "write", "batch_plan finish": "final"
+    "batch_plan done": "write", "batch_plan skip": "write", "archive_plan": "write", "batch_plan finish": "final",
+    "prep scan": "convert", "prep file": "write", "consolidate list": "compare", "consolidate fill": "compare",
+    "consolidate done": "final"
   };
   var stages = { current: "", shown: "", hideTimer: null, poll: null, seen: null, runs: {}, announced: {} };
 

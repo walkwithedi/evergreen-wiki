@@ -1038,5 +1038,171 @@ class HookTest(unittest.TestCase):
         self.assertEqual(p.returncode, 0)
 
 
+SAMPLE = os.path.join(ROOT, "examples", "sample-life-kb")
+PENDING = "<!-- kb:conclusions-pending -->"
+
+
+class FastIntakeTest(Tmp):
+    """prep.py scan and file on a copy of the sample library, then per-item delivery with --run."""
+
+    def setUp(self):
+        super().setUp()
+        self.lib = self.p("lib")
+        shutil.copytree(SAMPLE, self.lib)
+        self.work = self.p("work")
+        self.mat = self.p("mat")
+        write(os.path.join(self.mat, "water.md"), "# Water bill\n\nAmount due 42.10 by 2026-11-01.\n")
+        write(os.path.join(self.mat, "gas.txt"), "Gas bill\n\nAmount due 30.00.\n")
+
+    def scan(self, n, name, check=True):
+        return run("prep.py", "scan", os.path.join(self.mat, name), "--library", self.lib, "--work", self.work,
+                   "--n", str(n), check=check)
+
+    def file(self, n, name, title, *extra, check=True):
+        write(os.path.join(self.work, f"head_{n}.md"), f'---\ntitle: "{title}"\n---\n')
+        return run("prep.py", "file", "--n", str(n), "--library", self.lib, "--work", self.work,
+                   "--partition", "05", "--topic", "Utilities", "--type", "bill", "--title", title,
+                   "--orig", name, "--source", os.path.join(self.mat, name), *extra, check=check)
+
+    def deliver(self, n):
+        plan = os.path.join(self.work, f"plan_{n}.json")
+        run("package.py", "preview", os.path.join(self.work, f"out_{n}"), "--library", self.lib, "--plan", plan,
+            "--run", os.path.join(self.work, "run.json"))
+        run("package.py", "deliver", "--plan", plan)
+
+    def test_scan_card(self):
+        out = self.scan(1, "water.md").stdout
+        self.assertIn("Content hash: no hit", out)
+        self.assertIn("line 1: Water bill", out)
+        self.assertIn("date:", out)
+        self.assertTrue(os.path.isfile(os.path.join(self.work, "body_1.md")))
+        self.assertTrue(os.path.isfile(os.path.join(self.work, "01_File-Index.md")))
+
+    def test_file_queue_and_mark(self):
+        self.scan(1, "water.md")
+        out = self.file(1, "water.md", "Water-2026-10", "--close-read").stdout
+        self.assertIn("queued: 05_Utilities_bill_Water-2026-10.md (close-read", out)
+        topic = read(os.path.join(self.work, "out_1", "05_Utilities_bill_Water-2026-10.md"))
+        self.assertIn(PENDING, topic)
+        self.assertTrue(topic.rstrip().endswith("Amount due 42.10 by 2026-11-01."))
+        queue = read(os.path.join(self.work, "out_1", "_Consolidation-Queue.md"))
+        self.assertIn("| 05_Utilities_bill_Water-2026-10.md | water.md |", queue)
+        self.assertIn("| yes |", queue)
+        self.assertIn("water.md", read(os.path.join(self.work, "out_1", "01_File-Index.md")))
+        self.scan(2, "gas.txt")
+        self.file(2, "gas.txt", "Gas-2026-10")
+        self.assertNotIn(PENDING, read(os.path.join(self.work, "out_2", "05_Utilities_bill_Gas-2026-10.md")))
+        self.assertIn("| no |", read(os.path.join(self.work, "_Consolidation-Queue.md")))
+
+    def test_name_hit_needs_a_decision(self):
+        self.scan(1, "water.md")
+        self.file(1, "water.md", "Water")
+        self.scan(2, "gas.txt")
+        p = self.file(2, "gas.txt", "Water", check=False)
+        self.assertEqual(p.returncode, 3)
+        self.assertIn("File name: HIT", p.stdout)
+        out = self.file(2, "gas.txt", "Water", "--same-version").stdout
+        self.assertIn("Updated", out)
+        p = self.file(3, "gas.txt", "Other", "--same-version", check=False)
+        self.assertEqual(p.returncode, 2)  # no scan for item 3: no body file
+
+    def test_duplicate_upload_stops(self):
+        self.scan(1, "water.md")
+        self.file(1, "water.md", "Water")
+        self.deliver(1)
+        shutil.rmtree(self.work)
+        p = self.scan(2, "water.md", check=False)
+        self.assertEqual(p.returncode, 3)
+        self.assertIn("duplicate upload by content hash", p.stdout)
+
+    def test_run_archives_index_once(self):
+        for n, (name, title) in enumerate((("water.md", "Water"), ("gas.txt", "Gas")), 1):
+            self.scan(n, name)
+            self.file(n, name, title)
+            self.deliver(n)
+        arch = sorted(os.listdir(os.path.join(self.lib, "Archive")))
+        self.assertEqual(len([a for a in arch if a.startswith("01_File-Index_old")]), 1)
+        self.assertFalse([a for a in arch if a.startswith("_Consolidation-Queue")])
+        self.assertEqual(len([a for a in arch if a.startswith("_run-log_")]), 1)
+        self.assertEqual(len([a for a in arch if a.endswith("_README.txt")]), 1)
+        index = read(os.path.join(self.lib, "01_File-Index.md"))
+        self.assertIn("water.md", index)
+        self.assertIn("gas.txt", index)
+        self.assertEqual(read(os.path.join(self.lib, "_Consolidation-Queue.md")).count("| 05_Utilities_bill_"), 2)
+        log = [a for a in arch if a.startswith("_run-log_")][0]
+        self.assertIn("archived earlier in this run", read(os.path.join(self.lib, "Archive", log)))
+
+    def test_without_run_every_delivery_archives(self):
+        self.scan(1, "water.md")
+        self.file(1, "water.md", "Water")
+        plan = self.p("plan.json")
+        run("package.py", "preview", os.path.join(self.work, "out_1"), "--library", self.lib, "--plan", plan)
+        run("package.py", "deliver", "--plan", plan)
+        self.assertTrue(any(a.startswith("01_File-Index_old") for a in os.listdir(os.path.join(self.lib, "Archive"))))
+
+
+class ConsolidateTest(Tmp):
+    def setUp(self):
+        super().setUp()
+        self.topic = self.p("lib", "05_X_bill_A.md")
+        write(self.p("lib", "_kb.json"), json.dumps({"schema": 1}))
+        write(self.topic, '---\ntitle: "A"\noriginal: "[[Sources/05_X_bill_A.pdf]]"\n---\n\n' + PENDING +
+              "\n\nBody line one.\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n")
+        self.head = self.p("head.md")
+        write(self.head, '---\ntitle: "A"\noriginal: "[[Sources/05_X_bill_A.pdf]]"\n---\n\nKey conclusions\n- one\n')
+        queue = "# Consolidation queue\n\n| File | Source file | Filed | Close-read |\n| --- | --- | --- | --- |\n"
+        queue += "| b.md | b.txt | 2026-10-02 10:00 | no |\n| a.md | a.txt | 2026-10-01 10:00 | yes |\n"
+        write(self.p("work", "_Consolidation-Queue.md"), queue)
+        write(self.p("lib", "_Consolidation-Queue.md"), queue)
+
+    def test_fill_keeps_body(self):
+        out = self.p("out", "05_X_bill_A.md")
+        os.makedirs(self.p("out"))
+        self.assertIn("body unchanged", run("consolidate.py", "fill", self.topic, self.head, out).stdout)
+        text = read(out)
+        self.assertNotIn(PENDING, text)
+        self.assertIn("Key conclusions\n- one\n\nBody line one.", text)
+        self.assertTrue(text.endswith("| 1 | 2 |\n"))
+        p = run("consolidate.py", "fill", self.topic, self.head, out, check=False)
+        self.assertEqual(p.returncode, 3)  # output exists
+
+    def test_fill_refusals(self):
+        os.makedirs(self.p("out"))
+        write(self.p("nomark.md"), "---\ntitle: x\n---\n\nbody\n")
+        p = run("consolidate.py", "fill", self.p("nomark.md"), self.head, self.p("out", "a.md"), check=False)
+        self.assertIn("no pending mark", p.stdout)
+        write(self.p("h2.md"), '---\ntitle: "A"\n---\n\nKey conclusions\n')
+        p = run("consolidate.py", "fill", self.topic, self.p("h2.md"), self.p("out", "b.md"), check=False)
+        self.assertIn("original line", p.stdout)
+        write(self.p("h3.md"), "---\ntitle: A\n" + PENDING + "\n")
+        p = run("consolidate.py", "fill", self.topic, self.p("h3.md"), self.p("out", "c.md"), check=False)
+        self.assertEqual(p.returncode, 3)
+        self.assertFalse(os.listdir(self.p("out")))
+
+    def test_list_and_done(self):
+        out = run("consolidate.py", "list", self.p("work", "_Consolidation-Queue.md"), "--limit", "1").stdout
+        self.assertIn("queue: 2 files, oldest filed 2026-10-01 10:00", out)
+        self.assertIn("a.md | a.txt | 2026-10-01 10:00 | close-read", out)
+        self.assertNotIn("b.md |", out)
+        out = run("consolidate.py", "done", self.p("work", "_Consolidation-Queue.md"), "--name", "a.md",
+                  "--name", "zz.md").stdout
+        self.assertIn("not in the queue: zz.md", out)
+        self.assertIn("1 files still wait", out)
+        self.assertNotIn("| a.md |", read(self.p("work", "_Consolidation-Queue.md")))
+        p = run("consolidate.py", "done", self.p("lib", "_Consolidation-Queue.md"), "--name", "a.md", check=False)
+        self.assertEqual(p.returncode, 3)
+
+
+class IntakeSettingsTest(Tmp):
+    def test_mode_defaults_to_fast(self):
+        write(self.p("_kb.json"), json.dumps({"schema": 1}))
+        cfg = kbconf.load_library(self.d)
+        self.assertEqual(cfg["intake"]["mode"], "fast")
+        self.assertEqual(cfg["intake"]["consolidate_files"], 10)
+        self.assertEqual(cfg["names"]["consolidation_queue"], "_Consolidation-Queue.md")
+        self.assertEqual(kbconf.validate({"schema": 1, "intake": {"mode": "full"}}), [])
+        self.assertTrue(kbconf.validate({"schema": 1, "intake": {"mode": "slow"}}))
+
+
 if __name__ == "__main__":
     unittest.main()

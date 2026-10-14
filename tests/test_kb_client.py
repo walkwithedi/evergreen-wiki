@@ -853,6 +853,8 @@ class DecideTest(unittest.TestCase):
                                 ("python3 scripts/batch_plan.py finish --plan p", "batch_plan finish"),
                                 ("python3 scripts/assemble.py h.md b.md out/x.md", "assemble"),
                                 ('python3 scripts/meta.py entities s.md --field "a=b"', "meta entities"),
+                                ("python3 scripts/prep.py scan m.docx --library l --work w --n 1", "prep scan"),
+                                ("python3 scripts/consolidate.py fill t.md h.md out/t.md", "consolidate fill"),
                                 ("python3 scripts/meta.py --help", ""),
                                 ("python3 scripts/batch_plan.py --help", ""), ("python3 other.py", ""),
                                 ("ls scripts", "")):

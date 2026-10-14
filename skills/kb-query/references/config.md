@@ -66,7 +66,7 @@ The spec is the source of every rule about partitions, topics, terms and thresho
   "partitions": {"max": 10, "topic_start": 2, "fallback": "06"},
   "delivery": "",
   "convert": {"enabled": true, "image_limit": 10},
-  "intake": {"batch_files": 10, "batch_mb": 20},
+  "intake": {"mode": "fast", "batch_files": 10, "batch_mb": 20, "consolidate_files": 10},
   "names": {}
 }
 ```
@@ -78,7 +78,7 @@ The spec is the source of every rule about partitions, topics, terms and thresho
 - partitions: highest partition number, first topic partition (00 and 01 hold summary files), and the fallback partition for new topics.
 - delivery: direct or zip. Empty means direct: the assistant writes the files into the library after you confirm a preview, and archives the old versions at the same time. A Drive library with an inbox entry (its own unpack script) defaults to zip.
 - convert: kb-incremental turns uploaded Office, PDF and mail files into Markdown with a script before reading them (fewer tokens, faster). enabled: true or false (false when the key is missing; new libraries from a preset start with true). image_limit: pictures in one batch that are read without asking (default 10); over it the user decides once for the batch. min_pdf_chars_per_page (default 200) and min_chars_per_image (default 100): below these a file is read as the original instead (a scan, or a document that is mostly pictures). outline_chars (default 6000; 0 turns it off): converted text longer than this also gets an outline (opening text, headings with line numbers), which is read first; the full text only where it is needed (references/convert.md in kb-incremental).
-- intake: kb-incremental files many files in batches (references/batches.md in kb-incremental). A batch closes at batch_files files (default 10) or batch_mb megabytes (default 20); material that makes more than one batch is planned first and filed batch by batch. Lower them when one batch takes too long.
+- intake: how kb-incremental files material. mode: fast (the default, also when the key is missing) files each item at once, searchable as soon as it is written, and leaves key conclusions and the status-card check to consolidation (references/fast.md and references/consolidate.md in kb-incremental); full runs every step for every item before delivery, as before. A request that says "full intake" ("完整入库") uses full for that request. consolidate_files (default 10): files handled in one consolidation round. Many files are filed in batches (references/batches.md in kb-incremental): a batch closes at batch_files files (default 10) or batch_mb megabytes (default 20); material that makes more than one batch is planned first and filed batch by batch. Lower them when one batch takes too long.
 - sources: a local library with direct delivery can keep a copy of each filed original (section 3, Originals). keep: true or false (false when the key is missing; new work libraries start with true, life libraries with false, since originals bypass masking). max_mb (default 50; 0 means no limit): larger originals are not copied and the readme says so. Ignored for zip and Google Drive delivery.
 - names: overrides for any default name below. Leave out the keys you do not change.
 
@@ -102,6 +102,7 @@ The spec is the source of every rule about partitions, topics, terms and thresho
 | readme | README.txt | the readme that comes with each delivery |
 | run_log_prefix | _run-log_ | run log file name prefix (archive mode and direct delivery) |
 | batch_plan | _intake-batches.json | progress file of a batch intake run, in the library root until the run is finished |
+| consolidation_queue | _Consolidation-Queue.md | files filed by fast intake whose consolidation is still due, in the library root |
 | note_marker | Quick note: | first line of each quick note inside a filed batch |
 | assistant_label, user_label | Assistant, User | speaker labels in quick notes |
 
@@ -111,7 +112,7 @@ In kb-incremental, scripts/kbconf.py prints the resolved configuration: python3 
 
 ### Ignored files
 
-Every search and every read of knowledge files skips: the archive folder; the sources folder (names.sources_dir, copies of originals: opened only through a topic file's original link, see kb-query); names that start with an underscore (run logs, _kb.json, _kb-params.md, an inbox configuration file, the batch progress file); names that start with snapshot_prefix; names that contain old_suffix followed by a time stamp.
+Every search and every read of knowledge files skips: the archive folder; the sources folder (names.sources_dir, copies of originals: opened only through a topic file's original link, see kb-query); names that start with an underscore (run logs, _kb.json, _kb-params.md, an inbox configuration file, the batch progress file, the consolidation queue); names that start with snapshot_prefix; names that contain old_suffix followed by a time stamp.
 
 ## 3. Library folder and material: words to use with the user
 
@@ -146,3 +147,15 @@ A batch intake (references/batches.md in kb-incremental) can stop between batche
    - End this intake: python3 scripts/batch_plan.py skip --plan <file> --rest, then the final step for what was filed. Filed files stay; the original files are not touched.
    In Chinese: 「上次的分批入库还没做完：已完成 <n>/<总数> 批，还剩 <m> 个文件（<时间> 更新）。要继续吗？」 with 继续入库 / 稍后再说 / 结束这次入库.
 4. Ask at most once per conversation. kb-query and kb-note only remind: after their own answer or note, "Continue intake" hands over to kb-incremental; they never file material themselves.
+
+## 5. Consolidation due: remind once per conversation
+
+Fast intake (references/fast.md in kb-incremental) writes each filed item into the consolidation queue (names.consolidation_queue, a Markdown table in the library root, kept in Google Drive libraries too). Until consolidation has run for an item, its key conclusions are not written and the status card, change log and open items may not reflect it.
+
+1. After the library is chosen, find_exact names.consolidation_queue in the library root. Missing, or a table with no rows: nothing to say.
+2. Otherwise say in one line how many files wait and since when (the oldest filed time), and ask once, as a choice:
+   - Consolidate now (recommended): kb-incremental, consolidation mode.
+   - Later: no further reminder in this conversation.
+   In Chinese: 「有 <n> 个文件已入库、还没整合（最早一个在 <时间>），状态卡可能还没反映它们。现在整合吗？」 with 现在整合 / 稍后再说.
+3. When the same conversation already reminded of an unfinished batch intake (section 4), wait until that is settled; finishing a batch intake offers consolidation itself.
+4. Ask at most once per conversation. kb-query and kb-note only remind; consolidation belongs to kb-incremental. kb-query also says, when a file it names as basis is in the queue: "this file is not consolidated yet; the status card may not reflect it yet" (「该文件尚未整合，状态卡可能还没有反映它的内容」).
