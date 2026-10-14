@@ -657,17 +657,32 @@ def text_paths(text):
     out = []
     for raw in path_words(text or ""):
         raw = raw.rstrip(".,;:。，；：")
-        path = os.path.normpath(os.path.expanduser(raw))
-        if not os.path.isabs(path) or path in out or not os.path.exists(path):
-            continue
-        try:
-            walk_to(path if os.path.isdir(path) else os.path.dirname(path))
-        except (ValueError, OSError):
+        path = known_path(raw)
+        if not path or path in out:
             continue
         out.append(path)
         if len(out) >= MAX_PATHS:
             break
     return out
+
+
+def known_path(raw):
+    """The existing folder or file a typed path names, built by walk_to from the folder listings of the home
+    folder or a mounted drive (never by testing the typed text itself); "" when there is none."""
+    try:
+        folder, _ = walk_to(raw)
+        return folder
+    except (ValueError, OSError):
+        pass
+    want = os.path.normpath(os.path.expanduser(raw))
+    try:
+        folder, _ = walk_to(os.path.dirname(want))
+        name = os.path.basename(want)
+        with os.scandir(folder) as it:
+            found = [e.name for e in it if e.name == name and e.is_file()]
+    except (ValueError, OSError):
+        return ""
+    return os.path.join(folder, found[0]) if found else ""
 
 
 def walk_to(path, nearest=False):
