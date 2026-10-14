@@ -628,7 +628,26 @@ def places():
     return out
 
 
-PATH_RE = re.compile(r"[\"'「“]([~/][^\"'」”\n]+)[\"'」”]|(?:^|(?<=[\s:：，,（(]))([~/][^\s\"'，。；、）)」”]+)")
+QUOTES = {'"': '"', "'": "'", "「": "」", "“": "”"}
+BARE_PATH_RE = re.compile(r"(?<![^\s:：，,（(])[~/][^\s\"'“”「」，。；、）)]*")
+
+
+def path_words(text):
+    """The quoted parts that start with / or ~ (they may hold spaces), then the unquoted words that do.
+    Linear in the length of the text: each kind of quote is searched forward only."""
+    out, i, closed = [], 0, set()
+    while i < len(text):
+        c = text[i]
+        if c in QUOTES and c not in closed:
+            j = text.find(QUOTES[c], i + 1)
+            if j < 0:
+                closed.add(c)  # no closing quote of this kind further on
+            elif j > i + 1 and text[i + 1] in "~/":
+                out.append(text[i + 1:j])
+                i = j + 1
+                continue
+        i += 1
+    return out + BARE_PATH_RE.findall(text)
 
 
 def text_paths(text):
@@ -636,8 +655,8 @@ def text_paths(text):
     folder or on a mounted drive, so that reading them needs no card. Quoted paths may hold spaces; at most
     MAX_PATHS."""
     out = []
-    for m in PATH_RE.finditer(text or ""):
-        raw = (m.group(1) or m.group(2) or "").rstrip(".,;:。，；：")
+    for raw in path_words(text or ""):
+        raw = raw.rstrip(".,;:。，；：")
         path = os.path.normpath(os.path.expanduser(raw))
         if not os.path.isabs(path) or path in out or not os.path.exists(path):
             continue

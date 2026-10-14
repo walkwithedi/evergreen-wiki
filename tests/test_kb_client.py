@@ -864,6 +864,14 @@ class DecideTest(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertFalse(self.ok("bash", command))
 
+    def test_path_words(self):
+        words = kb_client.path_words('file "/a b/c.docx" and 「~/d e」, also /f/g.md，then /h. not a/b or "x"')
+        self.assertEqual(words, ["/a b/c.docx", "~/d e", "/f/g.md", "/h."])
+        start = time.time()  # many unclosed quotes stay linear
+        kb_client.path_words('"/' + "\u201c/" * 20000)
+        kb_client.path_words('"' * 20000 + "'" * 20000 + "「" * 20000)
+        self.assertLess(time.time() - start, 2)
+
     def test_remembered(self):
         always = {"bash": ["git *"], "read": ["/example/docs/*"]}
         self.assertTrue(agent.remembered("bash", ["git status"], always))
