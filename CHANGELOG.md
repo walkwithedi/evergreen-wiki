@@ -2,8 +2,9 @@
 
 All three skills share one version number. To release, update this file, the "Version:" line of every SKILL.md and the plugin manifests together and merge to main; the release workflow then publishes v<version>.
 
-## Unreleased
+## 1.15.0
 
+The browser client continues a batch intake across conversations and guides first use; queries read only the passages that answer; scripts take over the mechanical parts of placing an item.
 - tools/kb-client: a batch intake continues across conversations. When the last batch script step was done and nothing waits, the page starts a new conversation with Continue intake after a three-second countdown (Cancel stops it); after Stop, an error, or an automatic round that filed no batch, a Continue intake button does it. The material of a run still open (the sources of its progress file) is allowed for reading in every conversation. Simple mode turns File material and Continue intake off.
 - tools/kb-client: a Getting started card at the top of the page lists OpenCode found, OpenCode started, the skills where OpenCode reads them, a library, the knowledge-base line in OpenCode's instructions, and pdftotext (optional), each with what to do; with the first five done it offers three example requests that fill the box without sending. It can be hidden (remembered in the browser). The task buttons are off until a library exists. A missing model in OpenCode's settings no longer keeps the conversation off: OpenCode is started and the model shows as a warning. Check again (POST /api/chat/recheck) looks for OpenCode again as at start and starts it, or starts it anew after it stopped or fell back to simple mode (agent.Agent.retry), without restarting the client. GET /api/state adds opencode_skills, instructions and pdftotext.
 - install.py: the library and registration previews take their answer through confirm(); kb-client asks it as choices (Write, Change an item first and then which, Cancel), the terminal as before.
