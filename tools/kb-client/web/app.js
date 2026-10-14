@@ -86,8 +86,8 @@
       chat_ready: "Ready",
       chat_busy: "Working...",
       chat_simple: "Simple mode: OpenCode's server could not be used ({reason}). Each message runs once with opencode run; the assistant cannot ask for permission or ask questions on this page. For full use, open OpenCode in a terminal.",
-      chat_failed: "OpenCode stopped ({reason}). Quit the client and start it again.",
-      chat_no_program: "OpenCode was not found on this computer, so the conversation is off. Install OpenCode, or start the client with --opencode <path to opencode>, then start it again.",
+      chat_failed: "OpenCode stopped ({reason}). Choose Check again in Getting started to start it anew.",
+      chat_no_program: "OpenCode was not found on this computer, so the conversation is off. Install OpenCode, or start the client with --opencode <path to opencode>, then choose Check again in Getting started.",
       chat_terminal: "Open in a terminal",
       terminal_confirm: "Open this conversation in OpenCode in a terminal window? While you continue there, the conversation on this page pauses; when you are back, reload the page or start a new conversation.",
       terminal_opened: "Opened in a terminal ({name}).",
@@ -98,7 +98,6 @@
       thinking: "Thinking...",
       interim: "Working notes",
       perm_task: "Send a subagent", agent_explore: "explore (looks things up)",
-      chat_no_model: "OpenCode has no model set yet, so the conversation is off. Set up the model first (your administrator's setup tool), then start the client again.",
       chat_no_library: "No library on this computer yet. Choose Set up first.",
       pick_library: "Which library?",
       note_prompt: "What should be noted?",
@@ -148,7 +147,29 @@
       progress_done: "{lib}: all {total} batches done · filed {written} · duplicates {duplicates} · to review {review}",
       batch_card: "Batch {n} ({group}) done: {written} filed, {duplicates} duplicates, {review} to review.",
       run_card: "Intake finished in {lib}: {written} files filed in {total} batches.",
-      auto_count: "Allowed without asking: {n}"
+      auto_count: "Allowed without asking: {n}",
+      check_title: "Getting started",
+      check_hide: "Hide", check_show: "Show",
+      check_found: "OpenCode found",
+      check_found_no: "Not found. Install OpenCode, or start the client with --opencode <path to opencode>, then choose Check again.",
+      check_started: "OpenCode started",
+      check_starting: "Starting...",
+      check_started_simple: "Only simple mode: its server could not be used. Fix what the conversation panel shows, then choose Check again.",
+      check_started_failed: "It stopped. Choose Check again to start it anew.",
+      check_no_model: "No model found in its settings. If it does not start or answer, set up the model first.",
+      check_skills: "Skills installed where OpenCode reads them",
+      check_skills_no: "Choose Set up and install the skills for OpenCode.",
+      check_library: "A library is set up",
+      check_library_no: "Choose Set up to make one.",
+      check_line: "OpenCode's instructions name the libraries",
+      check_line_no: "Set up writes this line into OpenCode's AGENTS.md; answer yes when it asks.",
+      check_pdf: "PDF text extraction (pdftotext, optional)",
+      check_pdf_no: "Not installed: the assistant then reads each PDF whole, which is slower and uses more tokens. Install poppler-utils to add it.",
+      recheck: "Check again",
+      check_tries: "Ready. Pick an example: it goes into the box below to edit before you send it.",
+      try_note: "note this: the team review moved to Thursday",
+      try_due: "what is due this month?",
+      try_find: "what does the library say about the project plan?"
     },
     zh: {
       title: "知识库",
@@ -232,8 +253,8 @@
       chat_ready: "已就绪",
       chat_busy: "助手正在处理…",
       chat_simple: "简易模式：OpenCode 的服务用不了（{reason}）。每条消息用 opencode run 单独运行一次，助手不能在本页面请求授权或提问。需要完整功能时，请在终端里打开 OpenCode。",
-      chat_failed: "OpenCode 已停止（{reason}）。请退出客户端后重新启动。",
-      chat_no_program: "本机没有找到 OpenCode，对话不可用。请先安装 OpenCode，或启动客户端时用 --opencode <opencode 的路径> 指定，再重新启动客户端。",
+      chat_failed: "OpenCode 已停止（{reason}）。在「首次使用清单」里点「重新检测」即可重新启动。",
+      chat_no_program: "本机没有找到 OpenCode，对话不可用。请先安装 OpenCode，或启动客户端时用 --opencode <opencode 的路径> 指定，然后在「首次使用清单」里点「重新检测」。",
       chat_terminal: "在终端里打开",
       terminal_confirm: "在终端窗口里用 OpenCode 打开这个对话吗？在终端里继续时，本页面上的这个对话会暂停；回来后请刷新页面或开始新对话。",
       terminal_opened: "已在终端里打开（{name}）。",
@@ -244,7 +265,6 @@
       thinking: "思考中…",
       interim: "过程说明",
       perm_task: "派一个子助手去", agent_explore: "explore（查找）",
-      chat_no_model: "OpenCode 还没有配置模型，对话不可用。请先用管理员提供的配置工具配好模型，再重新启动客户端。",
       chat_no_library: "本机还没有知识库，请先选「安装与建库」。",
       pick_library: "用哪个知识库？",
       note_prompt: "要记下什么？",
@@ -294,7 +314,29 @@
       progress_done: "{lib}：{total} 批全部完成 · 已入库 {written} · 重复 {duplicates} · 待复核 {review}",
       batch_card: "第 {n} 批（{group}）完成：入库 {written} 个，重复 {duplicates} 个，待复核 {review} 个。",
       run_card: "知识库「{lib}」入库完成：共 {total} 批，入库 {written} 个文件。",
-      auto_count: "已自动允许 {n} 次"
+      auto_count: "已自动允许 {n} 次",
+      check_title: "首次使用清单",
+      check_hide: "收起", check_show: "展开",
+      check_found: "找到 OpenCode",
+      check_found_no: "没有找到。请安装 OpenCode，或启动客户端时用 --opencode <opencode 的路径> 指定，然后点「重新检测」。",
+      check_started: "OpenCode 已启动",
+      check_starting: "正在启动…",
+      check_started_simple: "只能用简易模式：它的服务用不了。按对话区显示的原因处理后，点「重新检测」。",
+      check_started_failed: "它已停止。点「重新检测」重新启动。",
+      check_no_model: "它的配置里没有找到模型。如果启动不了或不回答，请先配好模型。",
+      check_skills: "技能已装到 OpenCode 能读到的位置",
+      check_skills_no: "选「安装与建库」，把技能装给 OpenCode。",
+      check_library: "已建好知识库",
+      check_library_no: "选「安装与建库」建一个。",
+      check_line: "OpenCode 的指令文件里已写明知识库",
+      check_line_no: "「安装与建库」会把这一行写进 OpenCode 的 AGENTS.md，问到时回答「是」。",
+      check_pdf: "PDF 文字提取（pdftotext，可选）",
+      check_pdf_no: "未安装：助手会整份读取 PDF，更慢也更费 token。安装 poppler-utils 即可补上。",
+      recheck: "重新检测",
+      check_tries: "已就绪。点一个例子，它会填进下面的输入框，改好再发送。",
+      try_note: "记一下：团队评审改到周四",
+      try_due: "这个月有什么到期的？",
+      try_find: "库里关于项目计划是怎么说的？"
     }
   };
 
@@ -390,10 +432,97 @@
       names.length ? t("skills_in", { names: names.join(", ") }) : t("skills_none")));
     $("backups").textContent = state.backups ? t("backups", { n: state.backups }) : t("no_backups");
     setBusy(job !== null);
+    chatEnable();
+  }
+
+  // ---------- getting started ----------
+
+  // Each item: [done (true, false, or null for not known yet), title, what to do when not done,
+  // button]. Items 1-5 are needed; pdftotext only makes PDFs cheaper.
+  function checklist() {
+    var a = state.agent;
+    var setup = [t("setup"), function () { startAction("setup"); }];
+    var recheck = [t("recheck"), recheckAgent];
+    var started = chat.phase === "ready" ? true : (chat.phase === "simple" || chat.phase === "failed") ? false : null;
+    var startedHow = chat.phase === "simple" ? t("check_started_simple")
+      : chat.phase === "failed" ? t("check_started_failed") : (a.program ? t("check_starting") : "");
+    return [
+      [!!a.program, t("check_found"), t("check_found_no"), recheck],
+      [a.program ? started : false, t("check_started"), startedHow, started === false ? recheck : null,
+       a.program && !a.model ? t("check_no_model") : ""],
+      [!!state.opencode_skills, t("check_skills"), t("check_skills_no"), setup],
+      [localLibs().length > 0, t("check_library"), t("check_library_no"), setup],
+      [!!state.instructions, t("check_line"), t("check_line_no"), setup],
+      [!!state.pdftotext, t("check_pdf"), t("check_pdf_no"), null, "", true]
+    ];
+  }
+
+  function renderChecklist() {
+    if (!state) return;
+    var items = checklist();
+    var list = $("check-list");
+    list.textContent = "";
+    items.forEach(function (x) {
+      var mark = x[0] === true ? "done" : x[0] === null ? "wait" : (x[5] ? "optional" : "todo");
+      var li = el("li", { "class": "check " + mark });
+      li.appendChild(el("span", { "class": "check-mark", "aria-hidden": "true" },
+        mark === "done" ? "\u2713" : mark === "wait" ? "\u2026" : mark === "optional" ? "\u2013" : "!"));
+      var body = el("div", { "class": "check-body" });
+      body.appendChild(el("div", { "class": "check-title" }, x[1]));
+      if (x[0] !== true && x[2]) body.appendChild(el("div", { "class": "hint" }, x[2]));
+      if (x[4]) body.appendChild(el("div", { "class": "warn" }, x[4]));
+      li.appendChild(body);
+      if (x[0] === false && x[3]) {
+        var b = el("button", { type: "button", "class": "quiet small" }, x[3][0]);
+        b.disabled = job !== null;
+        b.addEventListener("click", x[3][1]);
+        li.appendChild(b);
+      }
+      list.appendChild(li);
+    });
+    var ready = items.slice(0, 5).every(function (x) { return x[0] === true; });
+    $("check-state").textContent = items.slice(0, 5).filter(function (x) { return x[0] === true; }).length + "/5";
+    var tries = $("check-tries");
+    tries.textContent = "";
+    if (ready) {
+      tries.appendChild(el("p", { "class": "hint" }, t("check_tries")));
+      ["try_note", "try_due", "try_find"].forEach(function (k) {
+        var b = el("button", { type: "button", "class": "quiet small" }, t(k));
+        b.addEventListener("click", function () { $("input").value = t(k); $("input").focus(); });
+        tries.appendChild(b);
+      });
+    }
+    show(tries, ready);
+    var folded = checkFolded();
+    show($("check-body"), !folded);
+    $("check-toggle").textContent = t(folded ? "check_show" : "check_hide");
+    $("check-toggle").setAttribute("aria-expanded", folded ? "false" : "true");
+  }
+
+  function checkFolded() {
+    try { return localStorage.getItem("kb-client-checklist") === "folded"; } catch (e) { return false; }
+  }
+
+  function foldChecklist() {
+    var folded = !checkFolded();
+    try { localStorage.setItem("kb-client-checklist", folded ? "folded" : "open"); } catch (e) { /* kept for this view only */ }
+    show($("check-body"), !folded);
+    $("check-toggle").textContent = t(folded ? "check_show" : "check_hide");
+    $("check-toggle").setAttribute("aria-expanded", folded ? "false" : "true");
+  }
+
+  // Looks for OpenCode again and starts it, or starts it anew after it failed or fell back to simple mode.
+  function recheckAgent() {
+    api("POST", "/api/chat/recheck", {}).then(function () {
+      return refresh().then(chatLoad);
+    }).catch(function (e) {
+      refresh();
+      chatInfo(e.status === 409 ? t("chat_no_program") : String(e.message));
+    });
   }
 
   function setBusy(on) {
-    Array.prototype.forEach.call(document.querySelectorAll("[data-action], .lib button"), function (b) {
+    Array.prototype.forEach.call(document.querySelectorAll("[data-action], .lib button, #check-list button"), function (b) {
       b.disabled = on;
     });
     show($("cancel"), on);
@@ -638,7 +767,7 @@
 
   // ---------- conversation ----------
 
-  var chat = { source: null, ready: false, busy: false, restarting: false, simple: false, msgs: {}, parts: {}, cards: {} };
+  var chat = { source: null, phase: "", ready: false, busy: false, restarting: false, simple: false, msgs: {}, parts: {}, cards: {} };
 
   function chatInfo(text, output) {
     $("chat-info").textContent = text || "";
@@ -651,17 +780,20 @@
     var on = chat.ready && !chat.busy;
     $("chat-send").disabled = !chat.ready;  // while the assistant works, a message waits its turn
     $("chat-terminal").disabled = !chat.ready;
+    var noLib = state !== null && !localLibs().length;
     Array.prototype.forEach.call(document.querySelectorAll("[data-task]"), function (b) {
       var batch = b.getAttribute("data-task") === "intake" || b.getAttribute("data-task") === "resume";
-      b.disabled = !on || (chat.simple && batch);
-      b.title = chat.simple && batch ? t("simple_no_intake") : "";
+      b.disabled = !on || noLib || (chat.simple && batch);
+      b.title = noLib ? t("chat_no_library") : (chat.simple && batch ? t("simple_no_intake") : "");
     });
     $("chat-new").disabled = !chat.ready || chat.busy;
     show($("chat-stop"), chat.ready && chat.busy);
     $("chat-state").textContent = !chat.ready ? "" : (chat.busy ? t("chat_busy") : t("chat_ready"));
+    renderChecklist();
   }
 
   function chatAgent(a) {
+    if (a.state !== "off") chat.phase = a.state;
     if (a.state === "starting") {
       chat.ready = false;
       if (a.restart) chat.restarting = true;
@@ -1297,7 +1429,6 @@
   function chatStart() {
     var a = state.agent;
     if (!a.program) { chatInfo(t("chat_no_program")); chatEnable(); return; }
-    if (!a.model) { chatInfo(t("chat_no_model")); chatEnable(); return; }
     api("POST", "/api/chat/start", {}).then(chatLoad).catch(function (e) { chatInfo(String(e.message)); });
   }
 
@@ -1378,6 +1509,7 @@
 
   translate();
   loadProgress();  // what is already finished is known, so only new batches get a card
+  $("check-toggle").addEventListener("click", foldChecklist);
   $("graph-close").addEventListener("click", closeGraph);
   $("graph-svg").addEventListener("pointerdown", function (e) { if (graph) panGraph(e); });
   $("graph-svg").addEventListener("wheel", function (e) { if (graph) zoomGraph(e); }, { passive: false });

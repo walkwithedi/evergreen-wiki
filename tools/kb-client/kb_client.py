@@ -51,7 +51,7 @@ WEB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 ACTIONS = ("setup", "backup", "rollback", "move", "uninstall")
 LANGS = ("en", "zh")
 MAX_BODY = 64 * 1024
-CHAT_ACTIONS = {name: name for name in ("start", "send", "new", "stop", "permission", "question", "terminal")}
+CHAT_ACTIONS = {name: name for name in ("start", "recheck", "send", "new", "stop", "permission", "question", "terminal")}
 MAX_TEXT = 20000  # characters of one message from the page
 MAX_PATHS = 200  # material paths sent with one message
 MAX_ENTRIES = 2000  # entries listed per folder; the page says when a folder holds more
@@ -65,8 +65,12 @@ MSG = {
         "move_to": "Choose the folder to move the library into. The library keeps its folder name.",
         "busy": "Another step is still running.",
         "no_program": "OpenCode was not found on this computer.",
-        "no_model": "OpenCode has no model set yet.",
         "not_ready": "The conversation is not ready yet.",
+        "confirm": "Write the library as previewed above?",
+        "write": "Write",
+        "change": "Change an item first",
+        "cancel": "Cancel",
+        "which_item": "Which item should be changed?",
         "started": "Knowledge base client: {url}",
         "stopped": "Knowledge base client stopped.",
     },
@@ -76,8 +80,12 @@ MSG = {
         "move_to": "选择要把知识库移到哪个文件夹里。知识库的文件夹名不变。",
         "busy": "还有一个步骤在运行。",
         "no_program": "本机没有找到 OpenCode。",
-        "no_model": "OpenCode 还没有配置模型。",
         "not_ready": "对话还没有准备好。",
+        "confirm": "按上面的预览写入知识库吗？",
+        "write": "写入",
+        "change": "先修改某一项",
+        "cancel": "取消",
+        "which_item": "修改哪一项？",
         "started": "知识库客户端：{url}",
         "stopped": "知识库客户端已停止。",
     },
@@ -166,6 +174,18 @@ class WebAsker:
         values = [o["value"] for o in opts]
         value = self.job.ask("choose", prompt, options=opts, default=str(default))
         return value if value in values else default
+
+    def confirm(self, prompt, items, can_write=True):
+        """The answer to a preview as install.confirm takes it: "" to write, "n" to cancel, or the number
+        of the item to change. The page shows the choices instead of the terminal's typed answer."""
+        m = MSG[self.lang]
+        opts = ([("write", m["write"])] if can_write else []) + [("change", m["change"]), ("cancel", m["cancel"])]
+        what = self.choose(m["confirm"], opts, opts[0][0])
+        if what == "write":
+            return ""
+        if what == "cancel":
+            return "n"
+        return self.choose(m["which_item"], [(str(i), f"{i}. {name}") for i, name in enumerate(items, 1)], "1")
 
 
 class Output:
@@ -261,24 +281,37 @@ class App:
             "backups": len(kb_manage.list_backups()),
             "registry": kb_manage.registry_path(),
             "work": self.work,
+            "opencode_skills": opencode_skills(),
+            "instructions": instructions_line(),
+            "pdftotext": bool(shutil.which("pdftotext")),
             "job": None if job is None else {"id": job.id, "action": job.action, "done": job.done},
         }
 
     # ---------- the conversation ----------
 
     def start_agent(self):
-        """The Agent, started on first use; None and the reason when OpenCode cannot be used."""
+        """The Agent, started on first use; None and the reason when OpenCode is not found. Whether
+        OpenCode can be used shows when it starts: a missing model only warns (its settings may come
+        from elsewhere)."""
         with self.lock:
             if self.agent is None:
-                st = agent_status()
-                if not st["program"]:
+                if not agent_status()["program"]:
                     return None, "no_program"
-                if not st["model"]:
-                    return None, "no_model"
                 self.agent = agent_mod.Agent(OPENCODE["program"], os.path.expanduser("~"), self.places,
                                              os.path.join(kb_manage.state_dir(), "kb-client.json"),
                                              self.start_timeout)
         self.agent.start()
+        return self.agent, None
+
+    def recheck(self):
+        """Looks for OpenCode again, the way the client did when it started, then starts it, or starts it
+        anew after it failed or fell back to simple mode. None and the reason when it is still not found."""
+        prog = find_opencode(self.options.get("opencode") or "")
+        if not prog:
+            return None, "no_program"
+        if self.agent is None:
+            return self.start_agent()
+        self.agent.retry(prog)
         return self.agent, None
 
     def places(self):
@@ -494,6 +527,25 @@ def skills_installed():
             out.append({"agent": target, "name": install.AGENT_NAMES.get(target, target),
                         "folder": folder, "skills": have})
     return out
+
+
+# The skills folders OpenCode reads besides its own (its Claude Code and .agents compatibility).
+OPENCODE_SKILL_AGENTS = ("opencode", "claude-code", "agents")
+
+
+def opencode_skills():
+    """True when a skills folder OpenCode reads holds all the skills."""
+    return any(s["agent"] in OPENCODE_SKILL_AGENTS and set(kb_manage.SKILLS) <= set(s["skills"])
+               for s in skills_installed())
+
+
+def instructions_line():
+    """True when the instructions OpenCode reads name the libraries: its AGENTS.md, or Claude Code's
+    CLAUDE.md while there is no AGENTS.md (OpenCode reads that one then)."""
+    path, _ = install.INSTRUCTION_FILES["opencode"]
+    if os.path.isfile(path):
+        return kb_manage.has_our_line(path)
+    return kb_manage.has_our_line(install.INSTRUCTION_FILES["claude-code"][0])
 
 
 def strip_jsonc(text):
@@ -819,8 +871,8 @@ class Handler(BaseHTTPRequestHandler):
         if what is None:
             return self.send(404, {"error": "not found"})
         m = MSG[self.app.lang]
-        if what == "start":
-            ag, why = self.app.start_agent()
+        if what in ("start", "recheck"):
+            ag, why = self.app.start_agent() if what == "start" else self.app.recheck()
             if ag is None:
                 return self.send(409, {"error": m[why], "reason": why})
             return self.send(200, {"agent": ag.snapshot()})
@@ -942,8 +994,8 @@ def main():
     # folder is taken from there, never from wherever the program was started.
     os.chdir(os.path.expanduser("~"))
     find_opencode(a.opencode)
-    app = App(lang, {"agent": a.agent, "preset": a.preset, "descriptions": a.descriptions}, a.idle,
-              a.start_timeout)
+    app = App(lang, {"agent": a.agent, "preset": a.preset, "descriptions": a.descriptions, "opencode": a.opencode},
+              a.idle, a.start_timeout)
     app.output = Output(sys.stdout)
     sys.stdout = app.output
     serve(app, a.port, not a.no_browser)

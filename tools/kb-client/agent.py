@@ -475,6 +475,24 @@ class Agent:
         self.start(restart=True)
         return True
 
+    def retry(self, program):
+        """Starts OpenCode anew with program after it could not be used (simple mode, or it stopped); the
+        page's conversation stream goes on. False while it is starting, ready, or a simple-mode message
+        is still running."""
+        with self.lock:
+            rp = self.run_proc
+            if self.state not in ("simple", "failed") or self.stopping or (rp and rp.poll() is None):
+                return False
+            self.program = program
+            self.gen += 1
+            self.state = "off"
+        log.info("starting opencode again")
+        self._kill()
+        self.proc, self.port, self.output = None, None, []
+        self.permissions, self.questions = {}, {}
+        self.start()
+        return True
+
     def _events(self, stream, gen):
         while not self.stopping and gen == self.gen:
             try:
