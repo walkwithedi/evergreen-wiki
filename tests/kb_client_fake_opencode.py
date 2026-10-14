@@ -6,7 +6,8 @@ FAKE_OPENCODE_LOG: file that gets one JSON line per call (the arguments, OPENCOD
 every request). FAKE_OPENCODE_MODE: "noserve" (serve exits at once), "noapi" (GET /permission is 404),
 "slow" (serve never says it listens). Messages starting with PERM <permission> <pattern>, QUESTION or SLOW
 make the session ask for a permission, ask a question or wait to be aborted; SUBAGENT <permission>
-<pattern> starts a subagent session that asks for that permission; THINK sends reasoning first.
+<pattern> starts a subagent session that asks for that permission; THINK sends reasoning first; RUN <command>
+shows a finished bash step running that command.
 """
 import json
 import os
@@ -111,6 +112,14 @@ class World:
                          {"type": "text", "text": "the answer"}):
                 self.emit("message.part.updated", sessionID=sid, time=0,
                           part=dict(part, id=self.next("p"), sessionID=sid, messageID=mid))
+        elif words[0] == "RUN":
+            mid = self.next("m")
+            info = {"id": mid, "sessionID": sid, "role": "assistant"}
+            self.emit("message.updated", sessionID=sid, info=info)
+            self.emit("message.part.updated", sessionID=sid, time=0, part={
+                "id": self.next("p"), "sessionID": sid, "messageID": mid, "type": "tool", "tool": "bash",
+                "callID": "c2", "state": {"status": "completed", "input": {"command": text[4:]}, "output": "",
+                                          "title": "Run a script", "metadata": {}, "time": {"start": 0, "end": 0}}})
         elif words[0] == "SLOW":
             ev = self.aborts.setdefault(sid, threading.Event())
             ev.clear()

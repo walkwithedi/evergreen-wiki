@@ -337,6 +337,33 @@ def libraries():
     return out
 
 
+def progress():
+    """Batch intake progress of every registered local library that has a progress file, for the progress
+    line and the batch cards on the page: counts and group (folder) names, no file paths."""
+    out = []
+    for lib in libraries():
+        if not lib["root"] or not lib["exists"]:
+            continue
+        plan = kb_manage.read_json(kb_manage.batch_plan(lib["root"]), None)
+        if not isinstance(plan, dict) or not isinstance(plan.get("batches"), list):
+            continue
+        bs = [b for b in plan["batches"] if isinstance(b, dict)]
+        done = [b for b in bs if b.get("status") == "done"]
+        started = [b for b in bs if b.get("status") == "started"]
+
+        def total(key):
+            return sum(int((b.get("result") or {}).get(key) or 0) for b in done)
+        out.append({"id": lib["id"], "label": lib["label"], "batches": len(bs), "done": len(done),
+                    "skipped": sum(1 for b in bs if b.get("status") == "skipped"),
+                    "current": started[0].get("n") if started else None,
+                    "current_group": str(started[0].get("group", "")) if started else "",
+                    "written": total("written"), "duplicates": total("duplicates"), "review": total("review"),
+                    "finished": [{"n": b.get("n"), "group": str(b.get("group", "")), "part": str(b.get("part", "")),
+                              "result": b.get("result") or {}} for b in done],
+                    "final_step": str(plan.get("final_step", ""))})
+    return out
+
+
 def agent_places():
     """Where OpenCode may act without asking (agent.decide): write in the registered local libraries;
     read also the skills and the agent's own settings; run the skills' scripts."""
@@ -532,6 +559,8 @@ class Handler(BaseHTTPRequestHandler):
         path, query = g
         if path == "/api/state":
             return self.send(200, self.app.state())
+        if path == "/api/progress":
+            return self.send(200, {"progress": progress()})
         if path == "/api/places":
             return self.send(200, {"places": places()})
         if path == "/api/fs":

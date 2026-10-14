@@ -302,6 +302,29 @@ class KbClientTest(unittest.TestCase):
         self.assertTrue(agent["model"])
         self.assertTrue(agent["config"].endswith("opencode.jsonc"))
 
+    def test_progress(self):
+        self.assertEqual(self.server.get("/api/progress")[1], {"progress": []})
+        result, out, _ = self.setup_library()
+        self.assertEqual(result, "ok", out)
+        self.assertEqual(self.server.get("/api/progress")[1], {"progress": []})  # no run open
+        batches = [{"n": 1, "group": "minutes", "part": "", "status": "done", "files": [{"path": "/x/a.docx"}],
+                    "result": {"written": 4, "duplicates": 1, "review": 0}},
+                   {"n": 2, "group": "plans", "part": "1/2", "status": "started", "files": [], "result": {}},
+                   {"n": 3, "group": "plans", "part": "2/2", "status": "pending", "files": [], "result": {}}]
+        write(self.p("home", "kb", "work", "_intake-batches.json"),
+              json.dumps({"schema": 1, "batches": batches, "final_step": "pending"}))
+        p = self.server.get("/api/progress")[1]["progress"]
+        self.assertEqual(len(p), 1)
+        p = p[0]
+        self.assertEqual((p["id"], p["batches"], p["done"], p["skipped"], p["current"], p["current_group"]),
+                         ("work", 3, 1, 0, 2, "plans"))
+        self.assertEqual((p["written"], p["duplicates"], p["review"], p["final_step"]), (4, 1, 0, "pending"))
+        self.assertEqual(p["finished"], [{"n": 1, "group": "minutes", "part": "",
+                                          "result": {"written": 4, "duplicates": 1, "review": 0}}])
+        self.assertNotIn("/x/a.docx", json.dumps(p))  # counts, not file paths
+        write(self.p("home", "kb", "work", "_intake-batches.json"), "{broken")
+        self.assertEqual(self.server.get("/api/progress")[1], {"progress": []})
+
     def test_quit(self):
         work = self.server.get("/api/state")[1]["work"]
         self.assertTrue(os.path.isdir(work))
@@ -477,6 +500,12 @@ class ChatTest(unittest.TestCase):
         # writing there is not allowed: only the library may be written to
         self.send("PERM edit " + os.path.join(material, "a.md"))
         self.assertEqual(ev.until(lambda e: e["type"] in ("auto", "permission"))["type"], "permission")
+
+    def test_tool_step_names_the_stage_script(self):
+        ev = self.ready()
+        self.send("RUN cd /skills/kb-incremental && python3 scripts/convert.py a.docx out.md")
+        step = ev.until(lambda e: e["type"] == "part" and e["kind"] == "tool", "tool step")
+        self.assertEqual((step["script"], step["detail"]), ("convert", "Run a script"))
 
     def test_work_folder_is_written_without_a_card(self):
         ev = self.ready()
@@ -723,6 +752,16 @@ class DecideTest(unittest.TestCase):
                     f"cp {index} {self.lib}/out/x"):  # a link out of the library
             with self.subTest(bad=bad):
                 self.assertFalse(self.ok("bash", bad))
+
+    def test_stage_script(self):
+        for command, script in (("python3 /s/kb-incremental/scripts/convert.py a b", "convert"),
+                                ('cd /s && python3 scripts/index_tool.py check w --orig "x"', "index_tool check"),
+                                ("python3 -I '/a b/scripts/card_check.py' o n", "card_check"),
+                                ("python3 scripts/batch_plan.py finish --plan p", "batch_plan finish"),
+                                ("python3 scripts/batch_plan.py --help", ""), ("python3 other.py", ""),
+                                ("ls scripts", "")):
+            with self.subTest(command=command):
+                self.assertEqual(agent.stage_script(command), script)
 
     def test_quoted_text(self):
         script = os.path.join(self.skill, "scripts", "batch_plan.py")

@@ -261,6 +261,27 @@ class Feed:
             return self.events[start:]
 
 
+# The skill scripts whose runs mark a stage of an intake on the page: script name, then the subcommands
+# that count (None: any). Only these fixed names reach the page, never the command line itself.
+STAGE_SCRIPTS = {"batch_plan": ("plan", "next", "done", "skip", "finish", "status", "add"), "convert": None,
+                 "index_tool": ("check", "add", "update", "write"), "clean": None, "card_check": None,
+                 "package": None, "archive_plan": None, "pick_materials": None}
+SCRIPT_RE = re.compile(r"(?:^|[\s/'\"])(\w+)\.py['\"]?(?:\s+([a-z]+))?")
+
+
+def stage_script(command):
+    """"convert", "index_tool check" and the like for a command running one of STAGE_SCRIPTS, else ""."""
+    for m in SCRIPT_RE.finditer(str(command)):
+        name, sub = m.group(1), m.group(2) or ""
+        if name not in STAGE_SCRIPTS:
+            continue
+        subs = STAGE_SCRIPTS[name]
+        if subs is None:
+            return name
+        return f"{name} {sub}" if sub in subs else ""
+    return ""
+
+
 def part_event(part, role, child=False):
     """What the page needs of one message part: text, reasoning, or a tool step in one line. None for the
     rest. child marks a part of a subagent's conversation."""
@@ -276,8 +297,9 @@ def part_event(part, role, child=False):
         if not detail:
             inp = state.get("input") or {}
             detail = str(inp.get("command") or inp.get("filePath") or inp.get("path") or inp.get("pattern") or "")
+        script = stage_script((state.get("input") or {}).get("command", "")) if part.get("tool") == "bash" else ""
         return dict(base, kind="tool", tool=str(part.get("tool", "")), status=str(state.get("status", "")),
-                    detail=detail[:300], error=str(state.get("error", ""))[:300])
+                    detail=detail[:300], error=str(state.get("error", ""))[:300], script=script)
     return None
 
 

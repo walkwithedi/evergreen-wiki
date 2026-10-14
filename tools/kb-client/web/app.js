@@ -109,7 +109,28 @@
       say_lint: "health check the {lib} library",
       say_archive: "archive old versions in the {lib} library",
       say_resume: "continue intake in the {lib} library",
-      say_work: "Work folder: {path}"
+      say_work: "Work folder: {path}",
+      stage_count: "Take stock", stage_convert: "Convert", stage_dedup: "Duplicates and names",
+      stage_clean: "Clean up", stage_compare: "Compare conclusions", stage_write: "File", stage_final: "Wrap up",
+      why_count: "Each file gets a content fingerprint first, so files already in the library or repeated in the material are not read again.",
+      why_convert: "Office files and PDFs become plain text the assistant can read; your original files are only read, never changed.",
+      why_dedup: "Name equals version: a new version of a document lands on the same name and the old one goes to the archive.",
+      why_clean: "Only the formatting is tidied; nothing is shortened, so every sentence can still be traced to its source.",
+      why_compare: "A rewrite of the status card is compared item by item by a script; a conclusion changes only with evidence.",
+      why_write: "Files are added and old versions archived; nothing is ever deleted.",
+      why_final: "After the last batch, the status card, change log and open items are updated once, for everything filed.",
+      more_count: "Batches keep each step small enough to check. A run can stop after any batch and go on later with Continue intake.",
+      more_convert: "Pictures keep a placeholder; tables stay tables. The converted text is kept in the client's work folder only while the client runs.",
+      more_dedup: "Two different documents never share a name; when in doubt the assistant renames rather than overwrites. This removes most \"which version is current?\" questions.",
+      more_clean: "The source text is the evidence behind every conclusion in the library, so it is kept whole.",
+      more_compare: "Three questions come first: does the new material carry this kind of fact, does the card have an entry for it, and do they disagree. Only three yeses change the card.",
+      more_write: "The file index records each source's content fingerprint, so the same file is recognised next time.",
+      more_final: "Topics and conclusions recorded during the batches are checked against the current status card once more before it is rewritten; that rewrite waits for your confirmation.",
+      progress_line: "{lib}: batch {n}/{total} · filed {written} · duplicates {duplicates} · to review {review}",
+      progress_done: "{lib}: all {total} batches done · filed {written} · duplicates {duplicates} · to review {review}",
+      batch_card: "Batch {n} ({group}) done: {written} filed, {duplicates} duplicates, {review} to review.",
+      run_card: "Intake finished in {lib}: {written} files filed in {total} batches.",
+      auto_count: "Allowed without asking: {n}"
     },
     zh: {
       title: "知识库",
@@ -216,7 +237,28 @@
       say_lint: "检查知识库「{lib}」",
       say_archive: "归档旧版（知识库「{lib}」）",
       say_resume: "继续入库（知识库「{lib}」）",
-      say_work: "工作文件夹：{path}"
+      say_work: "工作文件夹：{path}",
+      stage_count: "清点", stage_convert: "转换", stage_dedup: "查重与命名",
+      stage_clean: "清理正文", stage_compare: "比对结论", stage_write: "写入", stage_final: "收尾",
+      why_count: "先给每个文件算内容指纹，库里已有的和材料里重复的不再读取。",
+      why_convert: "把 Office 和 PDF 转成助手能读的纯文本；原始文件只读不改。",
+      why_dedup: "名称即版本：同一份文件的新版本落在同一个名字上，旧版移入归档。",
+      why_clean: "只整理格式，不删减内容，每句话都能追溯到原文。",
+      why_compare: "状态卡的改写由脚本逐条比对，有依据才改结论。",
+      why_write: "只新增和归档，从不删除。",
+      why_final: "最后一批完成后，一次性更新状态卡、变更日志和待决事项。",
+      more_count: "分批让每一步都小到可以检查。任何一批之后都可以停下，以后用「继续入库」接着做。",
+      more_convert: "图片留占位，表格仍是表格。转换出的文本只在客户端运行期间保存在它的工作文件夹里。",
+      more_dedup: "两份不同的文件绝不共用一个名字；拿不准时宁可改名也不覆盖。这样就基本不会出现「哪个版本是现行的」这种问题。",
+      more_clean: "原文是库里每条结论的依据，所以完整保留。",
+      more_compare: "先问三个问题：新材料有没有这类事实，状态卡有没有对应条目，两者是否矛盾。三个都是「是」才改状态卡。",
+      more_write: "文件索引记下每个来源的内容指纹，下次遇到同一文件能认出来。",
+      more_final: "各批记下的主题和结论，改写前会再和当前状态卡核对一遍；这一步要等你确认。",
+      progress_line: "{lib}：第 {n}/{total} 批 · 已入库 {written} · 重复 {duplicates} · 待复核 {review}",
+      progress_done: "{lib}：{total} 批全部完成 · 已入库 {written} · 重复 {duplicates} · 待复核 {review}",
+      batch_card: "第 {n} 批（{group}）完成：入库 {written} 个，重复 {duplicates} 个，待复核 {review} 个。",
+      run_card: "知识库「{lib}」入库完成：共 {total} 批，入库 {written} 个文件。",
+      auto_count: "已自动允许 {n} 次"
     }
   };
 
@@ -768,20 +810,138 @@
       chatAgent(ev);
       if (ev.state === "ready") chatLoad();  // a conversation picked up again brings its history
     }
-    else if (ev.type === "part") showPart(ev);
+    else if (ev.type === "part") { showPart(ev); if (ev.kind === "tool" && ev.script) stageFrom(ev); }
     else if (ev.type === "delta") {
       var p = partEl({ partID: ev.partID, messageID: ev.messageID, role: ev.role, child: ev.child, kind: "text" });
       p.textContent += ev.delta;
       scrollChat();
-    } else if (ev.type === "status") { chat.busy = ev.status !== "idle"; chatEnable(); }
+    } else if (ev.type === "status") {
+      chat.busy = ev.status !== "idle";
+      chatEnable();
+      if (!chat.busy) { stagesIdle(); if (stages.current) loadProgress(); }
+    }
     else if (ev.type === "auto") {
-      note((ev.child ? t("child") : "") + t("auto", { what: permName(ev.permission) + " " + permWhat(ev).join(", ") }), "auto");
+      autoNote((ev.child ? t("child") : "") + t("auto", { what: permName(ev.permission) + " " + permWhat(ev).join(", ") }));
     }
     else if (ev.type === "error") note(ev.text, "error");
     else if (ev.type === "permission") permissionCard(ev);
     else if (ev.type === "question") questionCard(ev);
     else if (ev.type === "permission_done" || ev.type === "question_done") dropCard(ev.id);
     else if (ev.type === "reset") clearChat();
+  }
+
+  // ---------- intake stages and progress ----------
+  // The stage comes from the skill script a tool step runs (agent.py stage_script), never from the
+  // model's wording, so it costs no tokens and cannot drift.
+
+  var STAGES = ["count", "convert", "dedup", "clean", "compare", "write", "final"];
+  var SCRIPT_STAGE = {
+    "pick_materials": "count", "batch_plan plan": "count", "batch_plan next": "count",
+    "convert": "convert", "index_tool check": "dedup", "clean": "clean", "card_check": "compare",
+    "index_tool add": "write", "index_tool update": "write", "index_tool write": "write", "package": "write",
+    "batch_plan done": "write", "batch_plan skip": "write", "archive_plan": "write", "batch_plan finish": "final"
+  };
+  var stages = { current: "", shown: "", hideTimer: null, poll: null, seen: null, runs: {}, announced: {} };
+
+  function drawStages() {
+    var list = $("stage-list");
+    list.textContent = "";
+    var at = STAGES.indexOf(stages.current);
+    STAGES.forEach(function (k, i) {
+      var li = el("li", { "class": i < at ? "past" : (i === at ? "now" : "") }, t("stage_" + k));
+      li.addEventListener("click", function () {
+        stages.shown = stages.shown === k ? "" : k;
+        drawStages();
+      });
+      list.appendChild(li);
+    });
+    var k = stages.shown || stages.current;
+    $("stage-why").textContent = k ? t("why_" + k) + (stages.shown ? " " + t("more_" + k) : "") : "";
+  }
+
+  function stageFrom(ev) {
+    var k = SCRIPT_STAGE[ev.script || ""];
+    if (!k) return;
+    if (k !== stages.current) { stages.current = k; stages.shown = ""; }
+    clearTimeout(stages.hideTimer);
+    show($("stages"), true);
+    drawStages();
+    if (ev.script.indexOf("batch_plan") === 0 && ev.status === "completed") loadProgress();
+    if (!stages.poll) stages.poll = setInterval(function () { if (chat.busy) loadProgress(); }, 5000);
+  }
+
+  // Once the assistant has been idle for two minutes, the stages fold away until the next intake.
+  function stagesIdle() {
+    clearTimeout(stages.hideTimer);
+    if (!stages.current) return;
+    stages.hideTimer = setTimeout(function () {
+      show($("stages"), false);
+      stages.current = ""; stages.shown = "";
+      clearInterval(stages.poll); stages.poll = null;
+    }, 120000);
+  }
+
+  function runCard(p) {
+    if (stages.announced[p.id]) return;
+    stages.announced[p.id] = true;
+    note(t("run_card", { lib: p.label, total: p.batches, written: p.written }), "batch");
+  }
+
+  // Batch cards for batches finished since the page last looked, the run card when a run is wrapped up
+  // (its progress file is then marked done, and moved to the archive soon after), and the progress line
+  // of the run still open.
+  function loadProgress() {
+    return api("GET", "/api/progress").then(function (r) {
+      var first = stages.seen === null;
+      if (first) stages.seen = {};
+      var now = {}, line = "";
+      r.progress.forEach(function (p) {
+        now[p.id] = p;
+        var seen = stages.seen[p.id] || (stages.seen[p.id] = {});
+        p.finished.forEach(function (b) {
+          if (seen[b.n]) return;
+          seen[b.n] = true;
+          if (first) return;  // batches finished before the page looked are not announced
+          var res = b.result || {};
+          note(t("batch_card", { n: b.n, group: b.group + (b.part ? " " + b.part : ""), written: res.written || 0,
+                                 duplicates: res.duplicates || 0, review: res.review || 0 }), "batch");
+        });
+        var open = p.done + p.skipped < p.batches;
+        if (!open && p.final_step === "done") {
+          if (!first && stages.runs[p.id] && stages.runs[p.id].final_step !== "done") runCard(p);
+          return;
+        }
+        stages.announced[p.id] = false;
+        if (!line) line = t(open ? "progress_line" : "progress_done", {
+          lib: p.label, n: p.current || Math.min(p.done + p.skipped + 1, p.batches), total: p.batches,
+          written: p.written, duplicates: p.duplicates, review: p.review });
+      });
+      Object.keys(stages.runs).forEach(function (id) {  // wrapped up and archived between two looks
+        var was = stages.runs[id];
+        if (!now[id] && was.done + was.skipped >= was.batches) runCard(was);
+      });
+      stages.runs = now;
+      $("progress").textContent = line;
+      show($("progress"), !!line);
+    }).catch(function () {});
+  }
+
+  // Answers the client gave itself are counted on one line per stretch of conversation; the details
+  // stay one click away.
+  function autoNote(text) {
+    var box = $("messages").lastChild;
+    if (!box || !box.classList || !box.classList.contains("autos")) {
+      var list = el("div", { "class": "text" });
+      box = fold("", list);
+      box.className = "fold note auto autos";
+      box.dataset.n = "0";
+      $("messages").appendChild(box);
+    }
+    var n = Number(box.dataset.n) + 1;
+    box.dataset.n = String(n);
+    box.firstChild.textContent = t("auto_count", { n: n });
+    box.lastChild.appendChild(el("div", {}, text));
+    scrollChat();
   }
 
   function clearChat() {
@@ -890,6 +1050,7 @@
   // ---------- start ----------
 
   translate();
+  loadProgress();  // what is already finished is known, so only new batches get a card
   Array.prototype.forEach.call(document.querySelectorAll("[data-action]"), function (b) {
     b.addEventListener("click", function () { startAction(b.getAttribute("data-action")); });
   });
