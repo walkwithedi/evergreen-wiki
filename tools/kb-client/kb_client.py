@@ -27,6 +27,7 @@ import os
 import queue
 import re
 import secrets
+import socketserver
 import sys
 import threading
 import time
@@ -721,9 +722,18 @@ class Handler(BaseHTTPRequestHandler):
         return self.send(404, {"error": "not found"})
 
 
+class LocalServer(ThreadingHTTPServer):
+    """No reverse lookup of the host name when binding: on some systems it waits for a DNS timeout
+    before the page can open, and the server only ever answers on 127.0.0.1."""
+
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = "127.0.0.1", self.server_address[1]
+
+
 def serve(app, port, open_browser):
     handler = type("BoundHandler", (Handler,), {"app": app})
-    server = ThreadingHTTPServer(("127.0.0.1", port), handler)
+    server = LocalServer(("127.0.0.1", port), handler)
     server.daemon_threads = True
     app.server = server
     url = f"http://127.0.0.1:{server.server_address[1]}/?t={app.token}"
