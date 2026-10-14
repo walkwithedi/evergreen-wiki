@@ -53,7 +53,7 @@ File the "file:" paths through Check 1 to step 4 and delivery, as in SKILL.md, w
 6. Mark the batch and print one progress line:
    python3 scripts/batch_plan.py done --plan <progress file> --batch <n> --written <files> --duplicates <n> --review <n>
    Batch <n>/<total> <group>: <written> filed, <duplicates> duplicates, <review> to review. Next: <group>, or the final step.
-7. Go straight on with the next batch. Keep the reply short: the progress line only, no per-file notes. When the conversation is getting long, stop after a finished batch and tell the user to open a new conversation and say "continue intake".
+7. Go straight on with the next batch. Keep the reply short: the progress line only, no per-file notes. When the conversation is getting long, stop after a finished batch and tell the user to open a new conversation and say "continue intake". Stop only right after that batch's done and its progress line, starting nothing else, so that a client can tell this stop from a failure and continue the run in a new conversation.
 
 A failure inside a batch (a script error, a write that cannot be made): stop the run, report it, and leave the batch pending; nothing of a batch is marked done before its delivery.
 
