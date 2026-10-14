@@ -8,7 +8,8 @@ exits at once; needs FAKE_OPENCODE_LOG), "noapi" (GET /permission is 404), "slow
 listens). Messages starting with PERM <permission> <pattern>, QUESTION or SLOW
 make the session ask for a permission, ask a question or wait to be aborted; SUBAGENT <permission>
 <pattern> starts a subagent session that asks for that permission; THINK sends reasoning first; RUN <command>
-shows a finished bash step running that command.
+shows a finished bash step running that command; STEPS <n> gives one answer with n tool steps (the third
+one failed).
 """
 import json
 import os
@@ -121,6 +122,23 @@ class World:
                 "id": self.next("p"), "sessionID": sid, "messageID": mid, "type": "tool", "tool": "bash",
                 "callID": "c2", "state": {"status": "completed", "input": {"command": text[4:]}, "output": "",
                                           "title": "Run a script", "metadata": {}, "time": {"start": 0, "end": 0}}})
+        elif words[0] == "STEPS":
+            mid = self.next("m")
+            info = {"id": mid, "sessionID": sid, "role": "assistant"}
+            parts = []
+            for k in range(int(words[1])):
+                tool, status = ("read", "completed") if k % 2 else ("bash", "error" if k == 2 else "completed")
+                parts.append({"id": self.next("p"), "sessionID": sid, "messageID": mid, "type": "tool", "tool": tool,
+                              "callID": f"s{k}", "state": {"status": status, "input": {"filePath": f"/x/{k}.md"},
+                                                           "output": "", "title": f"step {k}", "metadata": {},
+                                                           "error": "failed" if status == "error" else None,
+                                                           "time": {"start": 0, "end": 0}}})
+            parts.append({"id": self.next("p"), "sessionID": sid, "messageID": mid, "type": "text",
+                          "text": "steps done"})
+            self.sessions[sid].append({"info": info, "parts": parts})
+            self.emit("message.updated", sessionID=sid, info=info)
+            for part in parts:
+                self.emit("message.part.updated", sessionID=sid, part=part, time=0)
         elif words[0] == "SLOW":
             ev = self.aborts.setdefault(sid, threading.Event())
             ev.clear()

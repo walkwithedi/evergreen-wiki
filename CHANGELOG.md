@@ -2,6 +2,11 @@
 
 All three skills share one version number. To release, update this file, the "Version:" line of every SKILL.md and the plugin manifests together and merge to main; the release workflow then publishes v<version>.
 
+## Unreleased
+
+- tools/kb-client: fewer permission cards. Read-only commands (ls, cat, head, tail, wc, stat, file, du, grep, rg, find without -exec, -delete and the like, pwd, echo, test) joined by ; && || or |, with at most 2>/dev/null and only the variables HOME, USER, KB_LIBRARIES and PWD, are answered by the client when every path lies in the readable places (agent.read_only_command). Full paths of existing files and folders written in a message count as the conversation's material (read only). Always allow answers are kept in kb-client.json and answered by the client after OpenCode or the client starts again; a remembered command pattern covers only a plain command, never one joined to another. Manage shows how many are remembered, with Clear (POST /api/chat/forget), which forgets them and restarts OpenCode.
+- tools/kb-client: a shorter page. A step that finished well folds to its title and result line; Getting started folds once when Set up completes what it was missing. When a turn ends, each answer folds its steps into one line with counts by kind and failures, also for subagents and for a conversation picked up again; the conversation's height follows the window.
+
 ## 1.15.0
 
 The browser client continues a batch intake across conversations and guides first use; queries read only the passages that answer; scripts take over the mechanical parts of placing an item.

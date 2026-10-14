@@ -512,7 +512,7 @@ class ChatTest(unittest.TestCase):
         self.assertNotEqual(new, session)
         self.assertEqual(self.server.get("/api/chat/state")[1]["history"], [])
         saved = json.loads(read(self.p("home", ".config", "evergreen-wiki", "kb-client.json")))
-        self.assertEqual(saved, {"session": new})
+        self.assertEqual(saved, {"session": new, "always": {}})
 
     def test_setup_restarts_opencode(self):
         ev = self.ready()
@@ -560,6 +560,44 @@ class ChatTest(unittest.TestCase):
         self.assertEqual(self.server.post("/api/chat/permission", {"id": card["id"], "reply": ["always"]})[0], 400)
         self.assertEqual(self.server.post("/api/chat/permission", {"id": card["id"], "reply": "always"})[0], 200)
         ev.until(lambda e: e["type"] == "part" and e["text"] == "permission: always", "reply")
+        self.assertEqual(self.server.get("/api/state")[1]["remembered"], 1)
+        # the client keeps the answer: the same kind of command is answered without a card, also after the
+        # client starts again, but never a command joined to another one
+        self.send("PERM bash bash scripts/x.sh")
+        self.assertEqual(ev.until(lambda e: e["type"] in ("auto", "permission"))["type"], "auto")
+        self.send("PERM bash bash a.sh; rm -r b")
+        card = ev.until(lambda e: e["type"] in ("auto", "permission"))
+        self.assertEqual(card["type"], "permission")
+        self.server.post("/api/chat/permission", {"id": card["id"], "reply": "reject"})
+        self.server.stop()
+        ev = self.start()
+        ev.until(lambda e: e["type"] == "agent" and e["state"] == "ready", "ready")
+        self.assertEqual(self.server.get("/api/state")[1]["remembered"], 1)
+        self.send("PERM bash bash other.sh")
+        self.assertEqual(ev.until(lambda e: e["type"] in ("auto", "permission"))["type"], "auto")
+        # Clear forgets it and starts OpenCode anew
+        self.assertEqual(self.server.post("/api/chat/forget", {})[0], 200)
+        ev.until(lambda e: e["type"] == "agent" and e["state"] == "starting" and e.get("restart") == "forget", "restart")
+        ev.until(lambda e: e["type"] == "agent" and e["state"] == "ready", "ready again")
+        self.assertEqual(self.server.get("/api/state")[1]["remembered"], 0)
+        self.send("PERM bash bash other.sh")
+        self.assertEqual(ev.until(lambda e: e["type"] in ("auto", "permission"))["type"], "permission")
+
+    def test_paths_written_in_the_message_are_material(self):
+        doc = self.p("home", "Documents", "plan.docx")
+        write(doc, "x")
+        ev = self.ready()
+        self.send("PERM read " + doc)  # the path is in the message itself; nothing chosen in the browser
+        self.assertEqual(ev.until(lambda e: e["type"] in ("auto", "permission"))["type"], "auto")
+        self.send("PERM read " + self.p("home", "Documents", "other.docx"))  # not an existing file
+        self.assertEqual(ev.until(lambda e: e["type"] in ("auto", "permission"))["type"], "permission")
+
+    def test_read_only_commands_are_answered_by_the_client(self):
+        material = self.p("home", "Documents", "minutes")
+        os.makedirs(material)
+        ev = self.ready()
+        self.send(f"PERM bash ls {material} 2>/dev/null; head -n 5 {material}/a.md | wc -l", material=[material])
+        self.assertEqual(ev.until(lambda e: e["type"] in ("auto", "permission"))["type"], "auto")
 
     def test_permission_inside_the_material_is_answered_by_the_client(self):
         material = self.p("home", "Documents", "minutes")
@@ -807,6 +845,44 @@ class DecideTest(unittest.TestCase):
         self.assertFalse(self.ok("read", os.path.join(self.tmp, "home", "other.py")))
         self.assertFalse(self.ok("glob", "**/*.md"))  # the whole home folder
         self.assertFalse(self.ok("webfetch", "https://example.com"))
+
+    def test_read_only_commands(self):
+        lib, mat = self.lib, self.mat
+        os.environ["KB_LIBRARIES"] = "x"
+        for command in (f"ls {lib} 2>/dev/null; ls {mat}; echo \"$KB_LIBRARIES\"",
+                        f"grep -rn 'a;b' {lib} | head -20", f"find {lib} -name '*.md' | wc -l",
+                        f"cat {mat}/*.md", f"head -n 5 {lib}/a.md && tail {lib}/a.md",
+                        f"test -f {lib}/a.md || echo missing", f"grep -l -e x {lib}/a.md",
+                        f"stat {os.path.join(self.skill, 'SKILL.md')}"):
+            with self.subTest(command=command):
+                self.assertTrue(self.ok("bash", command))
+        for command in (f"find {lib} -delete", f"find {lib} -exec rm {{}} ;", "ls /etc", "ls",
+                        f"cat {lib}/a > {lib}/b", f"cat {lib}/a >> x", f"echo $(rm {lib}/a)", f"echo `id`",
+                        f"ls {lib} &", f"ls {lib} |", "echo $SECRET", f"rm {lib}/a", "grep root /etc/passwd",
+                        f"grep -r x", f"cd {lib} && ls", f"ls {lib}/../..", f"ls {lib}/out",
+                        "cat ~/.ssh/id_rsa", f"(ls {lib})", f"ls {lib}\nrm x"):
+            with self.subTest(command=command):
+                self.assertFalse(self.ok("bash", command))
+
+    def test_path_words(self):
+        words = kb_client.path_words('file "/a b/c.docx" and 「~/d e」, also /f/g.md，then /h. not a/b or "x"')
+        self.assertEqual(words, ["/a b/c.docx", "~/d e", "/f/g.md", "/h."])
+        start = time.time()  # many unclosed quotes stay linear
+        kb_client.path_words('"/' + "\u201c/" * 20000)
+        kb_client.path_words('"' * 20000 + "'" * 20000 + "「" * 20000)
+        self.assertLess(time.time() - start, 2)
+
+    def test_remembered(self):
+        always = {"bash": ["git *"], "read": ["/example/docs/*"]}
+        self.assertTrue(agent.remembered("bash", ["git status"], always))
+        self.assertTrue(agent.remembered("bash", ["git"], always))
+        self.assertTrue(agent.remembered("bash", ["git log --grep 'a; b'"], always))  # quoted text is literal
+        self.assertFalse(agent.remembered("bash", ["git status; rm -r x"], always))
+        self.assertFalse(agent.remembered("bash", ["git status | sh"], always))
+        self.assertFalse(agent.remembered("bash", ["gitx"], always))
+        self.assertTrue(agent.remembered("read", ["/example/docs/a/b.md"], always))
+        self.assertFalse(agent.remembered("edit", ["/example/docs/a.md"], always))
+        self.assertFalse(agent.remembered("bash", [], always))
 
     def test_subagents(self):
         self.assertTrue(self.ok("task", "explore"))
