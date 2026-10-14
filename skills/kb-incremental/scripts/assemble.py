@@ -26,6 +26,9 @@ import os
 import shutil
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import kbconf  # noqa: E402
+
 log = logging.getLogger("assemble")
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s.%(funcName)s:%(lineno)d - %(message)s"
 
@@ -64,17 +67,8 @@ def with_original(head, link):
     return "\n".join(lines[:end] + [f'original: "[[{escaped}]]"'] + lines[end:])
 
 
-def utf8_stdio():
-    """Windows consoles default to a legacy code page; library names may be CJK."""
-    for s in (sys.stdout, sys.stderr):
-        try:
-            s.reconfigure(encoding="utf-8", errors="replace")
-        except (AttributeError, ValueError):
-            pass
-
-
 def main():
-    utf8_stdio()
+    kbconf.utf8_stdio()
     ap = argparse.ArgumentParser(description="Assemble a topic file from its head and its cleaned body")
     ap.add_argument("head", help="metadata and key conclusions, written by the assistant")
     ap.add_argument("body", help="cleaned body (clean.py output, term fixes made in place)")
