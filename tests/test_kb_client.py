@@ -183,6 +183,36 @@ class KbClientTest(unittest.TestCase):
         self.assertEqual(st["skills"][0]["agent"], "claude-code")
         self.assertGreaterEqual(st["backups"], 1)
 
+    def test_checklist_state(self):
+        st = self.server.get("/api/state")[1]
+        self.assertEqual((st["opencode_skills"], st["instructions"]), (False, False))
+        self.assertIsInstance(st["pdftotext"], bool)
+        result, out, _ = self.setup_library()
+        self.assertEqual(result, "ok", out)
+        st = self.server.get("/api/state")[1]
+        # OpenCode reads Claude Code's skills, and its CLAUDE.md while it has no AGENTS.md of its own
+        self.assertEqual((st["opencode_skills"], st["instructions"]), (True, True))
+        write(self.p("home", ".config", "opencode", "AGENTS.md"), "# Mine\n")
+        self.assertFalse(self.server.get("/api/state")[1]["instructions"])
+
+    def test_preview_answered_with_choices(self):
+        # agent, install, set up, kind, folder, scope; at the preview: change item 2 (Label), then write
+        result, out, asked = self.server.run("setup", ["claude-code", True, True, "work", self.p("home", "kb", "work"),
+                                                       "team projects", "change", "2", "Team", "write", True])
+        self.assertEqual(result, "ok", out)
+        previews = [q for q in asked if q["kind"] == "choose" and q["options"][0]["value"] == "write"]
+        self.assertEqual(len(previews), 2)
+        self.assertEqual([o["value"] for o in previews[0]["options"]], ["write", "change", "cancel"])
+        items = next(q for q in asked if q["kind"] == "choose" and q["options"][0]["value"] == "1")
+        self.assertEqual(len(items["options"]), 9)
+        self.assertEqual(json.loads(read(self.p("home", "kb", "work", "_kb.json")))["label"], "Team")
+
+    def test_preview_cancelled_with_a_choice(self):
+        result, out, _ = self.server.run("setup", ["claude-code", True, True, "work", self.p("home", "kb", "work"),
+                                                   "team projects", "cancel"])
+        self.assertIn("Cancelled", out)
+        self.assertFalse(os.path.exists(self.p("home", "kb", "work", "_kb.json")))
+
     def test_cancel_writes_nothing(self):
         result, out, _ = self.server.run("setup", ["claude-code", CANCEL])
         self.assertEqual(result, "stopped", out)
@@ -418,14 +448,44 @@ class ChatTest(unittest.TestCase):
         status, r = self.server.post("/api/chat/send", dict(kw, text=text))
         self.assertEqual(status, 200, r)
 
-    def test_needs_opencode_and_a_model(self):
+    def test_starts_without_a_model_in_its_settings(self):
+        # the settings may come from elsewhere; whether OpenCode can be used shows when it starts
         os.remove(self.p("home", ".config", "opencode", "opencode.jsonc"))
+        ev = self.ready()
+        self.assertFalse(self.server.get("/api/state")[1]["agent"]["model"])
+        self.send("hello")
+        ev.until(lambda e: e["type"] == "part" and e["text"] == "echo: hello", "answer")
+
+    def test_recheck_finds_opencode_installed_later(self):
+        program = self.p("bin", "opencode")
+        os.rename(program, self.p("opencode.later"))
         s = Server(self.env, "--idle", "0")
         self.addCleanup(s.stop)
+        self.server = s
         status, r = s.post("/api/chat/start", {})
-        self.assertEqual((status, r["reason"]), (409, "no_model"))
+        self.assertEqual((status, r["reason"]), (409, "no_program"))
         self.assertEqual(s.post("/api/chat/send", {"text": "hello"})[0], 409)
-        self.assertEqual(s.get("/api/chat/state")[1]["agent"]["state"], "off")
+        self.assertEqual(s.post("/api/chat/recheck", {})[1]["reason"], "no_program")
+        os.rename(self.p("opencode.later"), program)
+        status, r = s.post("/api/chat/recheck", {})
+        self.assertEqual(status, 200, r)
+        self.assertEqual(s.get("/api/state")[1]["agent"]["program"], program)
+        ev = ChatEvents(s, 0)
+        self.addCleanup(ev.close)
+        ev.until(lambda e: e["type"] == "agent" and e["state"] == "ready", "ready")
+
+    def test_recheck_after_simple_mode(self):
+        ev = self.start("noserve1")  # the first serve fails, the next one works
+        ev.until(lambda e: e["type"] == "agent" and e["state"] == "simple", "simple")
+        status, r = self.server.post("/api/chat/recheck", {})
+        self.assertEqual(status, 200, r)
+        ev.until(lambda e: e["type"] == "agent" and e["state"] == "ready", "ready")
+        self.send("hello")
+        ev.until(lambda e: e["type"] == "part" and e["text"] == "echo: hello", "answer")
+        self.assertEqual([c["args"][0] for c in self.calls() if "args" in c], ["serve", "serve"])
+        # while it is ready, a recheck changes nothing
+        self.assertEqual(self.server.post("/api/chat/recheck", {})[0], 200)
+        self.assertEqual(len([c for c in self.calls() if "args" in c]), 2)
 
     def test_conversation(self):
         ev = self.ready()

@@ -289,6 +289,14 @@ def install_skills(q, m, target, dest_root, lang, descriptions=None):
     print(f"installed {done} of {len(SKILLS)} skills in {dest_root}")
 
 
+def confirm(q, m, items, can_write=True):
+    """The answer to a preview: "" or y to write, n to cancel, or the number of the item to change. An
+    asker with its own confirm (tools/kb-client) offers these as choices; a terminal types them."""
+    if hasattr(q, "confirm"):
+        return q.confirm(m["confirm"], items, can_write)
+    return q.ask(m["confirm"]).strip().lower()
+
+
 def free_id(base, taken):
     if base not in taken:
         return base
@@ -343,7 +351,7 @@ def register_existing(q, m, il, lang, reg_path, root, s):
         except (il.Refused, il.kbconf.ConfigError) as e:
             print(m["bad"].format(err=e))
             ok = False
-        ans = q.ask(m["confirm"]).lower()
+        ans = confirm(q, m, m["existing_items"], ok)
         if ok and ans in ("", "y", "yes", "是"):
             break
         if ans.startswith("n"):
@@ -439,14 +447,14 @@ def setup_library(q, m, il, lang, preset=None, preset_default="life"):
             show_preview(m, il, s, root, reg_path, entry)
         except (il.Refused, il.kbconf.ConfigError) as e:
             print(m["bad"].format(err=e))
-            ans = q.ask(m["confirm"])
-            if ans.lower().startswith("n"):
+            ans = confirm(q, m, m["items"], False)
+            if ans.startswith("n"):
                 print(m["cancelled"])
                 return None
             if ans.isdigit() and 1 <= int(ans) <= len(m["items"]):
                 root = edit_item(q, m, il, s, root, int(ans))
             continue
-        ans = q.ask(m["confirm"]).lower()
+        ans = confirm(q, m, m["items"])
         if ans in ("", "y", "yes", "是"):
             break
         if ans.startswith("n"):

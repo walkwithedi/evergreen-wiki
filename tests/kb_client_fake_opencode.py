@@ -3,8 +3,9 @@
 interface the client uses and sends their events; `run <message>` prints an answer.
 
 FAKE_OPENCODE_LOG: file that gets one JSON line per call (the arguments, OPENCODE_CONFIG_CONTENT, and
-every request). FAKE_OPENCODE_MODE: "noserve" (serve exits at once), "noapi" (GET /permission is 404),
-"slow" (serve never says it listens). Messages starting with PERM <permission> <pattern>, QUESTION or SLOW
+every request). FAKE_OPENCODE_MODE: "noserve" (serve exits at once), "noserve1" (only the first serve
+exits at once; needs FAKE_OPENCODE_LOG), "noapi" (GET /permission is 404), "slow" (serve never says it
+listens). Messages starting with PERM <permission> <pattern>, QUESTION or SLOW
 make the session ask for a permission, ask a question or wait to be aborted; SUBAGENT <permission>
 <pattern> starts a subagent session that asks for that permission; THINK sends reasoning first; RUN <command>
 shows a finished bash step running that command.
@@ -227,6 +228,9 @@ def main():
     print("refreshing the model settings", flush=True)
     if MODE == "noserve":
         return 1
+    if MODE == "noserve1" and not os.path.exists(LOG + ".once"):
+        with open(LOG + ".once", "w", encoding="utf-8"):
+            return 1
     server = Server(("127.0.0.1", 0), Handler)
     server.daemon_threads = True
     if MODE == "slow":

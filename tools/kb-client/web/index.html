@@ -34,6 +34,17 @@
   </aside>
 
   <section class="work">
+    <div class="panel checklist" id="checklist">
+      <div class="panel-head">
+        <h2 data-t="check_title">Getting started</h2>
+        <span class="chat-state" id="check-state"></span>
+        <button type="button" class="quiet small" id="check-toggle" aria-controls="check-body" data-t="check_hide">Hide</button>
+      </div>
+      <div id="check-body">
+        <ol class="check-list" id="check-list"></ol>
+        <div class="check-tries" id="check-tries" hidden></div>
+      </div>
+    </div>
     <div class="panel" id="step">
       <div class="panel-head">
         <h2 id="step-title" data-t="welcome_title">Welcome</h2>

@@ -285,3 +285,21 @@ textarea {
 .node.sel circle:not(.ring) { stroke: var(--ink); stroke-width: 2.5; }
 .node text { fill: var(--ink); paint-order: stroke; stroke: var(--log); stroke-width: 3px; pointer-events: none; }
 @media (max-width: 700px) { .graph-body { flex-direction: column; } .graph-side { width: auto; max-height: 30%; } }
+
+.checklist .panel-head h2 { margin-bottom: 0; }
+.checklist .chat-state { flex: 1; }
+.check-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.check { display: flex; align-items: flex-start; gap: 10px; }
+.check-mark {
+  flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1px solid currentColor;
+  display: inline-flex; align-items: center; justify-content: center; font-size: 12px; margin-top: 2px;
+}
+.check.done .check-mark { color: var(--good); }
+.check.todo .check-mark { color: var(--bad); }
+.check.wait .check-mark, .check.optional .check-mark { color: var(--muted); }
+.check-body { flex: 1; min-width: 0; }
+.check-body .hint { margin: 0; }
+.check.done .check-title { color: var(--muted); }
+.check > button { flex: none; }
+.check-tries { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.check-tries .hint { flex-basis: 100%; margin: 0; }
