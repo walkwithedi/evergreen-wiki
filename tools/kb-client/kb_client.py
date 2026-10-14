@@ -51,7 +51,7 @@ WEB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 ACTIONS = ("setup", "backup", "rollback", "move", "uninstall")
 LANGS = ("en", "zh")
 MAX_BODY = 64 * 1024
-CHAT_ACTIONS = {name: name for name in ("start", "recheck", "send", "new", "stop", "permission", "question", "terminal")}
+CHAT_ACTIONS = {name: name for name in ("start", "recheck", "send", "new", "stop", "permission", "question", "terminal", "forget")}
 MAX_TEXT = 20000  # characters of one message from the page
 MAX_PATHS = 200  # material paths sent with one message
 MAX_ENTRIES = 2000  # entries listed per folder; the page says when a folder holds more
@@ -284,6 +284,7 @@ class App:
             "opencode_skills": opencode_skills(),
             "instructions": instructions_line(),
             "pdftotext": bool(shutil.which("pdftotext")),
+            "remembered": self.remembered(),
             "job": None if job is None else {"id": job.id, "action": job.action, "done": job.done},
         }
 
@@ -302,6 +303,14 @@ class App:
                                              self.start_timeout)
         self.agent.start()
         return self.agent, None
+
+    def remembered(self):
+        """How many Always allow answers the client keeps (agent.remembered)."""
+        if self.agent is not None:
+            return self.agent.remembered_count()
+        data = kb_manage.read_json(os.path.join(kb_manage.state_dir(), "kb-client.json"), {})
+        always = data.get("always") if isinstance(data, dict) else None
+        return sum(len(v) for v in always.values() if isinstance(v, list)) if isinstance(always, dict) else 0
 
     def recheck(self):
         """Looks for OpenCode again, the way the client did when it started, then starts it, or starts it
@@ -619,6 +628,29 @@ def places():
     return out
 
 
+PATH_RE = re.compile(r"[\"'「“]([~/][^\"'」”\n]+)[\"'」”]|(?:^|(?<=[\s:：，,（(]))([~/][^\s\"'，。；、）)」”]+)")
+
+
+def text_paths(text):
+    """Absolute paths (or ~/ ones) written in a message that name existing files or folders in the home
+    folder or on a mounted drive, so that reading them needs no card. Quoted paths may hold spaces; at most
+    MAX_PATHS."""
+    out = []
+    for m in PATH_RE.finditer(text or ""):
+        raw = (m.group(1) or m.group(2) or "").rstrip(".,;:。，；：")
+        path = os.path.normpath(os.path.expanduser(raw))
+        if not os.path.isabs(path) or path in out or not os.path.exists(path):
+            continue
+        try:
+            walk_to(path if os.path.isdir(path) else os.path.dirname(path))
+        except (ValueError, OSError):
+            continue
+        out.append(path)
+        if len(out) >= MAX_PATHS:
+            break
+    return out
+
+
 def walk_to(path, nearest=False):
     """(folder, starting point) for an absolute path inside the home folder or a mounted drive. The folder
     is built from the starting point one name at a time, each name taken from the folder listing, and its
@@ -887,11 +919,14 @@ class Handler(BaseHTTPRequestHandler):
                 if not isinstance(material, list) or len(material) > MAX_PATHS or \
                         not all(isinstance(x, str) and os.path.isabs(x) for x in material):
                     return self.send(400, {"error": "material"})
-                ag.send(text.strip(), material)
+                ag.send(text.strip(), material + text_paths(text))
                 return self.send(200, {"ok": True})
             if what == "new":
                 ag.new()
                 return self.send(200, {"ok": True, "session": ag.session})
+            if what == "forget":
+                ag.forget()
+                return self.send(200, {"ok": True})
             if what == "stop":
                 ag.stop()
                 return self.send(200, {"ok": True})

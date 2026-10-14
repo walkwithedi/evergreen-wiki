@@ -30,6 +30,8 @@
         <button type="button" data-action="uninstall" class="danger" data-t="uninstall">Uninstall</button>
       </div>
       <p class="hint" id="backups"></p>
+      <p class="hint" id="remembered" hidden><span id="remembered-text"></span>
+        <button type="button" class="quiet small" id="forget" data-t="forget">Clear</button></p>
     </section>
   </aside>
 
@@ -48,6 +50,7 @@
     <div class="panel" id="step">
       <div class="panel-head">
         <h2 id="step-title" data-t="welcome_title">Welcome</h2>
+        <button type="button" class="quiet small" id="step-toggle" aria-controls="log" hidden>Hide</button>
         <button type="button" class="quiet" id="cancel" data-t="cancel_step" hidden>Cancel this step</button>
       </div>
       <p class="intro" id="welcome" data-t="welcome">Pick an item on the left.</p>
