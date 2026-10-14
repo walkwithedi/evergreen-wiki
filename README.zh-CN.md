@@ -29,7 +29,7 @@
                      +-- 知识库文件夹：Markdown 文件、状态卡、文件索引
 ```
 
-安装程序 `install.py` 负责把这些装好，以后还能备份、回滚、移动知识库和卸载。[tools/desktop-setup](tools/desktop-setup/README.zh-CN.md) 在 Linux 桌面上用弹窗完成同样的步骤，[tools/kb-client](tools/kb-client/README.zh-CN.md) 则在浏览器页面里完成。[tools/doc2kb](tools/doc2kb/README.zh-CN.md) 是独立的文档转换器，在桌面或定时任务里把整个目录的文档增量转换成带索引的 Markdown。
+安装程序 `install.py` 负责把这些装好，以后还能备份、回滚、移动知识库和卸载。[tools/kb-client](tools/kb-client/README.zh-CN.md) 在浏览器页面里完成同样的步骤。[tools/doc2kb](tools/doc2kb/README.zh-CN.md) 是独立的文档转换器，在桌面或定时任务里把整个目录的文档增量转换成带索引的 Markdown。
 
 ### 下载哪个文件
 
@@ -39,7 +39,7 @@
 | --- | --- | --- |
 | `kb-note-<版本>.zip`、`kb-query-<版本>.zip`、`kb-incremental-<版本>.zip` | 每个一个技能，英文口令 | 上传到 claude.ai 或 Claude App |
 | 同名但以 `-zh.zip` 结尾 | 同样的技能，中文口令 | 同上，中文用户用这三个 |
-| `evergreen-wiki-v<版本>.zip` | 完整仓库：技能、带备份/回滚/移动/卸载命令的 `install.py`、tools/desktop-setup、tools/kb-client、tools/doc2kb、示例知识库和文档 | 没有 git 时给终端助手安装、电脑不能联网时安装，或用 Linux 桌面工具安装 |
+| `evergreen-wiki-v<版本>.zip` | 完整仓库：技能、带备份/回滚/移动/卸载命令的 `install.py`、tools/kb-client、tools/doc2kb、示例知识库和文档 | 没有 git 时给终端助手安装、电脑不能联网时安装，或在 Linux 桌面上用浏览器页面安装 |
 | `doc2kb-v<版本>.zip` | 只有文档转换器 | 只想把文档目录转成 Markdown，不装技能 |
 
 ### 按情况选择
@@ -78,12 +78,10 @@ python3 install.py
 ### 在 Linux 桌面上（不用终端）
 
 1. 从 [Releases](../../releases) 下载 `evergreen-wiki-v<版本>.zip` 并解压。
-2. 在 `tools/desktop-setup` 里双击 `evergreen-wiki-setup.desktop`（知识库设置）；第一次双击时选信任并启动。
-3. 在菜单里选「安装与建库」：选助手、装技能、建知识库，并告诉助手你有这个库。备份、回滚、移动知识库和卸载也在同一个菜单里。
+2. 在最上层文件夹里双击 `kb-client.desktop`（知识库）；第一次双击时选信任并启动。页面会在默认浏览器中打开。
+3. 选「安装与建库」：选助手、装技能、建知识库，并告诉助手你有这个库。备份、回滚、移动知识库和卸载也在同一个页面上；页面会列出已登记的知识库，装好并配置了 OpenCode 时，还能在页面上直接和它对话。
 
-需要 Python 3.8 及以上；弹窗需要 zenity，没有时在终端窗口里问答。详见 [tools/desktop-setup](tools/desktop-setup/README.zh-CN.md)。
-
-同样的步骤也可以在浏览器里做：改为双击最上层文件夹里的 `kb-client.desktop`（知识库；`tools/kb-client` 里也有同样的入口）。需要 Python 3.8 及以上和一个浏览器，页面上会列出已登记的知识库；装好并配置了 OpenCode 时，还能在页面上直接和它对话。详见 [tools/kb-client](tools/kb-client/README.zh-CN.md)。
+需要 Python 3.8 及以上和一个浏览器。详见 [tools/kb-client](tools/kb-client/README.zh-CN.md)。
 
 ### 在 claude.ai 或 Claude App 里（Google Drive）
 

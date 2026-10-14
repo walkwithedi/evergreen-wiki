@@ -4,6 +4,8 @@ All three skills share one version number. To release, update this file, the "Ve
 
 ## Unreleased
 
+- tools/desktop-setup removed: tools/kb-client does the same steps in a page in the browser, double-clicked from kb-client.desktop at the top of the folder. READMEs and the download guide point there.
+
 ## 1.13.0
 
 Knowledge base client in the browser: the management steps and a conversation with OpenCode on one page.
