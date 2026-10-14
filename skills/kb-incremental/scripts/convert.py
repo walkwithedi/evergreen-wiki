@@ -11,6 +11,11 @@ fewer tokens. Every file gets one of three verdicts:
   as-is       not a format the converter handles (pictures, plain text, legacy .doc/.xls);
               read it as before. Not a failure.
 
+Converted text longer than --outline-chars also gets <out>/<name>.outline.txt: its size, the
+opening text and the headings (levels 1 to 3) with their line numbers in <name>.md. The assistant
+reads the outline first and the full text, or a section by its line numbers, only where needed
+(references/convert.md); 0 turns outlines off.
+
 Pictures inside converted files are exported to <out>/images/<name>/ and appear in the text
 as one placeholder line each, "[Image: <file>]" ("[图片：<file>]" in Chinese). PDF pictures
 have no position, so their placeholders follow the text. The batch line at the end counts
@@ -20,7 +25,7 @@ them all, "ask" means ask the user once whether to read them.
 stdout: one line per file, then the batch line; <out>/convert.json holds the same as JSON.
 stderr: log lines.
 Usage: python3 convert.py OUT FILE [FILE ...] [--lang en|zh] [--image-limit 10]
-       [--min-pdf-chars 200] [--min-chars-per-image 100]
+       [--min-pdf-chars 200] [--min-chars-per-image 100] [--outline-chars 6000]
 Take the limits from the library (python3 scripts/kbconf.py show <library>: convert).
 """
 import argparse
@@ -58,6 +63,27 @@ def body_chars(md):
     return len(re.sub(r"[\s|#:\-*>]", "", text))
 
 
+OUTLINE_HEADING_RE = re.compile(r"^(#{1,3})\s+(\S.*?)\s*$")
+OUTLINE_MAX_HEADINGS = 200
+
+
+def outline(md, name, chars, pictures):
+    """The outline of a converted text: size, opening text (doc2kb_core.extract_outline) and the
+    headings of levels 1 to 3, each with its line number in the converted file."""
+    lines = md.split("\n")
+    summary, _, _ = core.extract_outline(md, summary_chars=600)
+    tables = sum(1 for ln in lines if re.match(r"^\|\s*:?-{3,}", ln.strip()))
+    heads = [(i, m.group(1), m.group(2)) for i, ln in enumerate(lines, 1)
+             for m in [OUTLINE_HEADING_RE.match(ln)] if m]
+    out = [f"Outline of {name}: read this first; read the full text, or a section by its line numbers, where needed.",
+           f"characters: {chars} | lines: {len(lines)} | tables: {tables} | pictures: {pictures}",
+           "", "opening:", summary or "(none)", "", "headings (line: heading):"]
+    out += [f"{i}: {marks} {text}" for i, marks, text in heads[:OUTLINE_MAX_HEADINGS]] or ["(none)"]
+    if len(heads) > OUTLINE_MAX_HEADINGS:
+        out.append(f"({len(heads) - OUTLINE_MAX_HEADINGS} more headings not listed)")
+    return "\n".join(out) + "\n"
+
+
 def unique_stem(path, used):
     stem = core.safe_name(os.path.splitext(os.path.basename(path))[0])
     n = used.get(stem, 0) + 1
@@ -68,7 +94,7 @@ def unique_stem(path, used):
 def convert_one(path, out, stem, lang, limits):
     """Convert one file; returns a result dict (see the module docstring)."""
     ext = os.path.splitext(path)[1].lower()
-    res = {"file": path, "verdict": "as-is", "reason": "", "md": "", "chars": 0,
+    res = {"file": path, "verdict": "as-is", "reason": "", "md": "", "outline": "", "chars": 0,
            "images": [], "image_dir": "", "warnings": []}
     if ext not in core.SUPPORTED_EXT:
         res["reason"] = "not a format the converter handles"
@@ -117,6 +143,10 @@ def convert_one(path, out, stem, lang, limits):
     with open(dest, "w", encoding="utf-8", newline="\n") as f:
         f.write(md)
     res.update(verdict="converted", md=dest)
+    if limits.get("outline_chars") and chars > limits["outline_chars"]:
+        res["outline"] = os.path.join(out, stem + ".outline.txt")
+        with open(res["outline"], "w", encoding="utf-8", newline="\n") as f:
+            f.write(outline(md, stem + ".md", chars, len(names)))
     return res
 
 
@@ -129,12 +159,15 @@ def main():
     ap.add_argument("--image-limit", type=int, default=d["image_limit"])
     ap.add_argument("--min-pdf-chars", type=int, default=d["min_pdf_chars_per_page"])
     ap.add_argument("--min-chars-per-image", type=int, default=d["min_chars_per_image"])
+    ap.add_argument("--outline-chars", type=int, default=d["outline_chars"],
+                    help="converted text longer than this also gets an outline; 0 turns outlines off")
     kbconf.add_log_args(ap)
     a = ap.parse_args()
     kbconf.setup_logging(a.log_level)
     lang = "zh" if a.lang.lower().startswith("zh") else "en"
     core.set_lang(lang)
-    limits = {"min_pdf_chars": a.min_pdf_chars, "min_chars_per_image": a.min_chars_per_image}
+    limits = {"min_pdf_chars": a.min_pdf_chars, "min_chars_per_image": a.min_chars_per_image,
+              "outline_chars": max(0, a.outline_chars)}
     os.makedirs(a.out, exist_ok=True)
 
     used, results = {}, []
@@ -142,7 +175,7 @@ def main():
         if not os.path.isfile(path):
             log.error("not found: %s", path)
             results.append({"file": path, "verdict": "fallback", "reason": "file not found", "md": "",
-                            "chars": 0, "images": [], "image_dir": "", "warnings": []})
+                            "outline": "", "chars": 0, "images": [], "image_dir": "", "warnings": []})
             continue
         res = convert_one(path, a.out, unique_stem(path, used), lang, limits)
         log.info("%s: %s %s", path, res["verdict"], res["reason"])
@@ -155,10 +188,11 @@ def main():
         detail = r["md"] if r["verdict"] == "converted" else r["reason"]
         extra = f" | {len(r['images'])} images" if r["images"] and r["verdict"] == "converted" else ""
         warn = f" | {len(r['warnings'])} warnings" if r["warnings"] else ""
-        print(f"{r['verdict']}: {os.path.basename(r['file'])} | {detail}{extra}{warn}")
+        ol = f" | outline {r['outline']}" if r["outline"] else ""
+        print(f"{r['verdict']}: {os.path.basename(r['file'])} | {detail}{extra}{ol}{warn}")
     print(f"images: {n_img} in {n_files} converted files, limit {a.image_limit}: {decision}")
-    summary = {"lang": lang, "image_limit": a.image_limit, "images": n_img, "decision": decision,
-               "files": results}
+    summary = {"lang": lang, "image_limit": a.image_limit, "outline_chars": limits["outline_chars"],
+               "images": n_img, "decision": decision, "files": results}
     with open(os.path.join(a.out, "convert.json"), "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
     sys.exit(0)

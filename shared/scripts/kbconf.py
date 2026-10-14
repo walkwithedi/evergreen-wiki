@@ -68,8 +68,9 @@ FALLBACK_LIMITS = (90, 120)
 # enabled: off unless the library turns it on (new libraries from a preset do).
 # image_limit: pictures in one batch that are read without asking.
 # min_pdf_chars_per_page, min_chars_per_image: below these a file is read as the original.
+# outline_chars: converted text longer than this also gets an outline, read first; 0 turns it off.
 CONVERT_DEFAULTS = {"enabled": False, "image_limit": 10, "min_pdf_chars_per_page": 200,
-                    "min_chars_per_image": 100}
+                    "min_chars_per_image": 100, "outline_chars": 6000}
 
 # Intake of many files at once (kb-incremental scripts/batch_plan.py): a batch closes at
 # batch_files files or batch_mb megabytes; more than one batch turns batch mode on.

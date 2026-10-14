@@ -61,7 +61,7 @@ No material given: the user asks for intake but names no path and uploads or pas
 
 Many files: when the material is files or folders on disk and commands can run, plan the batches before reading any of it (references/batches.md). One batch: go on here as usual. More than one: follow batches.md.
 
-Conversion, before reading anything: when _kb.json convert.enabled is true (or the user asks for it in this request, and not when the user says not to convert this batch), convert the uploaded files with references/convert.md, which says which file to read for each item and what to do with the pictures in them. Off, or without Python: read the originals as before.
+Conversion, before reading anything: when _kb.json convert.enabled is true (or the user asks for it in this request, and not when the user says not to convert this batch), convert the uploaded files with references/convert.md, which says which file to read for each item, when its outline is enough, and what to do with the pictures in them. Off, or without Python: read the originals as before.
 
 Check 2: find the summary files with find_by_name using the search keys (references/config.md).
 - Always read: spec, status card, file index.
@@ -112,7 +112,7 @@ Without Python: do the five actions by eye and mark the result line "manual".
 
 2.2 Extra cleaning required by params (for example masking class-A data).
 
-2.3 Term fixes: go through Table B one entry at a time, never with a bulk regex; check context to confirm each hit is the term.
+2.3 Term fixes: go through Table B one entry at a time, never with a bulk regex: search the body file for each entry with your search tool and check the context of each hit to confirm it is the term; the body need not be read through for this.
 
 Make the changes of 2.2 and 2.3 in the body file with your edit tool, one place at a time; never write the body file out again whole. Record each change: original -> fixed -> section heading. None: "Term fixes: none".
 
@@ -189,7 +189,7 @@ Glossary and issue list: read and rewrite only when something is added; categori
 
 Each topic file starts with its metadata: YAML front matter per entity-yaml.md and the spec, or the text header from params. Then the key conclusions, then the cleaned body. New or changed basis lines in summary files are links to the source file (YAML mode).
 
-Assemble topic files by script; never type the body out again. Write the metadata and the key conclusions to <work>/head_<n>.md, then:
+Assemble topic files by script; never type the body out again. Write everything that comes before the body to <work>/head_<n>.md: the metadata, any section labels params put before the conclusions or the body, and the key conclusions. Then:
 
   python3 scripts/assemble.py <work>/head_<n>.md <work>/body_<n>.md <work>/out/<file name>
 
