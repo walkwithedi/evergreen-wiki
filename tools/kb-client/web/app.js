@@ -194,7 +194,13 @@
       check_tries: "Ready. Pick an example: it goes into the box below to edit before you send it.",
       try_note: "note this: the team review moved to Thursday",
       try_due: "what is due this month?",
-      try_find: "what does the library say about the project plan?"
+      try_find: "what does the library say about the project plan?",
+      step_hide: "Hide", step_show: "Show output",
+      steps: "{n} steps", steps_failed: "{n} failed",
+      remembered: "{n} Always allow answers remembered",
+      forget: "Clear",
+      forget_confirm: "Forget every Always allow answer? The assistant will ask again for those actions, and OpenCode is restarted so that it forgets them too.",
+      chat_restarting_forget: "Restarting OpenCode so that it forgets the Always allow answers..."
     },
     zh: {
       title: "知识库",
@@ -386,7 +392,13 @@
       check_tries: "已就绪。点一个例子，它会填进下面的输入框，改好再发送。",
       try_note: "记一下：团队评审改到周四",
       try_due: "这个月有什么到期的？",
-      try_find: "库里关于项目计划是怎么说的？"
+      try_find: "库里关于项目计划是怎么说的？",
+      step_hide: "收起", step_show: "展开输出",
+      steps: "{n} 个步骤", steps_failed: "其中 {n} 个失败",
+      remembered: "已记住 {n} 项「总是允许」",
+      forget: "清除",
+      forget_confirm: "清除所有「总是允许」吗？之后这些操作助手会再次询问；OpenCode 会重新启动，让它也忘掉这些授权。",
+      chat_restarting_forget: "正在重新启动 OpenCode，让它忘掉「总是允许」的授权…"
     }
   };
 
@@ -600,6 +612,8 @@
       title: state.skills.map(function (s) { return s.folder; }).join("\n") },
       names.length ? t("skills_in", { names: names.join(", ") }) : t("skills_none")));
     $("backups").textContent = state.backups ? t("backups", { n: state.backups }) : t("no_backups");
+    $("remembered-text").textContent = t("remembered", { n: state.remembered || 0 });
+    show($("remembered"), !!state.remembered);
     setBusy(job !== null);
     chatEnable();
   }
@@ -662,22 +676,46 @@
       });
     }
     show(tries, ready);
-    var folded = checkFolded();
+    // Folded once by itself when Set up (or a recheck) completes what was missing; what the user chooses
+    // afterwards stays. OpenCode still starting when the page opens does not count as missing.
+    var missing = [0, 2, 3, 4].some(function (i) { return items[i][0] !== true; });
+    if (ready && checkMissing) saveFold("folded");
+    checkMissing = missing;
+    checkReady = ready;
+    showFold(checkFolded());
+  }
+
+  var checkReady = null;  // whether the needed items were done at the last look
+  var checkMissing = false;  // whether something other than OpenCode starting was missing then
+
+  function checkFolded() {
+    var v = null;
+    try { v = localStorage.getItem("kb-client-checklist"); } catch (e) { v = null; }
+    return v === "folded" || (v !== "open" && checkReady === true);
+  }
+
+  function saveFold(v) {
+    try { localStorage.setItem("kb-client-checklist", v); } catch (e) { /* kept for this view only */ }
+  }
+
+  function showFold(folded) {
     show($("check-body"), !folded);
     $("check-toggle").textContent = t(folded ? "check_show" : "check_hide");
     $("check-toggle").setAttribute("aria-expanded", folded ? "false" : "true");
-  }
-
-  function checkFolded() {
-    try { return localStorage.getItem("kb-client-checklist") === "folded"; } catch (e) { return false; }
   }
 
   function foldChecklist() {
     var folded = !checkFolded();
-    try { localStorage.setItem("kb-client-checklist", folded ? "folded" : "open"); } catch (e) { /* kept for this view only */ }
-    show($("check-body"), !folded);
-    $("check-toggle").textContent = t(folded ? "check_show" : "check_hide");
-    $("check-toggle").setAttribute("aria-expanded", folded ? "false" : "true");
+    saveFold(folded ? "folded" : "open");
+    showFold(folded);
+  }
+
+  // The step panel folds to its title and result line after a step that finished well.
+  function foldStep(folded) {
+    show($("log"), !folded && $("log").textContent !== "");
+    show($("step-toggle"), $("log").textContent !== "");
+    $("step-toggle").textContent = t(folded ? "step_show" : "step_hide");
+    $("step-toggle").setAttribute("aria-expanded", folded ? "false" : "true");
   }
 
   // Looks for OpenCode again and starts it, or starts it anew after it failed or fell back to simple mode.
@@ -724,6 +762,7 @@
     show($("ideas"), false);
     $("log").textContent = "";
     show($("log"), true);
+    show($("step-toggle"), false);
     show($("result"), false);
     clearAsk();
     setBusy(true);
@@ -758,6 +797,7 @@
     afterJob = null;
     if (res === "ok" && after) after($("log").textContent);
     if (action && action.indexOf("skill_") === 0) loadSkills();
+    foldStep(res === "ok");
     refresh();
   }
 
@@ -976,8 +1016,9 @@
     if (a.state !== "off") chat.phase = a.state;
     if (a.state === "starting") {
       chat.ready = false;
-      if (a.restart) chat.restarting = true;
-      chatInfo(t(chat.restarting ? "chat_restarting" : "chat_starting"), a.line || "");
+      if (a.restart) chat.restarting = a.restart === "forget" ? "forget" : true;
+      chatInfo(t(chat.restarting === "forget" ? "chat_restarting_forget" : chat.restarting ? "chat_restarting"
+        : "chat_starting"), a.line || "");
     } else if (a.state === "ready") {
       chat.ready = true;
       chat.simple = false;
@@ -1052,11 +1093,55 @@
         (ev.status ? "  (" + t("tool_" + ev.status) + ")" : "");
       p.textContent = line + (ev.error ? "\n" + ev.error : "");
       p.className = "tool" + (ev.status === "error" ? " failed" : "");
+      p.dataset.tool = ev.tool || "";
     } else {
       p.textContent = ev.text;
       if (ev.role === "user") dropQueued(ev.text);
     }
     scrollChat();
+  }
+
+  // A finished turn keeps its answer in view and folds its steps into one line, so that the conversation
+  // does not grow by a line for every file read or script run. The part elements move as they are, so a
+  // late update still lands in them.
+  var STEP_KIND = { read: "perm_read", bash: "perm_bash", edit: "perm_edit", write: "perm_edit", glob: "perm_glob",
+                    grep: "perm_grep", list: "perm_list", task: "perm_task", webfetch: "perm_webfetch" };
+
+  function stepsLine(tools) {
+    var counts = {}, failed = 0;
+    tools.forEach(function (p) {
+      var k = t(STEP_KIND[p.dataset.tool] || "perm_other", { name: p.dataset.tool || "?" });
+      counts[k] = (counts[k] || 0) + 1;
+      if (p.className.indexOf("failed") >= 0) failed++;
+    });
+    var parts = Object.keys(counts).map(function (k) { return k + " " + counts[k]; });
+    return t("steps", { n: tools.length }) + " (" + parts.join(" \u00b7 ") + ")" +
+      (failed ? " \u2014 " + t("steps_failed", { n: failed }) : "");
+  }
+
+  function compactBubble(b) {
+    if (b.dataset.compact) return;
+    var child = b.className.indexOf("child") >= 0;
+    var items = Array.prototype.filter.call(b.children, function (c) {
+      return child ? c.className !== "who" : c.className.split(" ")[0] === "tool";
+    });
+    var tools = items.filter(function (c) { return c.className.split(" ")[0] === "tool"; });
+    if (tools.length < 2 && !(child && tools.length && items.length > 1)) return;
+    var body = el("div", { "class": "steps-body" });
+    var d = fold(stepsLine(tools), body);
+    d.className = "fold steps" + (tools.some(function (p) { return p.className.indexOf("failed") >= 0; }) ? " failed" : "");
+    b.insertBefore(d, items[0]);
+    items.forEach(function (c) { body.appendChild(c); });
+    b.dataset.compact = "1";
+  }
+
+  function compactTurns() {
+    var bubbles = Array.prototype.slice.call(document.querySelectorAll("#messages > .msg"));
+    var last = -1;  // while the assistant works, its current turn (after the last user message) stays open
+    if (chat.busy) bubbles.forEach(function (b, i) { if (b.className.indexOf("user") >= 0) last = i; });
+    bubbles.forEach(function (b, i) {
+      if (b.className.indexOf("assistant") >= 0 && (!chat.busy || i < last)) compactBubble(b);
+    });
   }
 
   function dropQueued(text) {
@@ -1182,7 +1267,7 @@
       chat.busy = ev.status !== "idle";
       chatEnable();
       if (chat.busy) cancelContinue();
-      else { stagesIdle(); loadProgress().then(maybeContinue); }
+      else { compactTurns(); stagesIdle(); loadProgress().then(maybeContinue); }
     }
     else if (ev.type === "locked") {
       note((ev.child ? t("child") : "") + t("locked_note", { what: permName(ev.permission) + " " + permWhat(ev).join(", ") }), "error");
@@ -1605,6 +1690,7 @@
       chat.busy = st.agent.status && st.agent.status !== "idle";
       (st.agent.permissions || []).forEach(permissionCard);
       (st.agent.questions || []).forEach(questionCard);
+      compactTurns();
       chatEnable();
       if (chat.source) chat.source.close();
       chat.source = new EventSource("/api/chat/events?after=" + st.seq + "&t=" + encodeURIComponent(token));
@@ -1809,6 +1895,11 @@
   $("check-toggle").addEventListener("click", foldChecklist);
   $("skill-new").addEventListener("click", newSkill);
   $("skill-import").addEventListener("click", function () { startAction("skill_import"); });
+  $("step-toggle").addEventListener("click", function () { foldStep(!$("log").hidden); });
+  $("forget").addEventListener("click", function () {
+    if (!window.confirm(t("forget_confirm"))) return;
+    api("POST", "/api/chat/forget", {}).then(refresh).catch(function (e) { note(String(e.message), "error"); });
+  });
   $("graph-close").addEventListener("click", closeGraph);
   $("graph-svg").addEventListener("pointerdown", function (e) { if (graph) panGraph(e); });
   $("graph-svg").addEventListener("wheel", function (e) { if (graph) zoomGraph(e); }, { passive: false });

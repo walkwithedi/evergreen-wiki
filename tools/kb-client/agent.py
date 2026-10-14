@@ -36,6 +36,7 @@ ASK_ALL["permission"]["skill"] = "allow"
 # Subagents that only look things up; what they do in turn is asked for like everything else.
 REPLIES = {name: name for name in ("once", "always", "reject")}
 READ_ONLY_AGENTS = ("explore",)
+MAX_ALWAYS = 200  # Always allow answers kept per kind of request
 # Places OpenCode's installers commonly use, for a desktop session whose PATH lacks them.
 COMMON_DIRS = ("~/.opencode/bin", "~/.local/bin", "~/bin", "/usr/local/bin", "~/.npm-global/bin")
 TERMINALS = (("x-terminal-emulator", ["-e"]), ("mate-terminal", ["-x"]), ("gnome-terminal", ["--"]),
@@ -170,6 +171,14 @@ def skill_command(command, script_dirs, cwd):
 
 FILE_COMMANDS = {"mkdir": {"-p"}, "cp": {"-p", "-r", "-R"}}
 
+# Commands that only read and print. Their path arguments must lie in the readable places.
+READ_ONLY_PROGRAMS = {"ls", "cat", "head", "tail", "wc", "stat", "file", "du", "grep", "egrep", "fgrep", "rg",
+                      "find", "pwd", "echo", "test"}
+FIND_ACTIONS = {"-exec", "-execdir", "-ok", "-okdir", "-delete", "-fprint", "-fprint0", "-fprintf", "-fls"}
+READ_VARS = {"HOME", "USER", "KB_LIBRARIES", "PWD"}
+VAR_RE = re.compile(r"\$(?:\{(\w+)\}|(\w+))")
+SEPARATORS = {";", "&&", "||", "|"}
+
 
 def file_command(command, places, cwd):
     """True for `mkdir [-p] <folder>...` with every folder in a writable place, and for
@@ -201,18 +210,117 @@ def file_command(command, places, cwd):
         all(any(inside(p, r) for r in readable) for p in paths[:-1])
 
 
+def expand(word):
+    """~ and the variables read-only commands may use, as the shell would expand them."""
+    word = VAR_RE.sub(lambda m: os.environ.get(m.group(1) or m.group(2), ""), word)
+    return os.path.expanduser(word)
+
+
+def read_only_command(command, places, cwd):
+    """True for read-only commands (READ_ONLY_PROGRAMS, find without its acting options) joined by ; && ||
+    or |, with at most 2>/dev/null as redirection, only the variables in READ_VARS, and every path argument
+    inside the readable places. No command substitution, other redirection, background job or subshell."""
+    cmd = str(command).strip()
+    if not cmd or "\n" in cmd or "\r" in cmd or "`" in cmd or "$(" in cmd or "<(" in cmd:
+        return False
+    if any((m.group(1) or m.group(2)) not in READ_VARS for m in VAR_RE.finditer(cmd)) or \
+            cmd.count("$") != len(VAR_RE.findall(cmd)):
+        return False
+    cmd = re.sub(r"(^|\s)2>\s*/dev/null(?=\s|$|[;|&])", " ", cmd)
+    try:
+        lex = shlex.shlex(cmd, posix=True, punctuation_chars=True)
+        lex.whitespace_split = True
+        tokens = list(lex)
+    except ValueError:
+        return False
+    readable = places.get("write", []) + places.get("read", []) + places.get("scripts", [])
+    commands, words = [], []
+    for tok in tokens:
+        if tok in SEPARATORS:
+            if not words:
+                return False
+            commands.append(words)
+            words = []
+        elif tok and set(tok) <= set("();<>|&"):
+            return False  # a redirection, subshell or background job
+        else:
+            words.append(tok)
+    if words:
+        commands.append(words)
+    elif not tokens or tokens[-1] != ";":
+        return False  # nothing, or a pipe or && with nothing after it
+    for words in commands:
+        prog = words[0]
+        if prog not in READ_ONLY_PROGRAMS:
+            return False
+        args = words[1:]
+        if prog == "find" and FIND_ACTIONS & set(args):
+            return False
+        if prog in ("echo", "pwd"):
+            continue
+        pattern_given = prog not in ("grep", "egrep", "fgrep", "rg") or \
+            any(a in ("-e", "-f") or a.startswith(("--regexp", "--file")) for a in args)
+        paths = 0
+        for a in args:
+            if a.startswith("-") or a in ("!", "(", ")"):
+                continue
+            if not pattern_given:
+                pattern_given = True  # grep's first plain word is its pattern
+                continue
+            word = expand(a)
+            if not ("/" in word or word.startswith(".") or os.path.exists(os.path.join(cwd, word))):
+                continue  # a number or a name filter, not a path
+            path = pattern_path(word, cwd)
+            if not path or not any(inside(path, r) for r in readable):
+                return False
+            paths += 1
+        # without a path these read the working folder (cat, head and the like read their input)
+        lists_cwd = prog in ("ls", "find", "du", "rg") or (prog in ("grep", "egrep", "fgrep") and any(
+            a.startswith("--recursive") or (a.startswith("-") and not a.startswith("--") and set("rR") & set(a))
+            for a in args))
+        if not paths and lists_cwd and not any(inside(cwd, r) for r in readable):
+            return False
+    return True
+
+
+def wildcard(pattern, text):
+    """OpenCode's wildcard match: * any run of characters, ? one; a trailing " *" may also match nothing."""
+    rx = re.escape(pattern).replace(r"\*", ".*").replace(r"\?", ".")
+    if pattern.endswith(" *"):
+        rx = rx[:-len(re.escape(" ") + ".*")] + "(?: .*)?"
+    return re.fullmatch(rx, text, re.S) is not None
+
+
+def remembered(permission, patterns, always):
+    """True when every pattern of the request matches one the user answered with Always allow for this kind
+    of request. A command must be one plain command (no shell syntax outside quoted words), so that a
+    remembered "git *" never covers "git status; rm ...". always: {permission: [patterns]}."""
+    saved = always.get(permission) or []
+    patterns = [str(p).strip() for p in patterns or [] if str(p).strip()]
+    if not saved or not patterns:
+        return False
+    for p in patterns:
+        if permission == "bash":
+            bare = unquoted(p)
+            if bare is None or SHELL_CHARS & set(bare):
+                return False
+        if not any(wildcard(x, p) for x in saved):
+            return False
+    return True
+
+
 def decide(permission, patterns, places, cwd):
     """True when the client answers "once" itself. places: {"write": [...], "read": [...],
     "scripts": [...]} as real folder paths. Writing only inside a registered library; reading also in the
-    chosen material, the skills and the agent's own settings; commands only the skills' own scripts and
-    plain mkdir and cp within those places.
+    chosen material, the skills and the agent's own settings; commands only the skills' own scripts,
+    plain mkdir and cp within those places, and read-only commands on those places.
     Everything else, and anything that cannot be read clearly, goes to the user."""
     patterns = [p for p in (patterns or []) if str(p).strip()]
     if not patterns:
         return False
     if permission == "bash":
         return all(skill_command(p, places.get("scripts", []), cwd) or file_command(p, places, cwd)
-                   for p in patterns)
+                   or read_only_command(p, places, cwd) for p in patterns)
     if permission == "task":
         return all(str(p).strip() in READ_ONLY_AGENTS for p in patterns)
     if permission in ("edit", "write"):
@@ -364,6 +472,7 @@ class Agent:
         self.gen = 0  # counts restarts; an event reader of an earlier OpenCode stops
         self.events_thread = None
         self.restart_pending = False
+        self.always = self._load_always()  # {permission: [patterns]} answered with Always allow
 
     # ----- start and stop -----
 
@@ -414,7 +523,7 @@ class Agent:
         self._resume()
         self.feed.emit("agent", state="ready", session=self.session)
         if self.restart_pending:
-            self.restart()
+            self.restart(self.restart_pending)
 
     def _read_output(self, found):
         for line in self.proc.stdout:
@@ -483,15 +592,15 @@ class Agent:
             raise http.client.HTTPException(f"status {r.status}")
         return c, r
 
-    def restart(self):
-        """Starts OpenCode again, so that it reads skills and instructions installed since it started; the
-        conversation goes on. While OpenCode is starting or the assistant is working, this waits until it is
+    def restart(self, why="setup"):
+        """Starts OpenCode again, so that it reads skills and instructions installed since it started (why
+        "setup") or forgets its Always allow answers (why "forget"); the conversation goes on. While OpenCode is starting or the assistant is working, this waits until it is
         done. Simple mode needs none: each message starts OpenCode anew. False when there is nothing to do."""
         with self.lock:
             if self.state in ("off", "simple") or self.stopping:
                 return False
             if self.state == "starting" or self.status != "idle":
-                self.restart_pending = True
+                self.restart_pending = why
                 return True
             self.restart_pending = False
             self.gen += 1
@@ -503,7 +612,7 @@ class Agent:
             t.join(5)
         self.proc, self.port, self.output = None, None, []
         self.permissions, self.questions = {}, {}
-        self.start(restart=True)
+        self.start(restart=why)
         return True
 
     def retry(self, program):
@@ -617,7 +726,7 @@ class Agent:
         self.status = status
         self.feed.emit("status", status=status)
         if status == "idle" and self.restart_pending:
-            threading.Thread(target=self.restart, daemon=True).start()
+            threading.Thread(target=self.restart, args=(self.restart_pending,), daemon=True).start()
 
     def allowed_places(self):
         pl = self.places()
@@ -638,7 +747,7 @@ class Agent:
                 return
             except OSError as e:
                 log.warning("automatic reject failed: %s", type(e).__name__)
-        if decide(perm, patterns, places, self.cwd):
+        if decide(perm, patterns, places, self.cwd) or remembered(perm, patterns, self.always):
             try:
                 self.call("POST", f"/permission/{quote(rid, safe='')}/reply", {"reply": "once"})
                 self.feed.emit("auto", permission=perm, patterns=patterns[:5], child=child)
@@ -652,20 +761,40 @@ class Agent:
 
     # ----- the conversation -----
 
-    def _load_saved(self):
+    def _load_state(self):
         try:
             with open(self.state_file, encoding="utf-8") as f:
                 data = json.load(f)
-            return data.get("session") if isinstance(data, dict) else None
+            return data if isinstance(data, dict) else {}
         except (OSError, ValueError):
-            return None
+            return {}
+
+    def _load_saved(self):
+        return self._load_state().get("session")
+
+    def _load_always(self):
+        data = self._load_state().get("always")
+        if not isinstance(data, dict):
+            return {}
+        return {str(k): [str(x) for x in v if isinstance(x, str) and x.strip()][:MAX_ALWAYS]
+                for k, v in data.items() if isinstance(v, list)}
+
+    def remembered_count(self):
+        return sum(len(v) for v in self.always.values())
+
+    def forget(self):
+        """Forgets every Always allow answer, in this client and (by starting it anew) in OpenCode."""
+        with self.lock:
+            self.always = {}
+        self._save()
+        self.restart("forget")
 
     def _save(self):
         try:
             os.makedirs(os.path.dirname(self.state_file), exist_ok=True)
             tmp = self.state_file + ".tmp"
             with open(tmp, "w", encoding="utf-8") as f:
-                json.dump({"session": self.session}, f)
+                json.dump({"session": self.session, "always": self.always}, f, ensure_ascii=False)
             os.replace(tmp, self.state_file)
         except OSError as e:
             log.warning("cannot save the conversation: %s", e)
@@ -748,9 +877,16 @@ class Agent:
         """reply: "once", "always" (OpenCode stops asking for the request's `always` patterns) or "reject"."""
         if rid not in self.permissions or reply not in REPLIES:
             return False
+        ev = self.permissions[rid]  # taken now: OpenCode's "replied" event may remove it before the reply returns
         code, _ = self.call("POST", f"/permission/{quote(rid, safe='')}/reply", {"reply": REPLIES[reply]})
         if code in (200, 204):
             self.permissions.pop(rid, None)
+            if reply == "always" and ev.get("always"):
+                with self.lock:
+                    kept = self.always.setdefault(ev["permission"], [])
+                    kept += [x for x in ev["always"] if x not in kept]
+                    del kept[:-MAX_ALWAYS]
+                self._save()
             self.feed.emit("permission_done", id=rid)
             return True
         return False

@@ -212,7 +212,7 @@ input[type=text] {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 520px;
+  max-height: max(320px, 60vh);
   overflow: auto;
 }
 .messages:empty { display: none; }
@@ -323,6 +323,11 @@ textarea {
 .check > button { flex: none; }
 .check-tries { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .check-tries .hint { flex-basis: 100%; margin: 0; }
+
+.fold.steps > summary { color: var(--muted); }
+.fold.steps.failed > summary { color: var(--bad); }
+.steps-body { margin: 4px 0 0 12px; display: flex; flex-direction: column; gap: 2px; }
+#step .panel-head h2 { flex: 1; }
 
 /* ideas carousel: welcome area, and shorter while an intake runs */
 .ideas { margin-top: 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--soft);
