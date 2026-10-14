@@ -123,6 +123,11 @@
       say_archive: "archive old versions in the {lib} library",
       say_resume: "continue intake in the {lib} library",
       say_work: "Work folder: {path}",
+      continue_auto: "Batch {n} of {total} done; a new conversation continues the intake in {s} seconds.",
+      continue_cancel: "Cancel",
+      continue_left: "The intake in {lib} has batches left.",
+      continue_go: "Continue intake",
+      simple_no_intake: "Not available in simple mode: the assistant cannot ask questions here, so a batch plan cannot be confirmed.",
       stage_count: "Take stock", stage_convert: "Convert", stage_dedup: "Duplicates and names",
       stage_clean: "Clean up", stage_compare: "Compare conclusions", stage_write: "File", stage_final: "Wrap up",
       why_count: "Each file gets a content fingerprint first, so files already in the library or repeated in the material are not read again.",
@@ -264,6 +269,11 @@
       say_archive: "归档旧版（知识库「{lib}」）",
       say_resume: "继续入库（知识库「{lib}」）",
       say_work: "工作文件夹：{path}",
+      continue_auto: "第 {n}/{total} 批已完成，{s} 秒后开新对话继续入库。",
+      continue_cancel: "取消",
+      continue_left: "知识库「{lib}」还有没入库的批次。",
+      continue_go: "继续入库",
+      simple_no_intake: "简易模式下不能用：助手无法在页面上提问，分批计划没法确认。",
       stage_count: "清点", stage_convert: "转换", stage_dedup: "查重与命名",
       stage_clean: "清理正文", stage_compare: "比对结论", stage_write: "写入", stage_final: "收尾",
       why_count: "先给每个文件算内容指纹，库里已有的和材料里重复的不再读取。",
@@ -628,7 +638,7 @@
 
   // ---------- conversation ----------
 
-  var chat = { source: null, ready: false, busy: false, restarting: false, msgs: {}, parts: {}, cards: {} };
+  var chat = { source: null, ready: false, busy: false, restarting: false, simple: false, msgs: {}, parts: {}, cards: {} };
 
   function chatInfo(text, output) {
     $("chat-info").textContent = text || "";
@@ -641,7 +651,11 @@
     var on = chat.ready && !chat.busy;
     $("chat-send").disabled = !chat.ready;  // while the assistant works, a message waits its turn
     $("chat-terminal").disabled = !chat.ready;
-    Array.prototype.forEach.call(document.querySelectorAll("[data-task]"), function (b) { b.disabled = !on; });
+    Array.prototype.forEach.call(document.querySelectorAll("[data-task]"), function (b) {
+      var batch = b.getAttribute("data-task") === "intake" || b.getAttribute("data-task") === "resume";
+      b.disabled = !on || (chat.simple && batch);
+      b.title = chat.simple && batch ? t("simple_no_intake") : "";
+    });
     $("chat-new").disabled = !chat.ready || chat.busy;
     show($("chat-stop"), chat.ready && chat.busy);
     $("chat-state").textContent = !chat.ready ? "" : (chat.busy ? t("chat_busy") : t("chat_ready"));
@@ -654,9 +668,11 @@
       chatInfo(t(chat.restarting ? "chat_restarting" : "chat_starting"), a.line || "");
     } else if (a.state === "ready") {
       chat.ready = true;
+      chat.simple = false;
       chat.restarting = false;
       chatInfo("");
     } else if (a.state === "simple") {
+      chat.simple = true;
       chat.ready = true;
       chat.restarting = false;
       chatInfo(t("chat_simple", { reason: a.reason || "" }), a.output || "");
@@ -841,7 +857,11 @@
       chatAgent(ev);
       if (ev.state === "ready") chatLoad();  // a conversation picked up again brings its history
     }
-    else if (ev.type === "part") { showPart(ev); if (ev.kind === "tool" && ev.script) stageFrom(ev); }
+    else if (ev.type === "part") {
+      showPart(ev);
+      if (ev.kind === "tool" && ev.script) stageFrom(ev);
+      if (ev.kind === "tool" && ev.status === "error") runs.errored = true;
+    }
     else if (ev.type === "delta") {
       var p = partEl({ partID: ev.partID, messageID: ev.messageID, role: ev.role, child: ev.child, kind: "text" });
       p.textContent += ev.delta;
@@ -849,12 +869,13 @@
     } else if (ev.type === "status") {
       chat.busy = ev.status !== "idle";
       chatEnable();
-      if (!chat.busy) { stagesIdle(); if (stages.current) loadProgress(); }
+      if (chat.busy) cancelContinue();
+      else { stagesIdle(); loadProgress().then(maybeContinue); }
     }
     else if (ev.type === "auto") {
       autoNote((ev.child ? t("child") : "") + t("auto", { what: permName(ev.permission) + " " + permWhat(ev).join(", ") }));
     }
-    else if (ev.type === "error") note(ev.text, "error");
+    else if (ev.type === "error") { runs.errored = true; note(ev.text, "error"); }
     else if (ev.type === "permission") permissionCard(ev);
     else if (ev.type === "question") questionCard(ev);
     else if (ev.type === "permission_done" || ev.type === "question_done") dropCard(ev.id);
@@ -1064,6 +1085,75 @@
 
   function closeGraph() { show($("graph"), false); graph = null; }
 
+  // ---------- continuing a batch intake ----------
+  // The skill stops after a finished batch when its conversation grows long. When the last batch script
+  // step was "done" and nothing else is pending, a new conversation continues the run after a short
+  // countdown; after a stop, an error, or an automatic round that filed no batch, a button does it instead.
+
+  var runs = { lastPlan: "", errored: false, stopped: false, autoFrom: null, timer: null };
+
+  function openRun() {
+    var ids = Object.keys(stages.runs || {});
+    for (var i = 0; i < ids.length; i++) {
+      var p = stages.runs[ids[i]];
+      if (p.done + p.skipped < p.batches) return p;
+    }
+    return null;
+  }
+
+  function cancelContinue() {
+    clearInterval(runs.timer);
+    runs.timer = null;
+    var bar = $("continue-bar");
+    if (bar) bar.remove();
+  }
+
+  function continueRun(p, auto) {
+    cancelContinue();
+    runs.autoFrom = auto ? { id: p.id, done: p.done } : null;
+    runs.lastPlan = ""; runs.errored = false; runs.stopped = false;
+    api("POST", "/api/chat/new", {}).then(function () {
+      say(withWork(t("say_resume", { lib: p.label })));
+    }).catch(function (e) { note(String(e.message), "error"); });
+  }
+
+  function continueButton(p) {
+    var bar = $("continue-bar");
+    if (!bar) { bar = el("div", { "class": "note batch", id: "continue-bar" }); $("messages").appendChild(bar); }
+    bar.textContent = t("continue_left", { lib: p.label }) + " ";
+    var go = el("button", { type: "button", "class": "quiet small" }, t("continue_go"));
+    go.addEventListener("click", function () { continueRun(p, false); });
+    bar.appendChild(go);
+    scrollChat();
+  }
+
+  function maybeContinue() {
+    var p = openRun();
+    if (!p || chat.busy || chat.simple || !chat.ready || Object.keys(chat.cards).length) return;
+    if (!runs.lastPlan && !runs.stopped && !runs.errored) return;  // nothing happened on this page yet
+    var spun = runs.autoFrom && runs.autoFrom.id === p.id && runs.autoFrom.done === p.done;
+    var auto = runs.lastPlan === "batch_plan done" && !runs.stopped && !runs.errored && !spun;
+    cancelContinue();
+    if (!auto) { continueButton(p); return; }
+    var bar = el("div", { "class": "note batch", id: "continue-bar" });
+    var text = el("span");
+    var left = 3;
+    var draw = function () {
+      text.textContent = t("continue_auto", { n: p.done + p.skipped, total: p.batches, s: left }) + " ";
+    };
+    draw();
+    bar.appendChild(text);
+    var cancel = el("button", { type: "button", "class": "quiet small" }, t("continue_cancel"));
+    cancel.addEventListener("click", function () { cancelContinue(); runs.lastPlan = ""; continueButton(p); });
+    bar.appendChild(cancel);
+    $("messages").appendChild(bar);
+    scrollChat();
+    runs.timer = setInterval(function () {
+      left -= 1;
+      if (left <= 0) continueRun(p, true); else draw();
+    }, 1000);
+  }
+
   // ---------- intake stages and progress ----------
   // The stage comes from the skill script a tool step runs (agent.py stage_script), never from the
   // model's wording, so it costs no tokens and cannot drift.
@@ -1100,7 +1190,7 @@
     clearTimeout(stages.hideTimer);
     show($("stages"), true);
     drawStages();
-    if (ev.script.indexOf("batch_plan") === 0 && ev.status === "completed") loadProgress();
+    if (ev.script.indexOf("batch_plan") === 0 && ev.status === "completed") { runs.lastPlan = ev.script; loadProgress(); }
     if (!stages.poll) stages.poll = setInterval(function () { if (chat.busy) loadProgress(); }, 5000);
   }
 
@@ -1359,7 +1449,10 @@
       $("composer").dispatchEvent(new Event("submit", { cancelable: true }));
     }
   });
-  $("chat-stop").addEventListener("click", function () { api("POST", "/api/chat/stop", {}).catch(function () {}); });
+  $("chat-stop").addEventListener("click", function () {
+    runs.stopped = true;
+    api("POST", "/api/chat/stop", {}).catch(function () {});
+  });
   $("chat-terminal").addEventListener("click", function () {
     if (!window.confirm(t("terminal_confirm"))) return;
     api("POST", "/api/chat/terminal", {}).then(function (r) {

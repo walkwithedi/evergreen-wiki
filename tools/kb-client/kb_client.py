@@ -456,13 +456,32 @@ def graph(root, since=0.0):
     return {"nodes": list(nodes.values()), "links": links, "truncated": truncated}
 
 
+def open_run_sources():
+    """The material chosen for every batch intake still open in a registered local library (the sources of
+    its progress file), so that a run continued in a new conversation reads it without a card. A run that
+    is finished, or a progress file that cannot be read, gives nothing. Used on the server only."""
+    out = []
+    for lib in libraries():
+        if not lib["root"] or not lib["exists"]:
+            continue
+        plan = kb_manage.read_json(kb_manage.batch_plan(lib["root"]), None)
+        if not isinstance(plan, dict) or not isinstance(plan.get("batches"), list):
+            continue
+        if not any(isinstance(b, dict) and b.get("status") in ("pending", "started") for b in plan["batches"]):
+            continue
+        out += [p for p in plan.get("sources") or [] if isinstance(p, str) and os.path.isabs(p) and os.path.exists(p)]
+    return out
+
+
 def agent_places():
     """Where OpenCode may act without asking (agent.decide): write in the registered local libraries;
-    read also the skills and the agent's own settings; run the skills' scripts."""
+    read also the skills, the agent's own settings and the material of open batch intakes; run the
+    skills' scripts."""
     write = [lib["root"] for lib in libraries() if lib["root"] and lib["exists"]]
     skills = [os.path.join(s["folder"], name) for s in skills_installed() for name in s["skills"]]
     read = skills + [install.AGENT_HOMES["opencode"], os.path.dirname(kb_manage.registry_path())]
-    return {"write": write, "read": [p for p in read if os.path.isdir(p)],
+    read = [p for p in read if os.path.isdir(p)] + open_run_sources()
+    return {"write": write, "read": read,
             "scripts": [os.path.join(p, "scripts") for p in skills if os.path.isdir(os.path.join(p, "scripts"))]}
 
 

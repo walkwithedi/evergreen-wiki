@@ -519,6 +519,27 @@ class ChatTest(unittest.TestCase):
         step = ev.until(lambda e: e["type"] == "part" and e["kind"] == "tool", "tool step")
         self.assertEqual((step["script"], step["detail"]), ("convert", "Run a script"))
 
+    def test_open_run_material_is_read_without_a_card(self):
+        ev = self.ready()
+        result, out, _ = self.server.run("setup", ["opencode", True, True, "work", self.p("home", "kb", "work"),
+                                                   "team projects", "", True])
+        self.assertEqual(result, "ok", out)
+        ev.until(lambda e: e["type"] == "agent" and e["state"] == "ready", "ready after the restart")
+        material = self.p("disk", "minutes")
+        os.makedirs(material)
+        plan = self.p("home", "kb", "work", "_intake-batches.json")
+
+        def progress(status):
+            write(plan, json.dumps({"schema": 1, "sources": [material], "final_step": "pending",
+                                    "batches": [{"n": 1, "group": "minutes", "status": status, "files": [], "result": {}}]}))
+        progress("pending")  # a run continued in a new conversation: the material was not chosen there
+        self.send("PERM read " + os.path.join(material, "a.docx"))
+        self.assertEqual(ev.until(lambda e: e["type"] in ("auto", "permission"))["type"], "auto")
+        ev.until(lambda e: e["type"] == "part" and e["text"] == "permission: once", "reply")
+        progress("done")  # finished: its material is no longer allowed
+        self.send("PERM read " + os.path.join(material, "b.docx"))
+        self.assertEqual(ev.until(lambda e: e["type"] in ("auto", "permission"))["type"], "permission")
+
     def test_work_folder_is_written_without_a_card(self):
         ev = self.ready()
         work = self.server.get("/api/state")[1]["work"]

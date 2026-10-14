@@ -4,6 +4,9 @@ All three skills share one version number. To release, update this file, the "Ve
 
 ## Unreleased
 
+- tools/kb-client: a batch intake continues across conversations. When the last batch script step was done and nothing waits, the page starts a new conversation with Continue intake after a three-second countdown (Cancel stops it); after Stop, an error, or an automatic round that filed no batch, a Continue intake button does it. The material of a run still open (the sources of its progress file) is allowed for reading in every conversation. Simple mode turns File material and Continue intake off.
+- kb-incremental batch intake (batches.md): a stop for a long conversation comes right after a batch's done and progress line.
+
 ## 1.14.0
 
 Easier start and a visible intake in the browser client, fewer tokens in a large intake, and originals kept in local libraries.
