@@ -852,6 +852,8 @@ class DecideTest(unittest.TestCase):
                                 ("python3 -I '/a b/scripts/card_check.py' o n", "card_check"),
                                 ("python3 scripts/batch_plan.py finish --plan p", "batch_plan finish"),
                                 ("python3 scripts/assemble.py h.md b.md out/x.md", "assemble"),
+                                ('python3 scripts/meta.py entities s.md --field "a=b"', "meta entities"),
+                                ("python3 scripts/meta.py --help", ""),
                                 ("python3 scripts/batch_plan.py --help", ""), ("python3 other.py", ""),
                                 ("ls scripts", "")):
             with self.subTest(command=command):

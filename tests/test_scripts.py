@@ -832,6 +832,166 @@ class WizardTest(Tmp):
         self.assertIn("--target", p.stderr)
 
 
+SPEC_EN = """# Spec
+
+2. Table B: term fixes
+
+Original | Fixed | Note
+Atlass | Atlas | typo
+
+5. Table E: entities
+
+| Name | Type | Aliases | Core | Note |
+| --- | --- | --- | --- | --- |
+| Project Atlas | project | Atlas; (PA) | yes | |
+| Payments Gateway | system | | no | |
+
+Only names in Table E may be written as links.
+
+6. Table F: value filters
+
+Empty-value forms | Noise values | Maintenance
+none; n/a; - | placeholders, generic words such as "system" or "platform" | add new noise
+
+7. Naming
+"""
+
+
+class MetaTest(Tmp):
+    def test_name(self):
+        out = run("meta.py", "name", "--partition", "05", "--topic", "Primary home", "--type", "report",
+                  "--title", "Roof repair: quote/2026", "--language", "en").stdout
+        self.assertEqual(out.split(" | ")[0], "05_Primary-home_report_Roof-repair-quote-2026.md")
+        p = run("meta.py", "name", "--partition", "05", "--topic", "x", "--type", "y", "--title", "a" * 100,
+                "--max-len", "60", check=False)
+        self.assertEqual(p.returncode, 3)
+        self.assertIn("shorten the short title by 50", p.stdout)
+        p = run("meta.py", "name", "--partition", "05", "--topic", "x", "--type", "y", "--title", "///", check=False)
+        self.assertEqual(p.returncode, 3)
+
+    def test_entities(self):
+        write(self.p("spec.md"), SPEC_EN)
+        out = run("meta.py", "entities", self.p("spec.md"),
+                  "--field", "entities=Atlas, PA, payments gateway, n/a, system, the vendor (east, west)",
+                  "--keywords", "Atlas, settlement").stdout
+        self.assertIn("Table E: 2 entities; Table F: 3 empty-value forms, 2 quoted noise values", out)
+        self.assertIn("  Atlas -> [[Project Atlas]]", out)
+        self.assertIn("  PA -> [[Project Atlas]]", out)  # brackets around an alias are not part of it
+        self.assertIn("payments gateway -> no match: decide (entity to register, plain text, or alias); "
+                      "possible alias of: Payments Gateway", out)
+        self.assertIn("n/a -> dropped (empty-value form in Table F)", out)
+        self.assertIn("system -> dropped (noise value in Table F)", out)
+        self.assertIn("the vendor (east, west) -> no match", out)  # not split inside brackets
+        self.assertIn('  entities: ["[[Project Atlas]]", "payments gateway", "the vendor (east, west)"]', out)
+        self.assertIn('  entities_note: "Atlas, PA, payments gateway, n/a, system, the vendor (east, west)"', out)
+        self.assertIn('  keywords: ["[[Project Atlas]]", "settlement"]', out)
+
+    def test_entities_presets_and_missing_table(self):
+        presets = os.path.join(ROOT, "skills", "kb-incremental", "assets", "presets")
+        out = run("meta.py", "entities", os.path.join(presets, "work", "zh", "00_Spec.md"),
+                  "--field", "实体=暂无、示例系统").stdout
+        self.assertIn("Table E: 0 entities", out)
+        self.assertIn("暂无 -> dropped (empty-value form in Table F)", out)
+        self.assertIn("示例系统 -> no match", out)
+        out = run("meta.py", "entities", os.path.join(ROOT, "examples", "sample-life-kb", "00_Spec.md"),
+                  "--field", "organisations=Riverside").stdout
+        self.assertIn("Riverside -> [[Riverside Clinic]]", out)
+        write(self.p("spec.md"), "# Spec\n\nNo tables here.\n")
+        p = run("meta.py", "entities", self.p("spec.md"), "--field", "a=b", check=False)
+        self.assertEqual(p.returncode, 3)
+        self.assertIn("by hand", p.stdout)
+
+    def test_terms(self):
+        write(self.p("spec.md"), SPEC_EN)
+        write(self.p("body.md"), "# Notes\n\nAtlass starts in May.\nNothing here.\n")
+        out = run("meta.py", "terms", self.p("spec.md"), self.p("body.md")).stdout
+        self.assertIn("Atlass -> Atlas: 1 lines", out)
+        self.assertIn("  line 3: Atlass starts in May.", out)
+        write(self.p("body.md"), "clean\n")
+        self.assertIn("Term fixes: none", run("meta.py", "terms", self.p("spec.md"), self.p("body.md")).stdout)
+
+    def test_yaml(self):
+        write(self.p("f.json"), json.dumps({"event_date": "2025-10-02", "file_date": "2025-10-06 09:14",
+                                            "partition": "02", "topic": 'Say "hi" \\ there',
+                                            "people": ["[[Self]]"], "size": None, "source_characters": 1840}))
+        self.assertEqual(run("meta.py", "yaml", self.p("f.json")).stdout,
+                         '---\nevent_date: 2025-10-02\nfile_date: 2025-10-06T09:14\npartition: "02"\n'
+                         'topic: "Say \\"hi\\" \\\\ there"\npeople: ["[[Self]]"]\nsource_characters: 1840\n---\n')
+        write(self.p("f.json"), "[1]")
+        self.assertEqual(run("meta.py", "yaml", self.p("f.json"), check=False).returncode, 3)
+
+    def test_date(self):
+        doc = self.p("a.docx")
+        with zipfile.ZipFile(doc, "w") as z:
+            z.writestr("docProps/core.xml", '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/'
+                       'package/2006/metadata/core-properties" xmlns:dcterms="http://purl.org/dc/terms/">'
+                       '<dcterms:modified>2025-03-04T05:06:00Z</dcterms:modified></cp:coreProperties>')
+        write(self.p("b.txt"), "x")
+        out = run("meta.py", "date", doc, self.p("b.txt"), "--timezone", "+08:00").stdout.splitlines()
+        self.assertEqual(out[0], "a.docx | 2025-03-04 13:06 | document metadata | +08:00")
+        self.assertIn("file system time, unreliable", out[1])
+
+
+QUERY = os.path.join(ROOT, "skills", "kb-query", "scripts", "kbfind.py")
+
+
+def kbfind(*args):
+    p = subprocess.run([sys.executable, QUERY, *args], capture_output=True, text=True, encoding="utf-8")
+    if p.returncode != 0:
+        raise AssertionError(f"kbfind {args} exited {p.returncode}\n{p.stdout}\n{p.stderr}")
+    return p.stdout
+
+
+class KbFindTest(Tmp):
+    def setUp(self):
+        super().setUp()
+        write(self.p("lib", "_kb.json"), json.dumps({"schema": 1, "names": {"old_suffix": "_alt"}}))
+        card = ["# Status card", "", "## Payments", ""] + [f"{i}. Item {i} about routine things" for i in range(1, 40)]
+        card += ["40. Settlement window moves to 18:00 (basis: [[05_Ops_minutes_Window]])", "    continued line", "",
+                 "## Projects", "", "Atlas launches in May; the settlement report follows.", "",
+                 "| Item | Owner |", "| --- | --- |", "| Settlement report | Finance |"]
+        write(self.p("lib", "00_Status-Card.md"), "\n".join(card) + "\n")
+        write(self.p("lib", "05_Ops_minutes_Window.md"), "---\ntopic: \"Settlement\"\n---\n\nBody.\n")
+        write(self.p("lib", "05_Ops_minutes_Window_alt20260101120000.md"), "settlement old\n")
+        write(self.p("lib", "_intake-batches.json"), "settlement")
+        write(self.p("lib", "_note.md"), "settlement")
+        write(self.p("lib", "snapshot_card.md"), "settlement")
+        write(self.p("lib", "Archive", "x.md"), "settlement")
+        write(self.p("lib", "Entities", "Atlas.md"), "# Atlas\n\nSettlement owner.\n")
+
+    def test_find_blocks(self):
+        out = kbfind("find", self.p("lib"), "SETTLEMENT")
+        self.assertIn("files searched: 2 | files with hits: 2 | blocks: 4", out)
+        self.assertIn("-- lines 44-45 | Status card > Payments\n40. Settlement window moves to 18:00", out)
+        self.assertIn("continued line", out)
+        self.assertIn("| Status card > Projects\nAtlas launches in May", out)
+        self.assertIn("| Item | Owner |\n| Settlement report | Finance |", out)  # the header row comes along
+        self.assertIn("-- lines 1-3 | (no heading) | front matter", out)
+        for skipped in ("old", "Archive", "snapshot", "_note", "Entities"):
+            self.assertNotIn(skipped, out.split("\n", 1)[1])
+        self.assertNotIn("Item 5 about", out)
+
+    def test_find_options_and_caps(self):
+        out = kbfind("find", self.p("lib"), "settlement", "atlas", "--all")
+        self.assertIn("blocks: 1", out)
+        out = kbfind("find", self.p("lib"), "item", "--file", "Status-Card", "--max-per-file", "3")
+        self.assertIn("files searched: 1", out)
+        self.assertIn("more blocks in this file", out)
+        out = kbfind("find", self.p("lib"), "settlement", "--in", "Entities")
+        self.assertIn("== Atlas.md", out)
+        self.assertIn("no match", kbfind("find", self.p("lib"), "nothing-like-this"))
+        p = subprocess.run([sys.executable, QUERY, "find", self.p("lib"), "x", "--in", "../.."], capture_output=True)
+        self.assertEqual(p.returncode, 2)
+
+    def test_toc(self):
+        out = kbfind("toc", self.p("lib", "00_Status-Card.md"))
+        self.assertIn("1-2 | # Status card", out)
+        self.assertIn("3-46 | ## Payments |", out)
+        self.assertIn("40 items", out)
+        self.assertIn("| ## Projects |", out)
+        self.assertIn("2 table rows", out)
+
+
 class HookTest(unittest.TestCase):
     def test_commit_detection(self):
         sys.path.insert(0, os.path.join(ROOT, ".claude", "hooks"))

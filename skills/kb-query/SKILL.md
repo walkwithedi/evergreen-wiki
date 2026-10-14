@@ -27,7 +27,7 @@ After the answer, check each local library searched for an unfinished intake (re
 
 | Question about | Read first |
 | --- | --- |
-| conclusions, positions, definitions, owners, boundaries, numbers, the current state of something | status card (always) |
+| conclusions, positions, definitions, owners, boundaries, numbers, the current state of something | status card (always consulted; see Step 3 for how much of it to read) |
 | whether some material is filed | file index |
 | open decisions (work) or due dates, renewals, follow-ups, payments, to-dos (life) | open items |
 | how something changed, what it used to be | change log, with the status card for the current state |
@@ -51,6 +51,18 @@ Rules:
 6. Search cap: one search and one reworded retry per keyword; at most 8 searches for one library and 4 more for each extra library. Then stop and answer as "not found".
 7. Several source files match: prefer the ones the status card or index mention, then newest first; read at most 5 per library.
 8. Each library is searched with its own root only.
+
+Reading only what answers: in a local library where you can run commands, find passages with the script instead of reading whole files (run it as references/environment.md says):
+
+  python3 scripts/kbfind.py find <library root> <keyword> [<keyword> ...] [--file <part of a name>] [--in <subfolder>]
+  python3 scripts/kbfind.py toc <file>
+
+find searches the root level with the same ignored files as above and prints each matching block (a list item, a table row with its header row, a paragraph, the front matter) with the headings above it and its line numbers; toc lists a file's sections with line ranges and sizes.
+1. Summary files (status card first): find with the question's keywords, partial strings, the standard term and its older forms from the glossary, with --file and the file's search key. Read the blocks it prints. When they do not settle the question, read the section they sit in, by the line numbers toc gives, or the section whose heading fits. Read the whole file when it is under 8000 characters, when find has no match, or when the question is about the file as a whole (everything due this month, the full list).
+2. Source material: one find across the root (without --file) replaces find_by_text and shows where in each file the keywords are. Read the matching blocks and their sections; read a whole file only when the question needs the whole document (a summary of it, a comparison across it) or the blocks leave the answer open. Rule 7 still limits the files.
+3. --in <entities_dir> or --in <notes_dir> searches those folders where the rules above allow them.
+4. One find counts as one search toward the cap. A block read is the basis like a file read; name the file as usual.
+Without Python, or in a Google Drive library: find_by_text and read as before.
 
 Quick-note fallback: only when the library itself has nothing relevant, search its notes folder (names.notes_dir) with find_by_text, not its filed subfolder. These count toward the cap.
 
