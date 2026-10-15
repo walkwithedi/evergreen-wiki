@@ -2,6 +2,13 @@
 
 All three skills share one version number. To release, update this file, the "Version:" line of every SKILL.md and the plugin manifests together and merge to main; the release workflow then publishes v<version>.
 
+## 1.20.1
+
+The browser client no longer locks the knowledge-base skills, keeps an intake going when it stops in the middle, and writes logs.
+- tools/kb-client: the knowledge-base skills are no longer locked. Requests on their folders follow the usual rules (a read-only command or one of their scripts is answered by the client, a change shows a card, Allow everything allows it), and the Skills section offers Change and Restore for them too, beside Upgrade, which now says that it replaces the folder. The lock refused read-only commands such as ls on a skill folder and script runs it could not recognise, which stopped intakes. agent.locked_target, skills_admin.locked_folders and the "locked" event are removed; /api/skills reports kb instead of locked.
+- tools/kb-client intake: each run works in <state dir>/intake/<run>/ instead of the client's temporary folder, which is emptied when the client stops, and saves its state there (intake-run.json) after every change; a client started again shows an interrupted run as stopped, and Continue intake files the rest. The client does not stop for being idle while a run is going, stops cleanly on SIGTERM, and goes back to the conversation that was open before the run when it ends (and at start, after an interrupted run). The assistant is told to stop when the body file is missing instead of scanning the original again. Finished runs' folders are removed after seven days.
+- tools/kb-client logs: <state dir>/logs/kb-client-YYYYMMDD.log (kept seven days, owner only) with OpenCode's start, restarts and stops, every permission request and its answer, steps and why the client stopped; each intake run writes intake.log with the scripts, exit codes and output tails, the assistant's turns, the decisions and the names written (never a file's text). Manage and the intake panel show where they are.
+
 ## 1.20.0
 
 The browser client files material itself, so that a file counts as filed only once it is in the library, and says plainly whether the knowledge-base skills are installed.

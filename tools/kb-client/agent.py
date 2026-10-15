@@ -412,35 +412,6 @@ def decide(permission, patterns, places, cwd):
     return True
 
 
-WRITE_PERMISSIONS = ("edit", "write", "patch", "multiedit")
-
-
-def locked_target(permission, patterns, places, cwd):
-    """True when a request would change a locked folder (the knowledge-base skills): a file edit inside
-    one, or a shell command that names one and is not one of the skills' own scripts. Such requests are
-    rejected without asking: those skills are only upgraded by installing a newer release."""
-    locked = places.get("locked", [])
-    if not locked:
-        return False
-    patterns = [str(p) for p in (patterns or []) if str(p).strip()]
-    if permission in WRITE_PERMISSIONS:
-        for p in patterns:
-            path = pattern_path(p, cwd)
-            if path and any(inside(path, r) for r in locked):
-                return True
-        return False
-    if permission == "bash":
-        home = os.path.expanduser("~")
-        for p in patterns:
-            if skill_command(p, places.get("scripts", []), cwd):
-                continue
-            for r in locked:
-                forms = {r, r.replace(home, "~", 1) if r.startswith(home) else r}
-                if any(f in p for f in forms):
-                    return True
-    return False
-
-
 # ---------- events for the page ----------
 
 class Feed:
@@ -570,6 +541,7 @@ class Agent:
             if self.workdir:
                 self.cwd = self.workdir
         self.allow_all = False  # Allow everything on the page: until switched off or the client quits, never saved
+        self.resume_with = None  # a conversation to pick up at start instead of the saved one (an interrupted intake's)
 
     # ----- start and stop -----
 
@@ -619,6 +591,7 @@ class Agent:
         self.events_thread.start()
         self._resume()
         self.models = self._models() if self.chat_first else []
+        log.info("opencode ready on port %s in %s (conversation %s)", self.port, self.cwd, self.session or "new")
         self.feed.emit("agent", state="ready", session=self.session)
         if self.restart_pending:
             self.restart(self.restart_pending)
@@ -703,7 +676,7 @@ class Agent:
             self.restart_pending = False
             self.gen += 1
             self.state = "off"
-        log.info("restarting opencode")
+        log.info("restarting opencode (%s)", why)
         self._kill()
         t = self.events_thread
         if t and t is not threading.current_thread():
@@ -754,6 +727,7 @@ class Agent:
                 with self.lock:
                     self.state = "failed"
                     self.reason = "opencode stopped"
+                log.warning("opencode stopped (exit %s); last output: %s", self.proc.returncode, " / ".join(self.output[-5:])[:500])
                 self.feed.emit("agent", state="failed", reason=self.reason,
                                output="\n".join(self.output[-10:]))
                 return
@@ -831,7 +805,6 @@ class Agent:
         return {"write": [real(x) for x in pl.get("write", [])],
                 "read": [real(x) for x in pl.get("read", []) + self.material],
                 "scripts": [real(x) for x in pl.get("scripts", [])],
-                "locked": [real(x) for x in pl.get("locked", [])],
                 "edit": [self.workdir] if self.workdir else []}
 
     def _permission(self, p, child=False):
@@ -839,20 +812,18 @@ class Agent:
         perm = str(p.get("permission", ""))
         patterns = [str(x) for x in p.get("patterns") or []]
         places = self.allowed_places()
-        if locked_target(perm, patterns, places, self.cwd):
-            try:
-                self.call("POST", f"/permission/{quote(rid, safe='')}/reply", {"reply": "reject"})
-                self.feed.emit("locked", permission=perm, patterns=patterns[:5], child=child)
-                return
-            except OSError as e:
-                log.warning("automatic reject failed: %s", type(e).__name__)
-        if self.allow_all or decide(perm, patterns, places, self.cwd) or remembered(perm, patterns, self.always):
+        what = " | ".join(patterns)[:200]  # the request itself, never file contents
+        why = "allow everything" if self.allow_all else "rule" if decide(perm, patterns, places, self.cwd) else \
+            "always allowed" if remembered(perm, patterns, self.always) else ""
+        if why:
             try:
                 self.call("POST", f"/permission/{quote(rid, safe='')}/reply", {"reply": "once"})
                 self.feed.emit("auto", permission=perm, patterns=patterns[:5], child=child)
+                log.info("permission %s allowed by the client (%s): %s", perm, why, what)
                 return
             except OSError as e:
                 log.warning("automatic reply failed: %s", type(e).__name__)
+        log.info("permission %s asked on the page: %s", perm, what)
         always = [str(x) for x in p.get("always") or []]
         ev = {"id": rid, "permission": perm, "patterns": patterns[:20], "always": always[:20], "child": child}
         self.permissions[rid] = ev
@@ -904,7 +875,8 @@ class Agent:
             log.warning("cannot save the conversation: %s", e)
 
     def _resume(self):
-        sid = self.sessions_by_dir.get(self.workdir) if self.chat_first else self._load_saved()
+        sid = self.resume_with or (self.sessions_by_dir.get(self.workdir) if self.chat_first else self._load_saved())
+        self.resume_with = None
         if sid and re.fullmatch(r"[\w-]{1,100}", sid):
             try:
                 code, _ = self.call("GET", f"/session/{sid}")
@@ -1036,6 +1008,26 @@ class Agent:
         self.feed.emit("reset", session=sid)
         return True
 
+    def use_session(self, sid):
+        """Goes back to the conversation sid (one this client had open; None or "" starts a new one), as
+        the client's intake does when it is done with the conversations of its files."""
+        if not sid:
+            self.new()
+            return
+        with self.lock:
+            if self.status != "idle":
+                raise RuntimeError("busy")
+            self.material = []
+            self.permissions.clear()
+            self.questions.clear()
+            self.roles.clear()
+            self.children.clear()
+            self.session = sid
+            if self.chat_first:
+                self.sessions_by_dir[self.workdir] = sid
+        self._save()
+        self.feed.emit("reset", session=sid)
+
     def _models(self):
         """The models OpenCode's settings offer, as "provider/model" ids; [] when it cannot say."""
         try:
@@ -1053,6 +1045,7 @@ class Agent:
         return out[:100]
 
     def stop(self):
+        log.info("stopping the assistant's turn")
         if self.state == "simple":
             rp = self.run_proc
             if rp and rp.poll() is None:
@@ -1067,6 +1060,7 @@ class Agent:
             return False
         ev = self.permissions[rid]  # taken now: OpenCode's "replied" event may remove it before the reply returns
         code, _ = self.call("POST", f"/permission/{quote(rid, safe='')}/reply", {"reply": REPLIES[reply]})
+        log.info("permission %s answered %s on the page (OpenCode %s)", ev.get("permission"), reply, code)
         if code in (200, 204):
             self.permissions.pop(rid, None)
             if reply == "always" and ev.get("always"):
@@ -1081,7 +1075,7 @@ class Agent:
 
     def set_allow_all(self, on):
         """Allow everything on the page (on) or ask again (off). Switching it on also answers the requests
-        already waiting with "once". Requests on the locked folders are still rejected."""
+        already waiting with "once"."""
         with self.lock:
             self.allow_all = bool(on)
             waiting = list(self.permissions.values()) if self.allow_all else []

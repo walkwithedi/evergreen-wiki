@@ -33,14 +33,14 @@
       ideas_label: "Ideas behind the knowledge base",
       idea_prev: "Previous", idea_next: "Next", idea_more: "More", idea_less: "Less", idea_pause: "Pause", idea_play: "Play",
       skills_title: "Skills",
-      skills_intro: "What the assistant can do. Knowledge-base skills are locked and only upgraded; the others can be changed, imported or created.",
+      skills_intro: "What the assistant can do. Every skill can be changed (backed up first) and restored; knowledge-base skills are also upgraded by Set up.",
       skill_new: "New skill", skill_import: "Import", skills_none_found: "No skills found where OpenCode reads them.",
-      skill_locked: "locked", skill_kb_group: "Knowledge base", skill_other_group: "Other skills",
+      skill_kb_group: "Knowledge base", skill_other_group: "Other skills",
       skill_try: "Try it", skill_upgrade: "Upgrade", skill_modify: "Change", skill_restore_btn: "Restore",
       skill_shadowed: "Not used: a skill with this name in {folder} comes first.",
       skill_triggers: "Say: ", skill_version: "version {v}",
       skill_backup: "Back up a skill", skill_restore: "Restore a skill",
-      skill_upgrade_hint: "Knowledge-base skills change only by installing a newer release: choose Set up with the new version.",
+      skill_upgrade_hint: "Upgrading replaces the skill's folder with the new release; a change made here stays only in its backup.",
       try_req: "{phrase}",
       modify_title: "Change {name}",
       modify_how: "What should change?",
@@ -54,7 +54,6 @@
       modify_go: "Back up and prepare the request",
       modify_req: "Change the skill {name} (its folder: {folder}). Change: {how}. Details: {detail}\nEdit only the files in that folder, keep the SKILL.md front matter (name, description) valid, and tell me what you changed. A backup was made before this request.",
       new_req: "Fill in the new skill {name} (its folder: {folder}): complete the steps and the output section of its SKILL.md so that it does what its description says, keep the description to one clear sentence with two or three example phrases, and tell me how to use it.",
-      locked_note: "Refused without asking: the knowledge-base skills are locked and only upgraded ({what}).",
       welcome_simple: "Set up installs the skills, makes a library and tells your agent about it; choose it again to add another library. Back up keeps a copy of what Set up wrote. Every step shows a preview before it changes anything.",
       welcome: "Set up installs the skills, makes a library and tells your agent about it; choose it again to add another library. Back up, Roll back, Move and Uninstall manage what Set up wrote. Every step shows a preview before it changes anything.",
       cancel_step: "Cancel this step",
@@ -120,6 +119,8 @@
       intake_stopped: "Stopped: {waiting} not done yet. Continue picks them up.",
       intake_continue: "Continue", intake_where: "Written into {root}",
       intake_manual_go: "Hand the {n} unreadable files to the assistant",
+      intake_log: "This run's log:", log_dir: "Logs:",
+      log_hint: "Logs hold file names and paths, not the files' text. When something goes wrong, send the log to whoever maintains the client.",
       chat_one_agent: "If OpenCode is also open in a terminal, quit it before filing material, so that only one of them writes to the library.",
       chat_keys: "Enter sends, Shift+Enter starts a new line.",
       chat_stop: "Stop",
@@ -268,14 +269,14 @@
       ideas_label: "知识库背后的思路",
       idea_prev: "上一张", idea_next: "下一张", idea_more: "详情", idea_less: "收起", idea_pause: "暂停", idea_play: "播放",
       skills_title: "技能",
-      skills_intro: "助手能做的事。知识库技能已锁定，只能升级；其他技能可以修改、导入或新建。",
+      skills_intro: "助手能做的事。每个技能都可以修改（先自动备份）和回滚；知识库技能还可以用「安装与建库」升级。",
       skill_new: "新建技能", skill_import: "导入", skills_none_found: "OpenCode 能读到的位置没有找到技能。",
-      skill_locked: "已锁定", skill_kb_group: "知识库", skill_other_group: "其他技能",
+      skill_kb_group: "知识库", skill_other_group: "其他技能",
       skill_try: "试一试", skill_upgrade: "升级", skill_modify: "修改", skill_restore_btn: "回滚",
       skill_shadowed: "未生效：{folder} 里的同名技能优先。",
       skill_triggers: "口令：", skill_version: "版本 {v}",
       skill_backup: "备份技能", skill_restore: "回滚技能",
-      skill_upgrade_hint: "知识库技能只能通过安装新版本来升级：用新版本选「安装与建库」。",
+      skill_upgrade_hint: "升级会用新版本替换整个技能文件夹；在这里做的修改只保留在备份里。",
       try_req: "{phrase}",
       modify_title: "修改 {name}",
       modify_how: "要改哪方面？",
@@ -289,7 +290,6 @@
       modify_go: "备份并准备请求",
       modify_req: "修改技能 {name}（文件夹：{folder}）。要改的方面：{how}。具体说明：{detail}\n只改这个文件夹里的文件，保持 SKILL.md 开头的 name 和 description 完整有效，改完告诉我改了什么。提出这个请求前已经做了备份。",
       new_req: "补全新技能 {name}（文件夹：{folder}）：把 SKILL.md 的步骤和输出两节写完整，让它做到描述里说的事；描述保持一句清楚的话，带两三个示例口令；最后告诉我怎么用。",
-      locked_note: "已直接拒绝：知识库技能已锁定，只能升级（{what}）。",
       welcome_simple: "「安装与建库」会装好技能、建一个知识库并告诉助手；要再加一个库时再选一次。「备份」保存一份安装写下的内容。每一步改动前都会先给预览。",
       welcome: "「安装与建库」会装好技能、建一个知识库并告诉助手；要再加一个库时再选一次。备份、回滚、移动和卸载用来管理安装写下的内容。每一步改动前都会先给预览。",
       cancel_step: "取消这一步",
@@ -355,6 +355,8 @@
       intake_stopped: "已停止：还有 {waiting} 个没做，点「继续」接着做。",
       intake_continue: "继续", intake_where: "写入位置：{root}",
       intake_manual_go: "把 {n} 个读不出文字的文件交给助手",
+      intake_log: "本轮日志：", log_dir: "日志文件夹：",
+      log_hint: "日志里有文件名和路径，没有文件正文。出问题时把日志发给维护者。",
       chat_one_agent: "如果终端里也开着 OpenCode，入库前请先退出它，免得两边同时写同一个知识库。",
       chat_keys: "回车发送，Shift+回车换行。",
       chat_stop: "停止",
@@ -696,6 +698,7 @@
     drawSkillPop();
     $("backups").textContent = state.backups ? t("backups", { n: state.backups }) : t("no_backups");
     $("remembered-text").textContent = t("remembered", { n: state.remembered || 0 });
+    logWhere($("log-dir"), t("log_dir"), state.log_dir);
     show($("remembered"), !!state.remembered);
     setBusy(job !== null);
     chatEnable();
@@ -1392,9 +1395,10 @@
   }
 
   function copyText(text, button) {
+    var label = button.textContent;
     var done = function () {
       button.textContent = t("copied");
-      setTimeout(function () { button.textContent = t("copy_code"); }, 1500);
+      setTimeout(function () { button.textContent = label; }, 1500);
     };
     if (navigator.clipboard && window.isSecureContext) {
       navigator.clipboard.writeText(text).then(done, function () {});
@@ -1683,9 +1687,6 @@
       if (chat.busy) cancelContinue();
       else { compactTurns(); stagesIdle(); loadProgress().then(maybeContinue); }
     }
-    else if (ev.type === "locked") {
-      note((ev.child ? t("child") : "") + t("locked_note", { what: permName(ev.permission) + " " + permWhat(ev).join(", ") }), "error");
-    }
     else if (ev.type === "auto") {
       autoNote((ev.child ? t("child") : "") + t("auto", { what: permName(ev.permission) + " " + permWhat(ev).join(", ") }));
     }
@@ -1796,8 +1797,8 @@
     return fold(t("diff_show"), pre);
   }
 
-  // Allow everything on the page: the client answers every request itself, except changes to the locked
-  // skills, until it is switched off or the client quits. Switching it on also answers the waiting cards.
+  // Allow everything on the page: the client answers every request itself, until it is switched off or
+  // the client quits. Switching it on also answers the waiting cards.
   function setAllowAll(on) {
     if (on && !window.confirm(t("allow_all_confirm"))) return;
     api("POST", "/api/chat/allow_all", { on: on }).catch(function (e) { note(String(e.message), "error"); });
@@ -2415,12 +2416,29 @@
       }
       if (row.children.length) box.appendChild(row);
     }
+    if (r.log) {
+      var lw = el("p", { "class": "hint log-where" });
+      logWhere(lw, t("intake_log"), r.log);
+      box.appendChild(lw);
+    }
+  }
+
+  // Where a log is, with Copy path and what the log holds.
+  function logWhere(box, label, path) {
+    box.textContent = "";
+    if (!path) return;
+    box.appendChild(document.createTextNode(label + " "));
+    box.appendChild(el("code", {}, path));
+    var copy = el("button", { type: "button", "class": "quiet small" }, t("copy_path"));
+    copy.addEventListener("click", function () { copyText(path, copy); });
+    box.appendChild(copy);
+    box.appendChild(el("span", { "class": "log-note" }, t("log_hint")));
   }
 
   // ---------- skills ----------
-  // The skills OpenCode reads (GET /api/skills). Knowledge-base skills are locked: Try it and Upgrade
-  // only. The others can be changed (backed up first, then a request is put in the box for the
-  // assistant), restored from a backup, imported or created. The request is never sent by itself.
+  // The skills OpenCode reads (GET /api/skills). Every skill can be changed (backed up first, then a
+  // request is put in the box for the assistant) and restored from a backup; the knowledge-base skills
+  // are also upgraded by Set up. Skills can be imported or created. The request is never sent by itself.
 
   var skills = { list: [], folder: "" };
 
@@ -2439,11 +2457,10 @@
   }
 
   function skillItem(sk) {
-    var li = el("li", { "class": "skill" + (sk.locked ? " locked" : "") + (sk.used ? "" : " shadowed") });
+    var li = el("li", { "class": "skill" + (sk.kb ? " kb" : "") + (sk.used ? "" : " shadowed") });
     var head = el("div", { "class": "skill-head" });
     head.appendChild(el("strong", {}, sk.name));
     if (sk.version) head.appendChild(el("span", { "class": "badge" }, t("skill_version", { v: sk.version })));
-    if (sk.locked) head.appendChild(el("span", { "class": "badge lock" }, t("skill_locked")));
     li.appendChild(head);
     var d = el("details", { "class": "skill-desc" });
     var end = /^[\s\S]*?[.。](?=\s|$)/.exec(sk.description);
@@ -2466,11 +2483,15 @@
     if (sk.used && sk.triggers && sk.triggers.length) {
       btn(t("skill_try"), "quiet", function () { fillInput(t("try_req", { phrase: sk.triggers[0] })); });
     }
-    if (sk.locked) {
-      btn(t("skill_upgrade"), "quiet", function () { note(t("skill_upgrade_hint"), "auto"); startAction("setup"); });
-    } else if (sk.used) {
+    if (sk.used) {
       btn(t("skill_modify"), "quiet", function () { modifyCard(sk); });
       if (sk.backups) btn(t("skill_restore_btn"), "quiet", function () { startAction("skill_restore", sk.dir); });
+    }
+    if (sk.kb) {
+      btn(t("skill_upgrade"), "quiet", function () {
+        if (!window.confirm(t("skill_upgrade_hint"))) return;
+        startAction("setup");
+      });
     }
     li.appendChild(row);
     return li;
@@ -2479,8 +2500,8 @@
   function drawSkills() {
     var ul = $("skills");
     ul.textContent = "";
-    var groups = [[t("skill_kb_group"), skills.list.filter(function (x) { return x.locked; })],
-                  [t("skill_other_group"), skills.list.filter(function (x) { return !x.locked; })]];
+    var groups = [[t("skill_kb_group"), skills.list.filter(function (x) { return x.kb; })],
+                  [t("skill_other_group"), skills.list.filter(function (x) { return !x.kb; })]];
     groups.forEach(function (g) {
       if (!g[1].length) return;
       ul.appendChild(el("li", { "class": "skill-group" }, g[0]));
@@ -2547,12 +2568,12 @@
     });
     var ul = $("skill-rows");
     ul.textContent = "";
-    [[t("skill_kb_group"), shown.filter(function (x) { return x.locked; })],
-     [t("skill_other_group"), shown.filter(function (x) { return !x.locked; })]].forEach(function (g) {
+    [[t("skill_kb_group"), shown.filter(function (x) { return x.kb; })],
+     [t("skill_other_group"), shown.filter(function (x) { return !x.kb; })]].forEach(function (g) {
       if (!g[1].length) return;
       ul.appendChild(el("li", { "class": "skill-group" }, g[0]));
       g[1].forEach(function (sk) {
-        var li = el("li", { "class": "skill-row" + (sk.locked ? " locked" : "") });
+        var li = el("li", { "class": "skill-row" + (sk.kb ? " kb" : "") });
         var d = el("details");
         var sum = el("summary");
         sum.appendChild(el("strong", { "class": "skill-name" }, sk.name));

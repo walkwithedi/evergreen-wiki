@@ -562,6 +562,80 @@ class ChatTest(unittest.TestCase):
         self.server.post("/api/intake/stop", {})
         self.intake_until_done()
 
+    def test_intake_log_and_conversation_back(self):
+        ev, material = self.intake_library()
+        self.send("hello")
+        ev.until(lambda e: e["type"] == "part" and e["text"] == "echo: hello", "answer")
+        self.send("PERM read " + self.p("home", "kb", "work", "00_Spec.md"))  # allowed by the client, and logged
+        ev.until(lambda e: e["type"] == "auto", "auto")
+        before = self.server.get("/api/chat/state")[1]["agent"]["session"]
+        self.server.post("/api/intake", {"library": "work", "paths": [material]})
+        run = self.intake_until_done()
+        ev.until(lambda e: e["type"] == "reset" and e.get("session") == before, "back to the earlier conversation")
+        self.assertEqual(self.server.get("/api/chat/state")[1]["agent"]["session"], before)
+        work = self.p("home", ".config", "evergreen-wiki", "intake", run["id"])
+        self.assertEqual(run["log"], os.path.join(work, "intake.log"))
+        text = read(run["log"])
+        self.assertEqual(os.stat(run["log"]).st_mode & 0o777, 0o600)
+        for part in ("run: prep.py scan", "exit 0", "decision: {", "written ->", "duplicate", "run " + run["id"] + " done"):
+            self.assertIn(part, text)
+        self.assertNotIn("Riverside Clinic moved to phase two", text)  # never the files' text
+        logs = self.p("home", ".config", "evergreen-wiki", "logs")
+        day = [f for f in os.listdir(logs) if f.startswith("kb-client-")]
+        self.assertEqual(len(day), 1)
+        self.assertEqual(os.stat(os.path.join(logs, day[0])).st_mode & 0o777, 0o600)
+        self.assertIn("permission read allowed by the client (rule)", read(os.path.join(logs, day[0])))
+
+    def test_intake_survives_the_client(self):
+        self.env["FAKE_OPENCODE_INTAKE"] = "slow"
+        _, material = self.intake_library()
+        self.server.post("/api/intake", {"library": "work", "paths": [material]})
+        end = time.time() + 30
+        while self.server.get("/api/intake")[1]["run"]["step"] != "ask" and time.time() < end:
+            time.sleep(0.2)
+        self.server.stop()  # the client dies in the middle of the run
+        self.env["FAKE_OPENCODE_INTAKE"] = ""
+        ev = self.start()
+        ev.until(lambda e: e["type"] == "agent" and e["state"] == "ready", "ready")
+        run = self.server.get("/api/intake")[1]["run"]
+        self.assertEqual((run["state"], run["counts"]), ("stopped", {"waiting": 3}), run)
+        status, r = self.server.post("/api/intake", {"resume": True})
+        self.assertEqual(status, 200, r)
+        run = self.intake_until_done()
+        self.assertEqual(run["counts"], {"written": 2, "duplicate": 1}, run)
+
+    def test_idle_waits_for_an_intake(self):
+        app = kb_client.App.__new__(kb_client.App)
+        stopped = []
+        app.idle, app.job, app.agent, app.last_seen = 1, None, None, 0
+        app.server = type("S", (), {"shutdown": lambda self: stopped.append(1)})()
+        running = [True]
+        app.intake = type("R", (), {"running": lambda self: running[0]})()
+        import threading
+        t = threading.Thread(target=app.idle_watch, daemon=True)
+        t.start()
+        time.sleep(2.5)
+        self.assertEqual(stopped, [])
+        running[0] = False
+        t.join(10)
+        time.sleep(0.2)
+        self.assertEqual(stopped, [1])
+
+    def test_old_logs_and_runs_are_removed(self):
+        logs = self.p("home", ".config", "evergreen-wiki", "logs")
+        old = os.path.join(logs, "kb-client-20000101.log")
+        write(old, "x\n")
+        os.utime(old, (time.time() - 8 * 86400,) * 2)
+        runs = self.p("home", ".config", "evergreen-wiki", "intake")
+        for name, state in (("done-old", "done"), ("stopped-old", "stopped")):
+            path = os.path.join(runs, name, "intake-run.json")
+            write(path, json.dumps({"run": {"state": state}}))
+            os.utime(path, (time.time() - 8 * 86400,) * 2)
+        self.start()
+        self.assertFalse(os.path.exists(old))
+        self.assertFalse(os.path.exists(os.path.join(runs, "done-old")))
+        self.assertTrue(os.path.exists(os.path.join(runs, "stopped-old")))  # kept to be continued
+
     def test_intake_refusals(self):
         self.assertEqual(self.server_or_start().post("/api/intake", {"library": "work", "paths": ["relative"]})[0], 400)
         status, r = self.server.post("/api/intake", {"library": "work", "paths": ["/nowhere"]})
@@ -808,19 +882,24 @@ class ChatTest(unittest.TestCase):
         ev.until(lambda e: e["type"] == "agent" and e["state"] == "ready", "ready")
         self.assertFalse(self.server.get("/api/chat/state")[1]["agent"]["allow_all"])
 
-    def test_allow_all_still_rejects_locked_folders(self):
+    def test_knowledge_base_skills_are_not_refused(self):
+        # the knowledge-base skills are a folder like any other: read and listed freely, changed after a
+        # card, or without one under Allow everything
         tmp = self.p("work")
         kb = os.path.join(tmp, "skills", "kb-query")
+        os.makedirs(kb)
         a = agent.Agent.__new__(agent.Agent)
         sent, emitted = [], []
-        a.allow_all, a.always, a.cwd, a.permissions = True, {}, tmp, {}
-        a.allowed_places = lambda: {"locked": [kb], "scripts": [], "write": [], "read": []}
+        a.allow_all, a.always, a.cwd, a.permissions = False, {}, tmp, {}
+        a.allowed_places = lambda: {"scripts": [], "write": [], "read": [kb]}
         a.call = lambda method, path, body=None: sent.append(body["reply"]) or (200, None)
         a.feed = type("F", (), {"emit": lambda self, t, **d: emitted.append(t)})()
-        a._permission({"id": "1", "permission": "edit", "patterns": [os.path.join(kb, "SKILL.md")]})
-        a._permission({"id": "2", "permission": "bash", "patterns": ["rm -r b; git push"]})
-        self.assertEqual(sent, ["reject", "once"])
-        self.assertEqual(emitted, ["locked", "auto"])
+        a._permission({"id": "1", "permission": "bash", "patterns": [f"ls {kb}"]})
+        a._permission({"id": "2", "permission": "edit", "patterns": [os.path.join(kb, "SKILL.md")]})
+        self.assertEqual((sent, emitted), (["once"], ["auto", "permission"]))
+        a.allow_all = True
+        a._permission({"id": "3", "permission": "edit", "patterns": [os.path.join(kb, "SKILL.md")]})
+        self.assertEqual((sent, emitted[-1]), (["once", "once"], "auto"))
 
     def test_paths_written_in_the_message_are_material(self):
         doc = self.p("home", "Documents", "plan.docx")
@@ -1060,9 +1139,6 @@ class DecideTest(unittest.TestCase):
         self.assertFalse(agent.decide("edit", [os.path.join(work, "a.py")], self.places, work))
         self.assertTrue(agent.decide("bash", [f"ls {work}"], places, work))
         self.assertFalse(agent.decide("bash", ["rm a.py"], places, work))
-        # a locked folder inside the work folder is refused before anything is allowed
-        locked = os.path.join(work, "skills", "kb-query")
-        self.assertTrue(agent.locked_target("edit", [os.path.join(locked, "SKILL.md")], dict(places, locked=[locked]), work))
 
     def test_check_workdir(self):
         home = os.path.realpath(os.path.expanduser("~"))
@@ -1351,17 +1427,22 @@ class SkillsTest(unittest.TestCase):
 
     def test_list_groups_and_shadowing(self):
         sk = self.skills()
-        self.assertEqual([(x["dir"], x["locked"], x["used"]) for x in sk],
+        self.assertEqual([(x["dir"], x["kb"], x["used"]) for x in sk],
                          [("kb-query", True, True), ("my-tool", False, True), ("my-tool", False, False)])
         self.assertEqual(sk[0]["version"], "1.16.0")
         self.assertEqual(sk[1]["triggers"], ["do the thing", "thing please"])
         self.assertEqual(sk[1]["agent"], "opencode")
 
-    def test_knowledge_base_skills_are_locked(self):
-        for action in ("skill_backup", "skill_restore"):
-            res, out, _ = self.server.run(action, [], skill="kb-query")
-            self.assertEqual(res, "stopped")
-            self.assertIn("only upgraded", out)
+    def test_knowledge_base_skills_are_backed_up_and_restored(self):
+        res, out, _ = self.server.run("skill_backup", [], skill="kb-query")
+        self.assertEqual(res, "ok", out)
+        md = os.path.join(self.oc, "kb-query", "SKILL.md")
+        before = read(md)
+        write(md, "changed\n")
+        when = os.listdir(self.p("home", ".config", "evergreen-wiki", "skill-backups", "kb-query"))[0]
+        res, out, _ = self.server.run("skill_restore", [when, True], skill="kb-query")
+        self.assertEqual(res, "ok", out)
+        self.assertEqual(read(md), before)
 
     def test_backup_and_restore(self):
         res, out, _ = self.server.run("skill_backup", [], skill="my-tool")
@@ -1415,23 +1496,7 @@ class SkillsTest(unittest.TestCase):
 
 
 @unittest.skipUnless(os.name == "posix", "the client runs on Linux desktops")
-class LockedTargetTest(unittest.TestCase):
-    def test_locked_target(self):
-        tmp = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, tmp, True)
-        kb = os.path.join(tmp, "skills", "kb-query")
-        other = os.path.join(tmp, "skills", "my-tool")
-        os.makedirs(os.path.join(kb, "scripts"))
-        os.makedirs(other)
-        write(os.path.join(kb, "scripts", "kbfind.py"), "")
-        places = {"locked": [kb], "scripts": [os.path.join(kb, "scripts")], "write": [], "read": []}
-        self.assertTrue(agent.locked_target("edit", [os.path.join(kb, "SKILL.md")], places, tmp))
-        self.assertFalse(agent.locked_target("edit", [os.path.join(other, "SKILL.md")], places, tmp))
-        self.assertTrue(agent.locked_target("bash", [f"rm -rf {kb}"], places, tmp))
-        self.assertFalse(agent.locked_target("bash", [f"python3 {kb}/scripts/kbfind.py find x y"], places, tmp))
-        self.assertFalse(agent.locked_target("read", [os.path.join(kb, "SKILL.md")], places, tmp))
-        self.assertFalse(agent.locked_target("edit", [os.path.join(kb, "SKILL.md")], {}, tmp))
-
+class SkillCommandTest(unittest.TestCase):
     def test_skill_command_on_several_lines(self):
         tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, tmp, True)
@@ -1441,20 +1506,23 @@ class LockedTargetTest(unittest.TestCase):
         os.makedirs(lib)
         write(os.path.join(kb, "scripts", "batch_plan.py"), "")
         scripts = os.path.join(kb, "scripts")
-        places = {"locked": [kb], "scripts": [scripts], "write": [lib], "read": []}
+        places = {"scripts": [scripts], "write": [lib], "read": [kb]}
         script = os.path.join(scripts, "batch_plan.py")
         joined = (f'python3 {script} plan \\\n  "{tmp}/inbox/Project Atlas" \\\n  --plan {lib}/_intake-batches.json \\\n'
                   f"  --library-root {lib} \\\n  --batch-files 5 2>&1")
-        for cmd in (joined, joined.replace("\n", "\r\n"), f"python3 {script} plan x 2>/dev/null",
+        blank = f'python3 {script} plan \\\n\\\n  "{tmp}/inbox/Project Atlas" \\\n  --batch-files 5 2>&1'  # an empty continued line
+        for cmd in (joined, blank, joined.replace("\n", "\r\n"), f"python3 {script} plan x 2>/dev/null",
                     f"python3 {script} plan x 2> /dev/null 2>&1"):
             self.assertTrue(agent.skill_command(cmd, [scripts], tmp), cmd)
-            self.assertFalse(agent.locked_target("bash", [cmd], places, tmp), cmd)
             self.assertTrue(agent.decide("bash", [cmd], places, tmp), cmd)
         for cmd in (f"python3 {script} plan x 2>&1; rm -rf {kb}", f"python3 {script} plan x > {kb}/x",
                     f"python3 {script} plan x 2>{kb}/err", f"python3 {script} plan x 2>&1 | tee {kb}/x",
                     f"python3 {script} plan $(rm -rf {kb})"):
             self.assertFalse(agent.skill_command(cmd, [scripts], tmp), cmd)
-            self.assertTrue(agent.locked_target("bash", [cmd], places, tmp), cmd)
+            self.assertFalse(agent.decide("bash", [cmd], places, tmp), cmd)  # a card, not refused
+        # listing or reading the skill folder is a read-only command like any other
+        self.assertTrue(agent.decide("bash", [f"ls {kb}/"], places, tmp))
+        self.assertTrue(agent.decide("bash", [f"cat {kb}/SKILL.md | head -5"], places, tmp))
         # inside quotes nothing is joined or dropped
         self.assertEqual(agent.plain_command("echo 'a \\\nb' '2>&1'"), "echo 'a \\\nb' '2>&1'")
         self.assertFalse(agent.skill_command(f"python3 {script} 'a \\\nb'", [scripts], tmp))

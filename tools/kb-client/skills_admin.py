@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """The skills OpenCode can use, for the client's Skills section: list them with what they do, and manage
-the ones that are not the knowledge-base skills.
+them.
 
-The three knowledge-base skills (kb_manage.SKILLS) are locked: listed with their version, changed only by
-installing a newer release (Set up), never edited, restored or replaced here. Every other skill can be
-backed up before the assistant edits it, restored from such a backup, imported from a folder or a zip
-file, or started from a template. Nothing in a skill is ever run here.
+The three knowledge-base skills (kb_manage.SKILLS) are listed first, with their version; besides the
+steps below they are upgraded by Set up with a newer release, which replaces their folders (a local
+change then survives only in its backup). Every skill can be backed up before the assistant edits it,
+restored from such a backup, imported from a folder or a zip file, or started from a template. Nothing
+in a skill is ever run here.
 
 Backups live in <state dir>/skill-backups/<skill>/<YYYYMMDD-HHMMSS>/, outside every skills folder.
 Python 3 standard library only.
@@ -35,7 +36,6 @@ MAX_IMPORT_FILES = 500
 
 MSG = {
     "en": {
-        "locked": "{name} is a knowledge-base skill: it is only upgraded, by Set up with a newer release.",
         "not_found": "No skill named {name} in the folders OpenCode reads.",
         "backed_up": "Backed up {name} to {path}",
         "no_backups": "{name} has no backup yet.",
@@ -65,7 +65,6 @@ MSG = {
         "cancelled": "Cancelled; nothing changed.",
     },
     "zh": {
-        "locked": "{name} 是知识库技能：只能用「安装与建库」从新版本升级。",
         "not_found": "OpenCode 能读到的技能文件夹里没有 {name}。",
         "backed_up": "已把 {name} 备份到 {path}",
         "no_backups": "{name} 还没有备份。",
@@ -155,7 +154,7 @@ def backups(name):
 
 def list_skills():
     """Every skill in the folders OpenCode reads: [{name, description, version, triggers, folder, agent,
-    locked, used, backups}], knowledge-base skills first, then by name."""
+    kb, used, backups}] (kb: one of the knowledge-base skills), knowledge-base skills first, then by name."""
     out, seen = [], set()
     for agent, root in folders():
         if not os.path.isdir(root):
@@ -167,30 +166,16 @@ def list_skills():
             info = read_skill(path)
             if info is None:
                 continue
-            info.update(folder=path, agent=agent, locked=entry in kb_manage.SKILLS,
+            info.update(folder=path, agent=agent, kb=entry in kb_manage.SKILLS,
                         used=entry not in seen, backups=len(backups(entry)), dir=entry)
             seen.add(entry)
             out.append(info)
-    out.sort(key=lambda s: (not s["locked"], s["dir"], OPENCODE_ORDER.index(s["agent"])))
-    return out
-
-
-def locked_folders():
-    """The knowledge-base skills' folders in every skills folder the installer knows: never written by
-    the assistant."""
-    out = []
-    for root, _ in install.TARGETS.values():
-        for name in kb_manage.SKILLS:
-            p = os.path.join(root, name)
-            if os.path.isdir(p):
-                out.append(p)
+    out.sort(key=lambda s: (not s["kb"], s["dir"], OPENCODE_ORDER.index(s["agent"])))
     return out
 
 
 def find(name, lang):
     m = MSG[lang]
-    if name in kb_manage.SKILLS:
-        raise Refused(m["locked"].format(name=name))
     for s in list_skills():
         if s["dir"] == name and s["used"]:
             return s

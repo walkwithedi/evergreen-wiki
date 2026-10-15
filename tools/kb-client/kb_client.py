@@ -16,9 +16,9 @@ opens, so other pages in the browser cannot use it. The questions, previews and 
 install.py and kb_manage.py: a step runs in a worker thread, its questions go to the page and wait for
 the answer, and what it prints is streamed to the page. The conversation on the page goes to an OpenCode
 server this client starts on 127.0.0.1 (agent.py); the page never talks to OpenCode itself. The folder
-browser only lists folders. The Skills section lists the skills OpenCode reads and manages the ones that
-are not the knowledge-base skills (skills_admin.py: backup before an edit, restore, import, a new skill
-from a template); the knowledge-base skills are locked and only upgraded by Set up. Otherwise this file
+browser only lists folders. The Skills section lists the skills OpenCode reads and manages them
+(skills_admin.py: backup before an edit, restore, import, a new skill from a template); the
+knowledge-base skills are also upgraded by Set up. Otherwise this file
 writes nothing but the current conversation's id. Python 3 standard library only.
 """
 import argparse
@@ -29,6 +29,7 @@ import os
 import queue
 import re
 import secrets
+import signal
 import shutil
 import socketserver
 import sys
@@ -261,7 +262,9 @@ class App:
         self.last_seen = time.time()
         self.output = None
         self.server = None
-        self.intake = None  # the last intake run (intake.Run)
+        # The last intake run (intake.Run): one saved by an earlier client shows as stopped and can go on.
+        intake_mod.clean(intake_root())
+        self.intake = intake_mod.latest(intake_root())
 
     # ---------- steps ----------
 
@@ -276,6 +279,7 @@ class App:
         return job
 
     def run(self, job, lib_id):
+        log.info("step %s started", job.action)
         if self.output:
             self.output.per_thread.job = job
         asker = WebAsker(job, self.lang)
@@ -299,6 +303,7 @@ class App:
                 job.done = True
                 job.events.append({"type": "end", "result": result, "seq": len(job.events) + 1})
                 job.cond.notify_all()
+            log.info("step %s ended: %s", job.action, result)
         if job.action == "setup" and result == "ok" and self.agent is not None:
             self.agent.restart()  # so that the conversation uses the skills and the instructions line just written
 
@@ -317,6 +322,7 @@ class App:
             "backups": len(kb_manage.list_backups()),
             "registry": kb_manage.registry_path(),
             "work": self.work,
+            "log_dir": log_folder(),
             "opencode_skills": opencode_skills(),
             "kb_skills": kb_skills(),
             "instructions": instructions_line(),
@@ -338,6 +344,11 @@ class App:
                 self.agent = agent_mod.Agent(OPENCODE["program"], os.path.expanduser("~"), self.places,
                                              os.path.join(kb_manage.state_dir(), "kb-client.json"),
                                              self.start_timeout, chat_first=bool(self.options.get("chat_first")))
+                run = self.intake
+                if run is not None and run.interrupted:
+                    # the saved conversation may be one of that run's files: open the one from before it
+                    self.agent.resume_with = run.back_to or None
+                    log.info("intake %s was interrupted; picking up conversation %s", run.id, run.back_to or "(new)")
         self.agent.start()
         return self.agent, None
 
@@ -388,17 +399,18 @@ class App:
                 sources = intake_mod.expand(paths, lib["root"])
                 if not sources:
                     return None, "intake_empty"
-            run_id = secrets.token_hex(4)
-            work = os.path.join(self.work, "intake-" + run_id)
-            os.makedirs(work, exist_ok=True)
-            self.intake = intake_mod.Run(ag, lib, sources, scripts, work, self.lang, run_id)
+            run_id = time.strftime("%Y%m%d-%H%M%S-") + secrets.token_hex(2)
+            work = os.path.join(intake_root(), run_id)
+            os.makedirs(work, mode=0o700, exist_ok=True)
+            back = last.back_to if resume and last is not None else (ag.session or "")
+            self.intake = intake_mod.Run(ag, lib, sources, scripts, work, self.lang, run_id, back)
+        log.info("intake %s: %d files into %s%s", run_id, len(sources), lib["id"], " (continued)" if resume else "")
         self.intake.start()
         return self.intake, None
 
     def places(self):
         pl = agent_places()
-        if os.path.isdir(self.work):
-            pl["write"] = pl["write"] + [self.work]
+        pl["write"] = pl["write"] + [d for d in (self.work, intake_root()) if os.path.isdir(d)]
         return pl
 
     def idle_watch(self):
@@ -406,6 +418,7 @@ class App:
             time.sleep(min(5, self.idle))
             busy = self.job is not None and not self.job.done
             busy = busy or (self.agent is not None and self.agent.status != "idle")
+            busy = busy or (self.intake is not None and self.intake.running())
             if not busy and time.time() - self.last_seen > self.idle:
                 log.info("no page for %s seconds, stopping", self.idle)
                 threading.Thread(target=self.server.shutdown, daemon=True).start()
@@ -669,8 +682,7 @@ def agent_places():
     read = skills + [install.AGENT_HOMES["opencode"], os.path.dirname(kb_manage.registry_path())]
     read = [p for p in read if os.path.isdir(p)] + open_run_sources()
     return {"write": write, "read": read,
-            "scripts": [os.path.join(p, "scripts") for p in skills if os.path.isdir(os.path.join(p, "scripts"))],
-            "locked": skills_admin.locked_folders()}
+            "scripts": [os.path.join(p, "scripts") for p in skills if os.path.isdir(os.path.join(p, "scripts"))]}
 
 
 def skills_installed():
@@ -1047,6 +1059,7 @@ class Handler(BaseHTTPRequestHandler):
                 run.stop()
             return self.send(200, {"ok": True})
         if path == "/api/quit":
+            log.info("stopping: Quit on the page")
             self.send(200, {"ok": True})
             job = self.app.job
             if job and not job.done:
@@ -1240,6 +1253,45 @@ class LocalServer(ThreadingHTTPServer):
         self.server_name, self.server_port = "127.0.0.1", self.server_address[1]
 
 
+LOG_KEEP_DAYS = 7
+
+
+def log_folder():
+    return os.path.join(kb_manage.state_dir(), "logs")
+
+
+def intake_root():
+    """Where the client's intake runs keep their work folders, logs and saved state (intake.py)."""
+    return os.path.join(kb_manage.state_dir(), "intake")
+
+
+def open_log_file(level):
+    """Logs also go to <state dir>/logs/kb-client-YYYYMMDD.log (only the owner can read it), at INFO or the
+    level asked for when that is lower; log files older than LOG_KEEP_DAYS days are removed. Returns the
+    path, or "" when it cannot be written."""
+    folder = log_folder()
+    try:
+        os.makedirs(folder, mode=0o700, exist_ok=True)
+        for f in os.listdir(folder):
+            p = os.path.join(folder, f)
+            if f.startswith("kb-client-") and f.endswith(".log") and \
+                    time.time() - os.path.getmtime(p) > LOG_KEEP_DAYS * 86400:
+                os.remove(p)
+        path = os.path.join(folder, time.strftime("kb-client-%Y%m%d.log"))
+        os.close(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600))
+        os.chmod(path, 0o600)
+        handler = logging.FileHandler(path, encoding="utf-8")
+    except OSError as e:
+        log.warning("no log file: %s", e)
+        return ""
+    handler.setFormatter(logging.Formatter(LOG_FORMAT))
+    handler.setLevel(min(logging.INFO, getattr(logging, level)))
+    root = logging.getLogger()
+    root.addHandler(handler)
+    root.setLevel(min(root.level, handler.level))
+    return path
+
+
 def serve(app, port, open_browser):
     handler = type("BoundHandler", (Handler,), {"app": app})
     server = LocalServer(("127.0.0.1", port), handler)
@@ -1251,10 +1303,17 @@ def serve(app, port, open_browser):
         threading.Thread(target=webbrowser.open, args=(url,), daemon=True).start()
     if app.idle:
         threading.Thread(target=app.idle_watch, daemon=True).start()
+    def on_term(signum, frame):  # another program asked the client to stop: stop the same way as Quit
+        log.info("stopping: signal %s", signum)
+        threading.Thread(target=server.shutdown, daemon=True).start()
+    try:
+        signal.signal(signal.SIGTERM, on_term)
+    except (ValueError, OSError):  # not the main thread, or no such signal here
+        log.debug("SIGTERM not handled")
     try:
         server.serve_forever(poll_interval=0.5)
     except KeyboardInterrupt:  # Ctrl+C in the terminal window stops the client like Quit
-        log.info("stopped from the terminal")
+        log.info("stopping: Ctrl+C in the terminal")
     finally:
         server.server_close()
         if app.agent:
@@ -1282,6 +1341,9 @@ def main():
                     choices=["DEBUG", "INFO", "WARNING", "ERROR"])
     a = ap.parse_args()
     logging.basicConfig(level=a.log_level, format=LOG_FORMAT, stream=sys.stderr)
+    logging.getLogger().handlers[0].setLevel(a.log_level)
+    path = open_log_file(a.log_level)
+    log.info("kb-client started (Python %s, %s), log %s", sys.version.split()[0], " ".join(sys.argv[1:]), path or "none")
     if a.descriptions:
         try:
             install.load_descriptions(a.descriptions)

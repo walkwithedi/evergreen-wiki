@@ -5,7 +5,7 @@
     {
       "name": "evergreen-wiki",
       "source": "./",
-      "version": "1.20.0",
+      "version": "1.20.1",
       "description": "kb-note, kb-query and kb-incremental: an LLM-maintained knowledge base in Google Drive or a local/Obsidian folder."
     }
   ]
