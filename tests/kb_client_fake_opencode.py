@@ -9,7 +9,8 @@ listens). Messages starting with PERM <permission> <pattern>, QUESTION or SLOW
 make the session ask for a permission, ask a question or wait to be aborted; SUBAGENT <permission>
 <pattern> starts a subagent session that asks for that permission; THINK sends reasoning first; RUN <command>
 shows a finished bash step running that command; STEPS <n> gives one answer with n tool steps (the third
-one failed).
+one failed); EDIT shows a finished edit step with a diff. GET /session lists the sessions with this
+server's folder, their time and parent; GET /config/providers offers example/model-1 and example/model-2.
 """
 import json
 import os
@@ -34,6 +35,7 @@ class World:
     def __init__(self):
         self.lock = threading.Lock()
         self.sessions = {}  # id -> [{"info", "parts"}]
+        self.meta = {}  # id -> {"parentID", "time"}
         self.clients = []
         self.waits = {}  # permission or question id -> (threading.Event, [reply])
         self.aborts = {}
@@ -91,6 +93,7 @@ class World:
         elif words[0] == "SUBAGENT":
             child = self.next("ses")
             self.sessions[child] = []
+            self.meta[child] = {"parentID": sid, "time": {"created": time.time(), "updated": time.time()}}
             self.emit("session.created", info={"id": child, "parentID": sid, "title": "explore"})
             rid = self.next("per")
             self.waits[rid] = (threading.Event(), [])
@@ -139,6 +142,16 @@ class World:
             self.emit("message.updated", sessionID=sid, info=info)
             for part in parts:
                 self.emit("message.part.updated", sessionID=sid, part=part, time=0)
+        elif words[0] == "EDIT":
+            mid = self.next("m")
+            info = {"id": mid, "sessionID": sid, "role": "assistant"}
+            part = {"id": self.next("p"), "sessionID": sid, "messageID": mid, "type": "tool", "tool": "edit",
+                    "callID": "e1", "state": {"status": "completed", "input": {"filePath": "notes.txt"}, "output": "",
+                                              "title": "notes.txt", "time": {"start": 0, "end": 0},
+                                              "metadata": {"diff": "--- notes.txt\n+++ notes.txt\n-old\n+new\n"}}}
+            self.sessions[sid].append({"info": info, "parts": [part]})
+            self.emit("message.updated", sessionID=sid, info=info)
+            self.emit("message.part.updated", sessionID=sid, part=part, time=0)
         elif words[0] == "SLOW":
             ev = self.aborts.setdefault(sid, threading.Event())
             ev.clear()
@@ -201,7 +214,11 @@ class Handler(BaseHTTPRequestHandler):
                 WORLD.clients.remove(q)
             return None
         if self.path == "/session":
-            return self.reply(200, [{"id": k} for k in WORLD.sessions])
+            return self.reply(200, [dict({"id": k, "title": "t-" + k, "directory": os.getcwd()}, **WORLD.meta.get(k, {}))
+                                    for k in WORLD.sessions])
+        if self.path == "/config/providers":
+            return self.reply(200, {"providers": [{"id": "example", "models": {
+                "model-1": {"name": "Model One"}, "model-2": {"name": "Model Two"}}}], "default": {"example": "model-1"}})
         if self.path == "/permission":
             return self.reply(404 if MODE == "noapi" else 200, [])
         if len(parts) == 2 and parts[0] == "session":
@@ -217,6 +234,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/session":
             sid = WORLD.next("ses")
             WORLD.sessions[sid] = []
+            WORLD.meta[sid] = {"time": {"created": time.time(), "updated": time.time()}}
             return self.reply(200, {"id": sid})
         if len(parts) == 3 and parts[0] == "session" and parts[2] == "prompt_async":
             text = body["parts"][0]["text"]

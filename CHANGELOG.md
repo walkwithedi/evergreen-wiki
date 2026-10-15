@@ -2,8 +2,11 @@
 
 All three skills share one version number. To release, update this file, the "Version:" line of every SKILL.md and the plugin manifests together and merge to main; the release workflow then publishes v<version>.
 
-## Unreleased
+## 1.18.0
 
+The browser client can open as a front end for OpenCode, with the knowledge base folded away.
+- tools/kb-client --chat-first: the page opens on the conversation; the libraries, Manage, Skills, the task buttons, the stage bar, the ideas and the knowledge-base items of Getting started fold under a Knowledge base button (remembered by the browser). Above the conversation: the work folder (chosen with the folder browser, the last five remembered; never the root, the home folder, a folder holding it or a system folder; agent.check_workdir), a model list (GET /config/providers, sent with the message as model; for the current conversation) and Earlier conversations (GET /session, the work folder's main conversations, newest first; POST /api/chat/sessions and /api/chat/switch). Choosing a folder starts OpenCode there and picks up that folder's last conversation (POST /api/chat/workdir). Reads and edits inside the work folder are answered by the client (places["edit"] in agent.decide); commands other than read-only ones and anything outside it still ask, and locked skill folders stay refused. An edit step carries its diff (metadata.diff, shown up to 400 lines under Show the change). kb-client.json keeps the work folder, the recent ones and each folder's last conversation.
+- tools/kb-client --simple: the welcome text no longer names Roll back, Move and Uninstall.
 - tools/kb-client: Allow everything (conversation header, and Allow everything on this page on each card; POST /api/chat/allow_all). After one confirmation the client answers every request itself, including the cards already waiting, until it is switched off or the client quits; kept in memory only, so it outlasts reloading the page and New conversation but not a restart. Changes to the knowledge-base skills are still refused.
 
 ## 1.17.0

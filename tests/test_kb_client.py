@@ -554,6 +554,70 @@ class ChatTest(unittest.TestCase):
         self.assertEqual(s.post("/api/chat/permission", {"id": "unknown", "allow": True})[0], 409)
         self.assertEqual(s.get("/api/chat/state", token=False)[0], 403)
 
+    def test_chat_first(self):
+        work = self.p("home", "projects", "atlas")
+        os.makedirs(work)
+        work = os.path.realpath(work)  # the temporary folder may be under a link to a system folder (/var on macOS)
+        ev = self.start("", "--chat-first")
+        ev.until(lambda e: e["type"] == "agent" and e["state"] == "ready", "ready")
+        s = self.server
+        self.assertTrue(s.get("/api/state")[1]["chat_first"])
+        agent = s.get("/api/chat/state")[1]["agent"]
+        self.assertEqual((agent["workdir"], agent["recent"]), ("", []))
+        self.assertEqual([m["id"] for m in agent["models"]], ["example/model-1", "example/model-2"])
+        # folders that cannot be the work folder
+        for path, why in ((self.home, "too_wide"), (self.tmp, "too_wide"), ("/", "too_wide"), ("/etc", "system"),
+                          (self.p("home", "missing"), "missing"), ("relative", "missing")):
+            status, r = s.post("/api/chat/workdir", {"path": path})
+            self.assertEqual((status, r.get("reason")), (400, why), path)
+        # a work folder starts OpenCode there; editing inside it needs no card, outside it does
+        status, r = s.post("/api/chat/workdir", {"path": work})
+        self.assertEqual(status, 200, r)
+        ev.until(lambda e: e["type"] == "agent" and e["state"] == "starting" and e.get("restart") == "workdir", "restart")
+        ev.until(lambda e: e["type"] == "agent" and e["state"] == "ready", "ready in the work folder")
+        self.assertEqual([c for c in self.calls() if "cwd" in c][-1]["cwd"], os.path.realpath(work))
+        self.send("PERM edit " + os.path.join(work, "notes.txt"))
+        self.assertEqual(ev.until(lambda e: e["type"] in ("auto", "permission"))["type"], "auto")
+        ev.until(lambda e: e["type"] == "status" and e["status"] == "idle", "idle")
+        self.send("PERM edit " + self.p("home", "elsewhere.txt"))
+        card = ev.until(lambda e: e["type"] in ("auto", "permission"))
+        self.assertEqual(card["type"], "permission")
+        s.post("/api/chat/permission", {"id": card["id"], "reply": "reject"})
+        ev.until(lambda e: e["type"] == "status" and e["status"] == "idle", "idle")
+        # a model of OpenCode's settings goes with the message; another is refused
+        self.send("hello", model="example/model-2")
+        ev.until(lambda e: e["type"] == "status" and e["status"] == "idle", "idle")
+        prompt = [c for c in self.calls() if c.get("path", "").endswith("/prompt_async")][-1]
+        self.assertEqual(prompt["body"]["model"], {"providerID": "example", "modelID": "model-2"})
+        self.assertEqual(s.post("/api/chat/send", {"text": "x", "model": "other/x"})[0], 400)
+        # an edit step brings its diff
+        self.send("EDIT")
+        step = ev.until(lambda e: e["type"] == "part" and e.get("kind") == "tool", "edit step")
+        self.assertIn("+new", step["diff"])
+        ev.until(lambda e: e["type"] == "status" and e["status"] == "idle", "idle")
+        # earlier conversations of the folder, and going back to one
+        first = s.get("/api/chat/state")[1]["agent"]["session"]
+        s.post("/api/chat/new", {})
+        ev.until(lambda e: e["type"] == "reset", "reset")
+        listed = s.post("/api/chat/sessions", {})[1]
+        self.assertIn(first, [x["id"] for x in listed["sessions"]])
+        self.assertEqual(s.post("/api/chat/switch", {"session": "nope"})[0], 404)
+        self.assertEqual(s.post("/api/chat/switch", {"session": first})[0], 200)
+        st = s.get("/api/chat/state")[1]
+        self.assertEqual(st["agent"]["session"], first)
+        self.assertIn("hello", [h.get("text") for h in st["history"]])
+        saved = json.loads(read(self.p("home", ".config", "evergreen-wiki", "kb-client.json")))
+        self.assertEqual((saved["workdir"], saved["recent"], saved["sessions"][saved["workdir"]]),
+                         (os.path.realpath(work), [os.path.realpath(work)], first))
+
+    def test_chat_first_requests_need_the_option(self):
+        self.ready()
+        s = self.server
+        self.assertFalse(s.get("/api/state")[1]["chat_first"])
+        for what in ("workdir", "sessions", "switch"):
+            self.assertEqual(s.post("/api/chat/" + what, {})[0], 404, what)
+        self.assertEqual(s.post("/api/chat/send", {"text": "x", "model": "example/model-1"})[0], 400)
+
     def test_permission_asked_and_answered(self):
         ev = self.ready()
         self.send("PERM edit " + self.p("elsewhere", "a.md"))
@@ -870,6 +934,36 @@ class FindOpenCodeTest(unittest.TestCase):
 @unittest.skipUnless(os.name == "posix", "the client runs on Linux desktops")
 class DecideTest(unittest.TestCase):
     """Which permission requests the client answers itself (agent.decide)."""
+
+    def test_work_folder(self):
+        work = os.path.join(self.tmp, "home", "projects", "atlas")
+        os.makedirs(work)
+        places = dict(self.places, edit=[work])
+        for perm in ("edit", "write", "read", "list"):
+            self.assertTrue(agent.decide(perm, [os.path.join(work, "src", "a.py")], places, work), perm)
+            self.assertTrue(agent.decide(perm, ["src/a.py"], places, work), perm)
+        self.assertFalse(agent.decide("edit", [os.path.join(self.tmp, "home", "b.py")], places, work))
+        self.assertFalse(agent.decide("edit", [os.path.join(work, "a.py")], self.places, work))
+        self.assertTrue(agent.decide("bash", [f"ls {work}"], places, work))
+        self.assertFalse(agent.decide("bash", ["rm a.py"], places, work))
+        # a locked folder inside the work folder is refused before anything is allowed
+        locked = os.path.join(work, "skills", "kb-query")
+        self.assertTrue(agent.locked_target("edit", [os.path.join(locked, "SKILL.md")], dict(places, locked=[locked]), work))
+
+    def test_check_workdir(self):
+        home = os.path.realpath(os.path.expanduser("~"))
+        for path, why in (("", "missing"), ("rel", "missing"), ("/", "too_wide"), (home, "too_wide"),
+                          (os.path.dirname(home), "too_wide"), ("/etc", "system"), ("/usr/share", "system")):
+            with self.assertRaises(ValueError) as cm:
+                agent.check_workdir(path)
+            self.assertEqual(str(cm.exception), why, path)
+        self.assertEqual(agent.check_workdir(self.lib), self.lib)
+
+    def test_edit_diff(self):
+        part = {"type": "tool", "tool": "edit", "id": "p", "messageID": "m",
+                "state": {"status": "completed", "title": "a.py", "metadata": {"diff": "-a\n+b\n"}}}
+        self.assertEqual(agent.part_event(part, "assistant")["diff"], "-a\n+b\n")
+        self.assertNotIn("diff", agent.part_event(dict(part, tool="bash"), "assistant"))
 
     def setUp(self):
         self.tmp = os.path.realpath(tempfile.mkdtemp())

@@ -55,6 +55,7 @@
       modify_req: "Change the skill {name} (its folder: {folder}). Change: {how}. Details: {detail}\nEdit only the files in that folder, keep the SKILL.md front matter (name, description) valid, and tell me what you changed. A backup was made before this request.",
       new_req: "Fill in the new skill {name} (its folder: {folder}): complete the steps and the output section of its SKILL.md so that it does what its description says, keep the description to one clear sentence with two or three example phrases, and tell me how to use it.",
       locked_note: "Refused without asking: the knowledge-base skills are locked and only upgraded ({what}).",
+      welcome_simple: "Set up installs the skills, makes a library and tells your agent about it; choose it again to add another library. Back up keeps a copy of what Set up wrote. Every step shows a preview before it changes anything.",
       welcome: "Set up installs the skills, makes a library and tells your agent about it; choose it again to add another library. Back up, Roll back, Move and Uninstall manage what Set up wrote. Every step shows a preview before it changes anything.",
       cancel_step: "Cancel this step",
       chat_title: "Conversation",
@@ -206,7 +207,17 @@
       remembered: "{n} Always allow answers remembered",
       forget: "Clear",
       forget_confirm: "Forget every Always allow answer? The assistant will ask again for those actions, and OpenCode is restarted so that it forgets them too.",
-      chat_restarting_forget: "Restarting OpenCode so that it forgets the Always allow answers..."
+      chat_restarting_forget: "Restarting OpenCode so that it forgets the Always allow answers...",
+      title_chat: "OpenCode",
+      kb_open: "Knowledge base \u25b8", kb_close: "Fold the knowledge base",
+      workdir_label: "Work folder:", workdir_none: "none chosen (your home folder; edits ask first)",
+      workdir_change: "Change\u2026", workdir_recent: "Recent folders", workdir_title: "Choose the work folder",
+      workdir_hint: "The assistant reads and edits files in this folder without asking; commands and anything outside it still ask.",
+      model_default: "Model: as in the settings",
+      sessions_btn: "Earlier conversations", sessions_title: "Earlier conversations in this folder",
+      sessions_none: "No earlier conversation in this folder.", session_untitled: "(untitled)",
+      diff_show: "Show the change", diff_more: "\u2026 {n} more lines; open the file to see them all.",
+      chat_restarting_workdir: "Starting OpenCode in the chosen folder..."
     },
     zh: {
       title: "知识库",
@@ -259,6 +270,7 @@
       modify_req: "修改技能 {name}（文件夹：{folder}）。要改的方面：{how}。具体说明：{detail}\n只改这个文件夹里的文件，保持 SKILL.md 开头的 name 和 description 完整有效，改完告诉我改了什么。提出这个请求前已经做了备份。",
       new_req: "补全新技能 {name}（文件夹：{folder}）：把 SKILL.md 的步骤和输出两节写完整，让它做到描述里说的事；描述保持一句清楚的话，带两三个示例口令；最后告诉我怎么用。",
       locked_note: "已直接拒绝：知识库技能已锁定，只能升级（{what}）。",
+      welcome_simple: "「安装与建库」会装好技能、建一个知识库并告诉助手；要再加一个库时再选一次。「备份」保存一份安装写下的内容。每一步改动前都会先给预览。",
       welcome: "「安装与建库」会装好技能、建一个知识库并告诉助手；要再加一个库时再选一次。备份、回滚、移动和卸载用来管理安装写下的内容。每一步改动前都会先给预览。",
       cancel_step: "取消这一步",
       chat_title: "对话",
@@ -410,7 +422,17 @@
       remembered: "已记住 {n} 项「总是允许」",
       forget: "清除",
       forget_confirm: "清除所有「总是允许」吗？之后这些操作助手会再次询问；OpenCode 会重新启动，让它也忘掉这些授权。",
-      chat_restarting_forget: "正在重新启动 OpenCode，让它忘掉「总是允许」的授权…"
+      chat_restarting_forget: "正在重新启动 OpenCode，让它忘掉「总是允许」的授权…",
+      title_chat: "OpenCode 工作台",
+      kb_open: "知识库 \u25b8", kb_close: "收起知识库",
+      workdir_label: "工作文件夹：", workdir_none: "未选择（家目录；改文件前会先问）",
+      workdir_change: "更换\u2026", workdir_recent: "最近的文件夹", workdir_title: "选择工作文件夹",
+      workdir_hint: "助手在这个文件夹里读、改文件不再询问；运行命令和文件夹以外的操作仍会询问。",
+      model_default: "模型：按配置",
+      sessions_btn: "历史会话", sessions_title: "这个文件夹里的历史会话",
+      sessions_none: "这个文件夹里还没有历史会话。", session_untitled: "（无标题）",
+      diff_show: "查看改动", diff_more: "\u2026 另有 {n} 行，打开文件查看全部。",
+      chat_restarting_workdir: "正在在所选文件夹里启动 OpenCode…"
     }
   };
 
@@ -593,6 +615,8 @@
     // A client started with --simple refuses moving, uninstalling, rolling back, changing skills and
     // forgetting permission answers; style.css hides their buttons under body.simple.
     document.body.classList.toggle("simple", !!state.simple);
+    applyKb();
+    $("welcome").textContent = t(state.simple ? "welcome_simple" : "welcome");
     var libs = $("libs");
     libs.textContent = "";
     state.libraries.forEach(function (lib) {
@@ -623,7 +647,7 @@
     var chip = !a.program ? ["bad", t("agent_missing")] : (a.model ? ["good", t("agent_ok")] : ["warn", t("agent_no_model")]);
     status.appendChild(el("span", { "class": "chip " + chip[0], title: a.program ? a.program + "  (" + a.how + ")" : "" }, chip[1]));
     var names = state.skills.map(function (s) { return s.name; });
-    status.appendChild(el("span", { "class": "chip " + (names.length ? "good" : "warn"),
+    status.appendChild(el("span", { "class": "chip kb-only " + (names.length ? "good" : "warn"),
       title: state.skills.map(function (s) { return s.folder; }).join("\n") },
       names.length ? t("skills_in", { names: names.join(", ") }) : t("skills_none")));
     $("backups").textContent = state.backups ? t("backups", { n: state.backups }) : t("no_backups");
@@ -657,7 +681,10 @@
 
   function renderChecklist() {
     if (!state) return;
-    var items = checklist();
+    // --chat-first with the knowledge base folded: only whether OpenCode can be used
+    var kbShown = !state.chat_first || kbOpen();
+    var items = kbShown ? checklist() : checklist().slice(0, 2);
+    var need = kbShown ? 5 : 2;
     var list = $("check-list");
     list.textContent = "";
     items.forEach(function (x) {
@@ -678,8 +705,8 @@
       }
       list.appendChild(li);
     });
-    var ready = items.slice(0, 5).every(function (x) { return x[0] === true; });
-    $("check-state").textContent = items.slice(0, 5).filter(function (x) { return x[0] === true; }).length + "/5";
+    var ready = items.slice(0, need).every(function (x) { return x[0] === true; });
+    $("check-state").textContent = items.slice(0, need).filter(function (x) { return x[0] === true; }).length + "/" + need;
     var tries = $("check-tries");
     tries.textContent = "";
     if (ready) {
@@ -690,10 +717,10 @@
         tries.appendChild(b);
       });
     }
-    show(tries, ready);
+    show(tries, ready && kbShown);
     // Folded once by itself when Set up (or a recheck) completes what was missing; what the user chooses
     // afterwards stays. OpenCode still starting when the page opens does not count as missing.
-    var missing = [0, 2, 3, 4].some(function (i) { return items[i][0] !== true; });
+    var missing = [0, 2, 3, 4].some(function (i) { return i < items.length && items[i][0] !== true; });
     if (ready && checkMissing) saveFold("folded");
     checkMissing = missing;
     checkReady = ready;
@@ -1002,7 +1029,8 @@
 
   // ---------- conversation ----------
 
-  var chat = { source: null, phase: "", ready: false, busy: false, restarting: false, simple: false, allowAll: false, msgs: {}, parts: {}, cards: {} };
+  var chat = { source: null, phase: "", ready: false, busy: false, restarting: false, simple: false, allowAll: false, msgs: {}, parts: {}, cards: {},
+               model: "", workdir: "", recent: [], models: [] };
 
   function chatInfo(text, output) {
     $("chat-info").textContent = text || "";
@@ -1026,6 +1054,7 @@
       b.title = noLib ? t("chat_no_library") : (chat.simple && batch ? t("simple_no_intake") : "");
     });
     $("chat-new").disabled = !chat.ready || chat.busy;
+    ["workdir-change", "workdir-recent", "sessions"].forEach(function (id) { $(id).disabled = !chat.ready || chat.busy; });
     show($("chat-stop"), chat.ready && chat.busy);
     $("chat-state").textContent = !chat.ready ? "" : (chat.busy ? t("chat_busy") : t("chat_ready"));
     renderChecklist();
@@ -1035,8 +1064,9 @@
     if (a.state !== "off") chat.phase = a.state;
     if (a.state === "starting") {
       chat.ready = false;
-      if (a.restart) chat.restarting = a.restart === "forget" ? "forget" : true;
-      chatInfo(t(chat.restarting === "forget" ? "chat_restarting_forget" : chat.restarting ? "chat_restarting"
+      if (a.restart) chat.restarting = a.restart === "forget" || a.restart === "workdir" ? a.restart : true;
+      chatInfo(t(chat.restarting === "forget" || chat.restarting === "workdir" ? "chat_restarting_" + chat.restarting
+        : chat.restarting ? "chat_restarting"
         : "chat_starting"), a.line || "");
     } else if (a.state === "ready") {
       chat.ready = true;
@@ -1113,6 +1143,7 @@
       p.textContent = line + (ev.error ? "\n" + ev.error : "");
       p.className = "tool" + (ev.status === "error" ? " failed" : "");
       p.dataset.tool = ev.tool || "";
+      if (ev.diff) p.appendChild(diffFold(ev.diff));
     } else {
       p.textContent = ev.text;
       if (ev.role === "user") dropQueued(ev.text);
@@ -1299,12 +1330,99 @@
     else if (ev.type === "permission") permissionCard(ev);
     else if (ev.type === "question") questionCard(ev);
     else if (ev.type === "permission_done" || ev.type === "question_done") dropCard(ev.id);
-    else if (ev.type === "reset") clearChat();
+    else if (ev.type === "reset") { chat.model = ""; $("model").value = ""; clearChat(); }
+    else if (ev.type === "workdir") chatBar(ev);
     else if (ev.type === "allow_all") {
       if (chat.allowAll !== ev.on) note(t(ev.on ? "allow_all_note_on" : "allow_all_note_off"), ev.on ? "error" : "auto");
       chat.allowAll = ev.on;
       chatEnable();
     }
+  }
+
+  // ---------- --chat-first: the knowledge base folded, a work folder, models, earlier conversations ----------
+
+  function kbOpen() {
+    try { return localStorage.getItem("kb-client-kb-open") === "open"; } catch (e) { return false; }
+  }
+
+  // body.chat-first hides the knowledge-base parts of the page (style.css) until body.kb-open.
+  function applyKb() {
+    var cf = !!(state && state.chat_first);
+    document.body.classList.toggle("chat-first", cf);
+    document.body.classList.toggle("kb-open", cf && (kbOpen() || !!job));
+    show($("kb-toggle"), cf);
+    show($("chat-bar"), cf);
+    $("kb-toggle").textContent = t(kbOpen() ? "kb_close" : "kb_open");
+    $("kb-toggle").setAttribute("aria-expanded", kbOpen() ? "true" : "false");
+    var title = t(cf ? "title_chat" : "title");
+    $("title").textContent = title;
+    document.title = title;
+  }
+
+  function toggleKb() {
+    try { localStorage.setItem("kb-client-kb-open", kbOpen() ? "folded" : "open"); } catch (e) { /* this view only */ }
+    applyKb();
+    renderChecklist();
+  }
+
+  function chatBar(a) {
+    if (a.workdir !== undefined) chat.workdir = a.workdir || "";
+    if (a.recent) chat.recent = a.recent;
+    if (a.models) chat.models = a.models;
+    $("workdir").textContent = chat.workdir || t("workdir_none");
+    show($("workdir-note"), !!(state && state.chat_first && chat.workdir));
+    var sel = $("workdir-recent");
+    sel.textContent = "";
+    sel.appendChild(el("option", { value: "" }, t("workdir_recent")));
+    chat.recent.filter(function (d) { return d !== chat.workdir; }).forEach(function (d) {
+      sel.appendChild(el("option", { value: d }, d));
+    });
+    show(sel, sel.options.length > 1);
+    var m = $("model");
+    var keep = chat.model;
+    m.textContent = "";
+    m.appendChild(el("option", { value: "" }, t("model_default")));
+    chat.models.forEach(function (x) { m.appendChild(el("option", { value: x.id }, x.name + "  (" + x.id + ")")); });
+    chat.model = chat.models.some(function (x) { return x.id === keep; }) ? keep : "";
+    m.value = chat.model;
+    show(m, chat.models.length > 1);
+  }
+
+  function setWorkdir(path) {
+    if (!path) return;
+    api("POST", "/api/chat/workdir", { path: path }).catch(function (e) { note(String(e.message), "error"); });
+  }
+
+  function sessionsCard() {
+    api("POST", "/api/chat/sessions", {}).then(function (r) {
+      var c = card("sessions", t("sessions_title"));
+      var list = r.sessions.filter(function (x) { return x.id !== r.current; });
+      if (!list.length) c.appendChild(el("p", { "class": "hint" }, t("sessions_none")));
+      list.forEach(function (x) {
+        var when = typeof x.updated === "number" && x.updated ? new Date(x.updated > 1e12 ? x.updated : x.updated * 1000).toLocaleString() : "";
+        var b = el("button", { type: "button", "class": "quiet session" }, (x.title || t("session_untitled")) + (when ? "  \u00b7  " + when : ""));
+        b.addEventListener("click", function () {
+          dropCard("sessions");
+          api("POST", "/api/chat/switch", { session: x.id }).then(chatLoad).catch(function (e) { note(String(e.message), "error"); });
+        });
+        c.appendChild(b);
+      });
+      buttonRow(c, [[t("close"), "quiet", function () { dropCard("sessions"); }]]);
+      c.scrollIntoView({ block: "nearest" });
+    }).catch(function (e) { note(String(e.message), "error"); });
+  }
+
+  var DIFF_LINES = 400;
+
+  function diffFold(diff) {
+    var lines = diff.replace(/\n$/, "").split("\n");
+    var pre = el("pre", { "class": "diff" });
+    lines.slice(0, DIFF_LINES).forEach(function (l) {
+      var cls = /^(\+\+\+|---)/.test(l) ? "head" : l[0] === "+" ? "add" : l[0] === "-" ? "del" : l.indexOf("@@") === 0 ? "hunk" : "";
+      pre.appendChild(el("span", cls ? { "class": cls } : {}, l + "\n"));
+    });
+    if (lines.length > DIFF_LINES) pre.appendChild(el("span", { "class": "hunk" }, t("diff_more", { n: lines.length - DIFF_LINES })));
+    return fold(t("diff_show"), pre);
   }
 
   // Allow everything on the page: the client answers every request itself, except changes to the locked
@@ -1719,6 +1837,7 @@
       clearChat();
       st.history.forEach(showPart);
       chatAgent(st.agent);
+      chatBar(st.agent);
       chat.allowAll = !!st.agent.allow_all;
       chat.busy = st.agent.status && st.agent.status !== "idle";
       (st.agent.permissions || []).forEach(permissionCard);
@@ -1741,6 +1860,7 @@
     if (!text.trim()) return;
     var body = { text: text };
     if (material && material.length) body.material = material;
+    if (chat.model) body.model = chat.model;
     if (chat.busy) {
       var n = el("div", { "class": "note queued" }, t("queued", { text: text.length > 80 ? text.slice(0, 80) + "\u2026" : text }));
       n.dataset.text = text;
@@ -1926,6 +2046,17 @@
   translate();
   loadProgress();  // what is already finished is known, so only new batches get a card
   $("check-toggle").addEventListener("click", foldChecklist);
+  $("kb-toggle").addEventListener("click", toggleKb);
+  $("workdir-change").addEventListener("click", function () {
+    openBrowser(chat.workdir || (state && state.home) || "", setWorkdir);
+  });
+  $("workdir-recent").addEventListener("change", function () {
+    var v = $("workdir-recent").value;
+    $("workdir-recent").value = "";
+    setWorkdir(v);
+  });
+  $("model").addEventListener("change", function () { chat.model = $("model").value; });
+  $("sessions").addEventListener("click", sessionsCard);
   $("skill-new").addEventListener("click", newSkill);
   $("skill-import").addEventListener("click", function () { startAction("skill_import"); });
   $("step-toggle").addEventListener("click", function () { foldStep(!$("log").hidden); });

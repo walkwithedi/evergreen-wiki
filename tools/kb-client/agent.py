@@ -42,6 +42,14 @@ COMMON_DIRS = ("~/.opencode/bin", "~/.local/bin", "~/bin", "/usr/local/bin", "~/
 TERMINALS = (("x-terminal-emulator", ["-e"]), ("mate-terminal", ["-x"]), ("gnome-terminal", ["--"]),
              ("konsole", ["-e"]), ("xterm", ["-e"]))
 SHELL_TIMEOUT = 10
+# A work folder (--chat-first) is never one of these, nor the home folder or a folder holding it: the
+# assistant may edit files inside it without a card.
+SYSTEM_DIRS = ("/bin", "/boot", "/dev", "/etc", "/lib", "/lib32", "/lib64", "/libx32", "/proc", "/run", "/sbin",
+               "/sys", "/usr", "/var")
+MAX_RECENT = 5  # work folders remembered
+MAX_SESSIONS = 50  # conversations listed for a work folder
+EDIT_TOOLS = ("edit", "write", "patch", "multiedit", "apply_patch")
+MAX_DIFF = 200000  # characters of an edit's diff passed to the page
 
 
 # ---------- finding OpenCode ----------
@@ -120,6 +128,25 @@ def pattern_path(pattern, cwd):
         p = p if p.endswith(os.sep) else os.path.dirname(p)
     p = p or "."
     return real(p if os.path.isabs(p) else os.path.join(cwd, p))
+
+
+def check_workdir(path):
+    """The real path of a folder the assistant may work in with --chat-first. Raises ValueError with
+    "missing" (not an existing absolute folder), "too_wide" (the root, the home folder or a folder holding
+    it) or "system" (inside SYSTEM_DIRS)."""
+    path = str(path or "").strip()
+    if not path or not os.path.isabs(os.path.expanduser(path)):
+        raise ValueError("missing")
+    p = real(os.path.expanduser(path))
+    if not os.path.isdir(p):
+        raise ValueError("missing")
+    if p == os.sep or inside(real(os.path.expanduser("~")), p):
+        raise ValueError("too_wide")
+    # the system folders as written, not resolved: on some systems they are links (/var to /private/var)
+    given = os.path.normpath(os.path.abspath(os.path.expanduser(path)))
+    if any(x == d or x.startswith(d + os.sep) for x in (given, p) for d in SYSTEM_DIRS):
+        raise ValueError("system")
+    return p
 
 
 def unquoted(cmd):
@@ -280,7 +307,7 @@ def read_only_command(command, places, cwd):
         tokens = list(lex)
     except ValueError:
         return False
-    readable = places.get("write", []) + places.get("read", []) + places.get("scripts", [])
+    readable = places.get("write", []) + places.get("read", []) + places.get("scripts", []) + places.get("edit", [])
     commands, words = [], []
     for tok in tokens:
         if tok in SEPARATORS:
@@ -360,7 +387,8 @@ def decide(permission, patterns, places, cwd):
     """True when the client answers "once" itself. places: {"write": [...], "read": [...],
     "scripts": [...]} as real folder paths. Writing only inside a registered library; reading also in the
     chosen material, the skills and the agent's own settings; commands only the skills' own scripts,
-    plain mkdir and cp within those places, and read-only commands on those places.
+    plain mkdir and cp within those places, and read-only commands on those places. places["edit"] (the
+    work folder of --chat-first) is read and edited freely, and read-only commands may read it.
     Everything else, and anything that cannot be read clearly, goes to the user."""
     patterns = [p for p in (patterns or []) if str(p).strip()]
     if not patterns:
@@ -368,12 +396,13 @@ def decide(permission, patterns, places, cwd):
     if permission == "bash":
         return all(skill_command(p, places.get("scripts", []), cwd) or file_command(p, places, cwd)
                    or read_only_command(p, places, cwd) for p in patterns)
+    edit = places.get("edit", [])  # the work folder of --chat-first: read and edited without a card
     if permission == "task":
         return all(str(p).strip() in READ_ONLY_AGENTS for p in patterns)
     if permission in ("edit", "write"):
-        roots = places.get("write", [])
+        roots = places.get("write", []) + edit
     elif permission in ("read", "list", "glob", "grep", "external_directory"):
-        roots = places.get("write", []) + places.get("read", []) + places.get("scripts", [])
+        roots = places.get("write", []) + places.get("read", []) + places.get("scripts", []) + edit
     else:
         return False
     for p in patterns:
@@ -484,8 +513,12 @@ def part_event(part, role, child=False):
             inp = state.get("input") or {}
             detail = str(inp.get("command") or inp.get("filePath") or inp.get("path") or inp.get("pattern") or "")
         script = stage_script((state.get("input") or {}).get("command", "")) if part.get("tool") == "bash" else ""
-        return dict(base, kind="tool", tool=str(part.get("tool", "")), status=str(state.get("status", "")),
-                    detail=detail[:300], error=str(state.get("error", ""))[:300], script=script)
+        ev = dict(base, kind="tool", tool=str(part.get("tool", "")), status=str(state.get("status", "")),
+                  detail=detail[:300], error=str(state.get("error", ""))[:300], script=script)
+        diff = (state.get("metadata") or {}).get("diff") if part.get("tool") in EDIT_TOOLS else None
+        if isinstance(diff, str) and diff.strip():
+            ev["diff"] = diff[:MAX_DIFF]
+        return ev
     return None
 
 
@@ -494,9 +527,10 @@ def part_event(part, role, child=False):
 class Agent:
     """state: off, starting, ready, simple (opencode run per message), failed."""
 
-    def __init__(self, program, cwd, places, state_file, start_timeout=90):
+    def __init__(self, program, cwd, places, state_file, start_timeout=90, chat_first=False):
         self.program = program  # a Program
         self.cwd = cwd
+        self.chat_first = chat_first  # a work folder can be chosen; each keeps its own conversation
         self.places = places  # callable returning {"write", "read", "scripts"} without the material
         self.state_file = state_file
         self.start_timeout = start_timeout
@@ -520,6 +554,21 @@ class Agent:
         self.events_thread = None
         self.restart_pending = False
         self.always = self._load_always()  # {permission: [patterns]} answered with Always allow
+        saved = self._load_state()
+        self.workdir = ""
+        self.recent = []
+        self.sessions_by_dir = {}  # work folder ("" for none) -> its last conversation
+        self.models = []  # [{"id": "provider/model", "name"}] from OpenCode, read when it is ready
+        if chat_first:
+            self.recent = [x for x in saved.get("recent") or [] if isinstance(x, str)][:MAX_RECENT]
+            sd = saved.get("sessions")
+            self.sessions_by_dir = {str(k): str(v) for k, v in sd.items()} if isinstance(sd, dict) else {}
+            try:
+                self.workdir = check_workdir(saved.get("workdir") or "") if saved.get("workdir") else ""
+            except ValueError:
+                self.workdir = ""
+            if self.workdir:
+                self.cwd = self.workdir
         self.allow_all = False  # Allow everything on the page: until switched off or the client quits, never saved
 
     # ----- start and stop -----
@@ -569,6 +618,7 @@ class Agent:
         self.events_thread = threading.Thread(target=self._events, args=(stream, self.gen), daemon=True)
         self.events_thread.start()
         self._resume()
+        self.models = self._models() if self.chat_first else []
         self.feed.emit("agent", state="ready", session=self.session)
         if self.restart_pending:
             self.restart(self.restart_pending)
@@ -781,7 +831,8 @@ class Agent:
         return {"write": [real(x) for x in pl.get("write", [])],
                 "read": [real(x) for x in pl.get("read", []) + self.material],
                 "scripts": [real(x) for x in pl.get("scripts", [])],
-                "locked": [real(x) for x in pl.get("locked", [])]}
+                "locked": [real(x) for x in pl.get("locked", [])],
+                "edit": [self.workdir] if self.workdir else []}
 
     def _permission(self, p, child=False):
         rid = p.get("id", "")
@@ -842,13 +893,18 @@ class Agent:
             os.makedirs(os.path.dirname(self.state_file), exist_ok=True)
             tmp = self.state_file + ".tmp"
             with open(tmp, "w", encoding="utf-8") as f:
-                json.dump({"session": self.session, "always": self.always}, f, ensure_ascii=False)
+                data = {"session": self.session, "always": self.always}
+                if self.chat_first:
+                    data.update(workdir=self.workdir, recent=self.recent, sessions=self.sessions_by_dir)
+                else:  # what a --chat-first client keeps stays for its next start
+                    data.update({k: v for k, v in self._load_state().items() if k in ("workdir", "recent", "sessions")})
+                json.dump(data, f, ensure_ascii=False)
             os.replace(tmp, self.state_file)
         except OSError as e:
             log.warning("cannot save the conversation: %s", e)
 
     def _resume(self):
-        sid = self._load_saved()
+        sid = self.sessions_by_dir.get(self.workdir) if self.chat_first else self._load_saved()
         if sid and re.fullmatch(r"[\w-]{1,100}", sid):
             try:
                 code, _ = self.call("GET", f"/session/{sid}")
@@ -862,10 +918,12 @@ class Agent:
     def ensure_session(self):
         if self.session:
             return self.session
-        code, data = self.call("POST", "/session", {"title": "Knowledge base"})
+        code, data = self.call("POST", "/session", {"title": "Conversation" if self.chat_first else "Knowledge base"})
         if code != 200 or not isinstance(data, dict) or not data.get("id"):
             raise OSError(f"POST /session answered {code}")
         self.session = str(data["id"])
+        if self.chat_first:
+            self.sessions_by_dir[self.workdir] = self.session
         self._save()
         return self.session
 
@@ -898,7 +956,7 @@ class Agent:
                     out.append(pe)
         return out
 
-    def send(self, text, material=()):
+    def send(self, text, material=(), model=""):
         for path in material:
             if os.path.isabs(path) and path not in self.material:
                 self.material.append(path)
@@ -907,10 +965,92 @@ class Agent:
         if self.state != "ready":
             raise RuntimeError("not ready")
         sid = self.ensure_session()
-        code, _ = self.call("POST", f"/session/{sid}/prompt_async", {"parts": [{"type": "text", "text": text}]})
+        body = {"parts": [{"type": "text", "text": text}]}
+        if model:
+            if not any(m["id"] == model for m in self.models):
+                raise ValueError("model")
+            provider, _, name = model.partition("/")
+            body["model"] = {"providerID": provider, "modelID": name}
+        code, _ = self.call("POST", f"/session/{sid}/prompt_async", body)
         if code not in (200, 204):
             raise OSError(f"prompt answered {code}")
         return None
+
+    # ----- the work folder, earlier conversations and models (--chat-first) -----
+
+    def set_workdir(self, path):
+        """Makes path (check_workdir) the folder OpenCode works in, remembered with the recent ones, and
+        starts OpenCode there; the folder's last conversation is picked up. Raises ValueError (why) for a
+        folder that cannot be used and RuntimeError while the assistant is working."""
+        p = check_workdir(path)
+        with self.lock:
+            if self.status != "idle" or (self.run_proc and self.run_proc.poll() is None):
+                raise RuntimeError("busy")
+            self.workdir = p
+            self.cwd = p
+            self.recent = ([p] + [x for x in self.recent if x != p])[:MAX_RECENT]
+            self.material = []
+            self.roles.clear()
+            self.children.clear()
+            self.session = self.sessions_by_dir.get(p)
+        self._save()
+        self.feed.emit("workdir", workdir=p, recent=self.recent)
+        if not self.restart("workdir"):  # simple mode: each message starts OpenCode in the new folder
+            self.feed.emit("reset", session=self.session)
+        return p
+
+    def sessions(self):
+        """The main conversations of the work folder, newest first: [{"id", "title", "updated"}]."""
+        if self.state != "ready":
+            return []
+        code, data = self.call("GET", "/session")
+        out = []
+        where = self.workdir or real(os.path.expanduser("~"))
+        for s in data if code == 200 and isinstance(data, list) else []:
+            if not isinstance(s, dict) or not s.get("id") or s.get("parentID"):
+                continue
+            d = s.get("directory")
+            if d and real(str(d)) != where:
+                continue
+            times = s.get("time") or {}
+            out.append({"id": str(s["id"]), "title": str(s.get("title") or "")[:200],
+                        "updated": times.get("updated") or times.get("created") or 0})
+        out.sort(key=lambda x: x["updated"] if isinstance(x["updated"], (int, float)) else 0, reverse=True)
+        return out[:MAX_SESSIONS]
+
+    def switch(self, sid):
+        """Continues the earlier conversation sid of the work folder. False when it is not one of them."""
+        if not isinstance(sid, str) or not any(s["id"] == sid for s in self.sessions()):
+            return False
+        with self.lock:
+            if self.status != "idle":
+                raise RuntimeError("busy")
+            self.material = []
+            self.permissions.clear()
+            self.questions.clear()
+            self.roles.clear()
+            self.children.clear()
+            self.session = sid
+            self.sessions_by_dir[self.workdir] = sid
+        self._save()
+        self.feed.emit("reset", session=sid)
+        return True
+
+    def _models(self):
+        """The models OpenCode's settings offer, as "provider/model" ids; [] when it cannot say."""
+        try:
+            code, data = self.call("GET", "/config/providers")
+        except OSError:
+            return []
+        out = []
+        for prov in (data or {}).get("providers") or [] if code == 200 and isinstance(data, dict) else []:
+            if not isinstance(prov, dict) or not prov.get("id"):
+                continue
+            models = prov.get("models") or {}
+            for mid, m in (models.items() if isinstance(models, dict) else []):
+                name = (m or {}).get("name") if isinstance(m, dict) else ""
+                out.append({"id": f"{prov['id']}/{mid}", "name": str(name or mid)})
+        return out[:100]
 
     def stop(self):
         if self.state == "simple":
@@ -1006,4 +1146,5 @@ class Agent:
         return {"state": self.state, "reason": self.reason, "session": self.session, "status": self.status,
                 "output": "\n".join(self.output[-10:]) if self.state in ("simple", "failed") else "",
                 "permissions": list(self.permissions.values()), "questions": list(self.questions.values()),
+                "workdir": self.workdir, "recent": self.recent, "models": self.models,
                 "allow_all": self.allow_all}
