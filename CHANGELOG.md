@@ -2,6 +2,13 @@
 
 All three skills share one version number. To release, update this file, the "Version:" line of every SKILL.md and the plugin manifests together and merge to main; the release workflow then publishes v<version>.
 
+## 1.20.0
+
+The browser client files material itself, so that a file counts as filed only once it is in the library, and says plainly whether the knowledge-base skills are installed.
+- tools/kb-client File material (new intake.py, local libraries): the client runs kb-incremental's scripts for each chosen file (prep.py scan, prep.py file, package.py preview --run and deliver) and asks the assistant, in a new conversation per file, only for masking, term fixes, the head file and a decision file (partition, topic, type, short title, close-read), which it checks and asks again for up to three times. A file name already in the index goes back to the assistant (next version or another title). Duplicates by content hash are skipped; files no text can be read from are listed for the user. POST /api/intake (library and paths, or resume), POST /api/intake/stop, GET /api/intake; progress as "intake" events in the conversation stream; the conversation is refused (409) while a run is going. Google Drive libraries are filed by the assistant as before.
+- tools/kb-client task buttons: File material and Quick note with a line each; Continue intake only while files are left, File quick notes only while notes wait (libraries report their count as notes), Health check and Archive old versions under More. The buttons stay visible with the knowledge base folded.
+- tools/kb-client knowledge-base skills: one rule for the status chip and Getting started, the three skills in the folders OpenCode reads (/api/state kb_skills: found with folder and version, missing, folders checked). The chip is always shown and opens the details, with Install them when one is missing. The skill lists reload after Set up, Uninstall and Roll back, which left them out of date until the page was reloaded.
+
 ## 1.19.0
 
 The browser client folds the knowledge base the same way with or without --chat-first, keeps a skill list beside the conversation and formats the assistant's answers.
