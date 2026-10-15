@@ -158,6 +158,16 @@ class KbClientTest(unittest.TestCase):
         status, page = s.get("/", token=False)
         self.assertEqual(status, 200)
         self.assertIn("app.js", page)
+
+    def test_simple_refuses_the_hidden_steps(self):
+        self.assertFalse(self.server.get("/api/state")[1]["simple"])
+        s = Server(self.env, "--idle", "0", "--simple")
+        self.addCleanup(s.stop)
+        self.assertTrue(s.get("/api/state")[1]["simple"])
+        for action in ("rollback", "move", "uninstall", "skill_backup", "skill_restore", "skill_import", "skill_new"):
+            self.assertEqual(s.post("/api/action", {"action": action})[0], 403, action)
+        self.assertEqual(s.post("/api/chat/forget", {})[0], 403)
+        self.assertEqual(s.post("/api/action", {"action": "backup"})[0], 200)
         self.assertEqual(s.get("/../install.py", token=False)[0], 404)
         self.assertEqual(s.get("/%2e%2e/install.py", token=False)[0], 404)
         self.assertEqual(s.get("/kb_client.py", token=False)[0], 404)
