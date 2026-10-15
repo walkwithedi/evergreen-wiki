@@ -80,8 +80,10 @@
       agent_ok: "OpenCode ready",
       agent_no_model: "OpenCode: no model set",
       agent_missing: "OpenCode not found",
-      skills_none: "Skills not installed",
-      skills_in: "Skills: {names}",
+      kb_skills_ok: "Knowledge-base skills: {n}/{total} installed", kb_skills_missing: "Knowledge-base skills: {names} missing",
+      kb_skills_title: "Knowledge-base skills where OpenCode reads them",
+      kb_skills_found: "{name} (version {version}): {folder}", kb_skills_not_found: "{name}: not found",
+      kb_skills_checked: "Folders checked, in the order OpenCode reads them:", kb_skills_install: "Install them",
       backups: "{n} backups",
       no_backups: "No backups yet",
       result_ok: "Finished.",
@@ -103,6 +105,21 @@
       task_lint: "Health check",
       task_archive: "Archive old versions",
       task_resume: "Continue intake",
+      task_intake_hint: "Choose files or folders; each is written into the library",
+      task_note_hint: "Keep one sentence in the library at once",
+      task_lint_hint: "Look for broken links, missing pages and stale files",
+      task_archive_hint: "Move superseded versions to the archive folder",
+      task_more: "More", task_notes_n: "File quick notes ({n})",
+      intake_title: "Filing into {lib}: {done}/{total}",
+      intake_step_scan: "Reading {file}", intake_step_ask: "The assistant masks and places {file}",
+      intake_step_file: "Assembling {file}", intake_step_write: "Writing {file} into the library",
+      intake_st_waiting: "waiting", intake_st_working: "in progress", intake_st_written: "written",
+      intake_st_duplicate: "already in the library", intake_st_manual: "needs you", intake_st_failed: "failed",
+      intake_stop: "Stop", intake_stopping: "Stopping\u2026",
+      intake_done: "Done: {written} written, {duplicate} already in the library, {failed} failed, {manual} to handle by hand.",
+      intake_stopped: "Stopped: {waiting} not done yet. Continue picks them up.",
+      intake_continue: "Continue", intake_where: "Written into {root}",
+      intake_manual_go: "Hand the {n} unreadable files to the assistant",
       chat_one_agent: "If OpenCode is also open in a terminal, quit it before filing material, so that only one of them writes to the library.",
       chat_keys: "Enter sends, Shift+Enter starts a new line.",
       chat_stop: "Stop",
@@ -298,8 +315,10 @@
       agent_ok: "OpenCode 已就绪",
       agent_no_model: "OpenCode 未配置模型",
       agent_missing: "未找到 OpenCode",
-      skills_none: "技能未安装",
-      skills_in: "技能：{names}",
+      kb_skills_ok: "知识库技能：已安装 {n}/{total}", kb_skills_missing: "知识库技能：缺 {names}",
+      kb_skills_title: "知识库技能（OpenCode 读得到的位置）",
+      kb_skills_found: "{name}（版本 {version}）：{folder}", kb_skills_not_found: "{name}：没有找到",
+      kb_skills_checked: "检查过的文件夹（按 OpenCode 的读取顺序）：", kb_skills_install: "去安装",
       backups: "共 {n} 次备份",
       no_backups: "还没有备份",
       result_ok: "已完成。",
@@ -321,6 +340,21 @@
       task_lint: "体检",
       task_archive: "归档旧版",
       task_resume: "继续入库",
+      task_intake_hint: "选文件或文件夹，逐个写进知识库",
+      task_note_hint: "记一句话，马上存进知识库",
+      task_lint_hint: "查断链、缺页和过期文件",
+      task_archive_hint: "把被新版本取代的文件移到归档文件夹",
+      task_more: "更多", task_notes_n: "整理随手记（{n} 条）",
+      intake_title: "入库到「{lib}」：{done}/{total}",
+      intake_step_scan: "正在读取 {file}", intake_step_ask: "助手正在为 {file} 脱敏、决定放置",
+      intake_step_file: "正在组装 {file}", intake_step_write: "正在把 {file} 写进知识库",
+      intake_st_waiting: "等待", intake_st_working: "处理中", intake_st_written: "已写入",
+      intake_st_duplicate: "库里已有（重复）", intake_st_manual: "需要你处理", intake_st_failed: "失败",
+      intake_stop: "停止", intake_stopping: "正在停止\u2026",
+      intake_done: "完成：写入 {written} 个，库里已有 {duplicate} 个，失败 {failed} 个，需要手动处理 {manual} 个。",
+      intake_stopped: "已停止：还有 {waiting} 个没做，点「继续」接着做。",
+      intake_continue: "继续", intake_where: "写入位置：{root}",
+      intake_manual_go: "把 {n} 个读不出文字的文件交给助手",
       chat_one_agent: "如果终端里也开着 OpenCode，入库前请先退出它，免得两边同时写同一个知识库。",
       chat_keys: "回车发送，Shift+回车换行。",
       chat_stop: "停止",
@@ -652,10 +686,14 @@
     var a = state.agent;
     var chip = !a.program ? ["bad", t("agent_missing")] : (a.model ? ["good", t("agent_ok")] : ["warn", t("agent_no_model")]);
     status.appendChild(el("span", { "class": "chip " + chip[0], title: a.program ? a.program + "  (" + a.how + ")" : "" }, chip[1]));
-    var names = state.skills.map(function (s) { return s.name; });
-    status.appendChild(el("span", { "class": "chip kb-only " + (names.length ? "good" : "warn"),
-      title: state.skills.map(function (s) { return s.folder; }).join("\n") },
-      names.length ? t("skills_in", { names: names.join(", ") }) : t("skills_none")));
+    var ks = state.kb_skills || { ok: false, found: [], missing: [], checked: [] };
+    var sc = el("button", { type: "button", "class": "chip chip-button " + (ks.ok ? "good" : "bad"), id: "kb-skills-chip",
+      "aria-expanded": $("skill-pop").hidden ? "false" : "true", "aria-controls": "skill-pop" },
+      ks.ok ? t("kb_skills_ok", { n: ks.found.length, total: ks.found.length })
+        : t("kb_skills_missing", { names: ks.missing.join(", ") }));
+    sc.addEventListener("click", function () { show($("skill-pop"), $("skill-pop").hidden); drawSkillPop(); });
+    status.appendChild(sc);
+    drawSkillPop();
     $("backups").textContent = state.backups ? t("backups", { n: state.backups }) : t("no_backups");
     $("remembered-text").textContent = t("remembered", { n: state.remembered || 0 });
     show($("remembered"), !!state.remembered);
@@ -845,7 +883,7 @@
     var after = afterJob;
     afterJob = null;
     if (res === "ok" && after) after($("log").textContent);
-    if (action && action.indexOf("skill_") === 0) loadSkills();
+    if (action) loadSkills();  // Set up, Uninstall and Roll back change the skills too
     foldStep(res === "ok");
     refresh();
   }
@@ -1048,20 +1086,22 @@
 
   function chatEnable() {
     var on = chat.ready && !chat.busy;
-    $("chat-send").disabled = !chat.ready;  // while the assistant works, a message waits its turn
     $("chat-terminal").disabled = !chat.ready;
     $("chat-allow-all").disabled = !chat.ready || chat.simple;
     $("chat-allow-all").setAttribute("data-t", chat.allowAll ? "allow_all_on" : "allow_all");
     $("chat-allow-all").textContent = t(chat.allowAll ? "allow_all_on" : "allow_all");
     $("chat-allow-all").classList.toggle("on", chat.allowAll);
     var noLib = state !== null && !localLibs().length;
+    var filing = intakeRunning();
+    $("chat-send").disabled = !chat.ready || filing;  // while the assistant works, a message waits its turn
     Array.prototype.forEach.call(document.querySelectorAll("[data-task]"), function (b) {
       var batch = b.getAttribute("data-task") === "intake" || b.getAttribute("data-task") === "resume";
-      b.disabled = !on || noLib || (chat.simple && batch);
+      b.disabled = !on || noLib || filing || (chat.simple && batch);
       b.title = noLib ? t("chat_no_library") : (chat.simple && batch ? t("simple_no_intake") : "");
     });
-    $("chat-new").disabled = !chat.ready || chat.busy;
-    ["workdir-change", "workdir-recent", "sessions"].forEach(function (id) { $(id).disabled = !chat.ready || chat.busy; });
+    showTasks();
+    $("chat-new").disabled = !chat.ready || chat.busy || filing;
+    ["workdir-change", "workdir-recent", "sessions"].forEach(function (id) { $(id).disabled = !chat.ready || chat.busy || filing; });
     show($("chat-stop"), chat.ready && chat.busy);
     $("chat-state").textContent = !chat.ready ? "" : (chat.busy ? t("chat_busy") : t("chat_ready"));
     renderChecklist();
@@ -1655,6 +1695,7 @@
     else if (ev.type === "permission_done" || ev.type === "question_done") dropCard(ev.id);
     else if (ev.type === "reset") { chat.model = ""; $("model").value = ""; clearChat(); }
     else if (ev.type === "workdir") chatBar(ev);
+    else if (ev.type === "intake") { intake.run = ev.run; drawIntake(); chatEnable(); }
     else if (ev.type === "allow_all") {
       if (chat.allowAll !== ev.on) note(t(ev.on ? "allow_all_note_on" : "allow_all_note_off"), ev.on ? "error" : "auto");
       chat.allowAll = ev.on;
@@ -2252,12 +2293,128 @@
 
   function task(name) {
     if (name === "note") { noteCard(); return; }
+    if (name === "resume" && intakeLeft()) { startIntake({ resume: true }); return; }
     pickLibrary(function (lib) {
       if (name !== "intake") { say(withWork(t("say_" + name, { lib: lib.label }))); return; }
       openBrowser((state && state.home) || "", function (paths) {
-        say(withWork(t("say_intake", { lib: lib.label, paths: paths.join("\n") })), paths);
+        startIntake({ library: lib.id, paths: paths });
       }, true);
     });
+  }
+
+  // Which of the extra buttons apply: Continue intake while a run stopped with files left (or a batch
+  // intake of the skill is open), File quick notes while notes wait.
+  function showTasks() {
+    show($("task-resume"), !!(intakeLeft() || openRun()));
+    var notes = localLibs().reduce(function (n, l) { return n + (l.notes || 0); }, 0);
+    $("task-notes").textContent = t("task_notes_n", { n: notes });
+    show($("task-notes"), notes > 0);
+  }
+
+  // ---------- intake run by the client ----------
+  // The client runs the skill's scripts for each file and asks the assistant only to mask and place it
+  // (intake.py); the page shows each file's state, and what was written where once the run ends.
+
+  var intake = { run: null, closed: "" };
+
+  function intakeRunning() {
+    return !!(intake.run && (intake.run.state === "running" || intake.run.state === "stopping"));
+  }
+
+  function intakeLeft() {
+    var r = intake.run;
+    return !!(r && r.state === "stopped" && (r.counts.waiting || 0) > 0);
+  }
+
+  function startIntake(body) {
+    api("POST", "/api/intake", body).then(function (r) {
+      intake.run = r.run;
+      intake.closed = "";
+      drawIntake();
+      chatEnable();
+    }).catch(function (e) { note(String(e.message), "error"); });
+  }
+
+  function loadIntake() {
+    return api("GET", "/api/intake").then(function (r) {
+      intake.run = r.run;
+      drawIntake();
+      chatEnable();
+    }).catch(function () {});
+  }
+
+  var INTAKE_MARK = { waiting: "\u2022", working: "\u2026", written: "\u2713", duplicate: "=", manual: "!", failed: "\u2717" };
+
+  function drawIntake() {
+    var r = intake.run, box = $("intake");
+    if (!r || intake.closed === r.id + r.state) { show(box, false); return; }
+    show(box, true);
+    box.textContent = "";
+    var c = r.counts || {};
+    var done = (c.written || 0) + (c.duplicate || 0) + (c.manual || 0) + (c.failed || 0);
+    var head = el("div", { "class": "intake-head" });
+    head.appendChild(el("strong", {}, t("intake_title", { lib: r.label, done: done, total: r.total })));
+    var cur = r.items.filter(function (it) { return it.status === "working"; })[0];
+    var step = el("span", { "class": "intake-step" },
+      r.state === "stopping" ? t("intake_stopping") : cur && r.step ? t("intake_step_" + r.step, { file: cur.file }) : "");
+    head.appendChild(step);
+    if (r.state === "running") {
+      var stop = el("button", { type: "button", "class": "quiet small" }, t("intake_stop"));
+      stop.addEventListener("click", function () { api("POST", "/api/intake/stop", {}).catch(function () {}); });
+      head.appendChild(stop);
+    } else if (r.state !== "stopping") {
+      var close = el("button", { type: "button", "class": "quiet small" }, t("close"));
+      close.addEventListener("click", function () { intake.closed = r.id + r.state; drawIntake(); });
+      head.appendChild(close);
+    }
+    box.appendChild(head);
+    var bar = el("div", { "class": "intake-bar" });
+    var fill = el("span");
+    fill.style.width = (r.total ? Math.round(100 * done / r.total) : 0) + "%";
+    bar.appendChild(fill);
+    box.appendChild(bar);
+    var ul = el("ul", { "class": "intake-items" });
+    r.items.forEach(function (it) {
+      var li = el("li", { "class": "st-" + it.status });
+      li.appendChild(el("span", { "class": "mark", "aria-hidden": "true" }, INTAKE_MARK[it.status] || ""));
+      li.appendChild(el("span", { "class": "file" }, it.file));
+      var what = t("intake_st_" + it.status) + (it.name ? " \u2192 " + it.name : "") + (it.reason ? ": " + it.reason : "");
+      li.appendChild(el("span", { "class": "what" }, what));
+      ul.appendChild(li);
+    });
+    box.appendChild(ul);
+    if (cur) {
+      var at = ul.children[r.items.indexOf(cur)];
+      if (at) ul.scrollTop = Math.max(0, at.offsetTop - ul.offsetTop - 40);
+    }
+    if (r.state === "done" || r.state === "stopped") {
+      var sum = el("p", { "class": "intake-sum" }, r.state === "done"
+        ? t("intake_done", { written: c.written || 0, duplicate: c.duplicate || 0, failed: c.failed || 0, manual: c.manual || 0 })
+        : t("intake_stopped", { waiting: c.waiting || 0 }));
+      box.appendChild(sum);
+      if (c.written) box.appendChild(el("p", { "class": "hint" }, t("intake_where", { root: r.root })));
+      var row = el("div", { "class": "buttons" });
+      if (r.state === "stopped" && c.waiting) {
+        var go = el("button", { type: "button", "class": "primary small" }, t("intake_continue"));
+        go.addEventListener("click", function () { startIntake({ resume: true }); });
+        row.appendChild(go);
+      }
+      var manual = r.items.filter(function (it) { return it.status === "manual"; });
+      if (manual.length) {
+        var hand = el("button", { type: "button", "class": "small" }, t("intake_manual_go", { n: manual.length }));
+        hand.addEventListener("click", function () {
+          var paths = manual.map(function (it) { return it.source; });
+          say(withWork(t("say_intake", { lib: r.label, paths: paths.join("\n") })), paths);
+        });
+        row.appendChild(hand);
+      }
+      if (c.written) {
+        var g = el("button", { type: "button", "class": "quiet small" }, t("view_graph"));
+        g.addEventListener("click", function () { openGraph(r.library, true); });
+        row.appendChild(g);
+      }
+      if (row.children.length) box.appendChild(row);
+    }
   }
 
   // ---------- skills ----------
@@ -2332,6 +2489,43 @@
     show($("skills-empty"), skills.list.length === 0);
     setBusy(job !== null);
     drawSkillRows();
+  }
+
+  // The details under the knowledge-base skills chip: where each skill was found, which are missing,
+  // and the folders looked in.
+  function drawSkillPop() {
+    var pop = $("skill-pop");
+    var chip = $("kb-skills-chip");
+    if (chip) chip.setAttribute("aria-expanded", pop.hidden ? "false" : "true");
+    if (pop.hidden || !state) return;
+    var ks = state.kb_skills || { ok: false, found: [], missing: [], checked: [] };
+    pop.textContent = "";
+    pop.appendChild(el("p", { "class": "pop-title" }, t("kb_skills_title")));
+    var ul = el("ul");
+    ks.found.forEach(function (x) {
+      ul.appendChild(el("li", { "class": "good" }, "\u2713 " + t("kb_skills_found", { name: x.name, version: x.version || "?", folder: x.folder })));
+    });
+    ks.missing.forEach(function (name) { ul.appendChild(el("li", { "class": "bad" }, "! " + t("kb_skills_not_found", { name: name }))); });
+    pop.appendChild(ul);
+    pop.appendChild(el("p", { "class": "hint" }, t("kb_skills_checked")));
+    var cl = el("ul", { "class": "hint" });
+    ks.checked.forEach(function (f) { cl.appendChild(el("li", {}, f)); });
+    pop.appendChild(cl);
+    var row = el("div", { "class": "buttons" });
+    if (!ks.ok) {
+      var go = el("button", { type: "button", "class": "primary small" }, t("kb_skills_install"));
+      go.disabled = job !== null;
+      go.addEventListener("click", function () {
+        show(pop, false);
+        try { localStorage.setItem(kbKey(), "open"); } catch (e) { /* this view only */ }
+        startAction("setup");
+      });
+      row.appendChild(go);
+    }
+    var close = el("button", { type: "button", "class": "quiet small" }, t("close"));
+    close.addEventListener("click", function () { show(pop, false); drawSkillPop(); });
+    row.appendChild(close);
+    pop.appendChild(row);
   }
 
   function firstSentence(text) {
@@ -2531,6 +2725,6 @@
   });
   chatEnable();
   if (!token) { result("error", t("no_token")); return; }
-  refresh().then(function () { if (state) { chatStart(); loadSkills(); } });
+  refresh().then(function () { if (state) { chatStart(); loadSkills(); loadIntake(); } });
   setInterval(function () { if (!job) refresh(); else api("GET", "/api/state").catch(function () {}); }, 20000);
 })();

@@ -9,12 +9,14 @@ listens). Messages starting with PERM <permission> <pattern>, QUESTION or SLOW
 make the session ask for a permission, ask a question or wait to be aborted; SUBAGENT <permission>
 <pattern> starts a subagent session that asks for that permission; THINK sends reasoning first; RUN <command>
 shows a finished bash step running that command; STEPS <n> gives one answer with n tool steps (the third
-one failed); EDIT shows a finished edit step with a diff. GET /session lists the sessions with this
+one failed); EDIT shows a finished edit step with a diff. A message naming a decision_<n>.json file is a
+client intake turn: the head and decision files are written (FAKE_OPENCODE_INTAKE: bad_once, never, slow). GET /session lists the sessions with this
 server's folder, their time and parent; GET /config/providers offers example/model-1 and example/model-2.
 """
 import json
 import os
 import queue
+import re
 import socketserver
 import sys
 import threading
@@ -22,6 +24,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 LOG = os.environ.get("FAKE_OPENCODE_LOG", "")
+INTAKE_RE = re.compile(r"/[^\s，。）]+decision_\d+\.json")
 MODE = os.environ.get("FAKE_OPENCODE_MODE", "")
 
 
@@ -37,6 +40,7 @@ class World:
         self.sessions = {}  # id -> [{"info", "parts"}]
         self.meta = {}  # id -> {"parentID", "time"}
         self.clients = []
+        self.bad = set()  # decision files answered wrongly once (FAKE_OPENCODE_INTAKE bad_once)
         self.waits = {}  # permission or question id -> (threading.Event, [reply])
         self.aborts = {}
         self.n = 0
@@ -156,9 +160,48 @@ class World:
             ev = self.aborts.setdefault(sid, threading.Event())
             ev.clear()
             self.message(sid, "assistant", "aborted" if ev.wait(20) else "slow done")
+        elif INTAKE_RE.search(text):
+            self.message(sid, "assistant", self.intake(text, sid))
         else:
             self.message(sid, "assistant", "echo: " + text)
         self.emit("session.status", sessionID=sid, status={"type": "idle"})
+
+    def intake(self, text, sid):
+        """A client intake turn: writes the head file and the decision file the message names. The title
+        is the original file's name; a name-hit message makes it the next version. FAKE_OPENCODE_INTAKE:
+        "bad_once" writes an unusable decision the first time for each item, "never" writes nothing,
+        "slow" waits until the turn is aborted."""
+        decision = INTAKE_RE.search(text).group(0)
+        head = re.sub(r"decision_(\d+)\.json$", r"head_\1.md", decision)
+        mode = os.environ.get("FAKE_OPENCODE_INTAKE", "")
+        if mode == "never":
+            return "thinking about it"
+        if mode == "slow":  # waits to be stopped
+            ev = self.aborts.setdefault(sid, threading.Event())
+            ev.clear()
+            return "aborted" if ev.wait(20) else "slow done"
+        if mode == "bad_once" and decision not in self.bad:
+            self.bad.add(decision)
+            with open(decision, "w", encoding="utf-8") as f:
+                f.write('{"partition": ""}')
+            return "decided"
+        orig = re.search(r"(?:Original file|原文件)[:：]\s*(.+)", text)
+        title = os.path.splitext(os.path.basename(orig.group(1).strip()))[0] if orig else ""
+        prev = {}
+        if os.path.isfile(decision):
+            try:
+                with open(decision, encoding="utf-8") as f:
+                    prev = json.load(f)
+            except ValueError:
+                prev = {}
+        title = title or prev.get("title") or "Item"
+        same = bool(prev.get("same_version")) or "next version of that file" in text or "新版本" in text and "同名" in text
+        with open(head, "w", encoding="utf-8") as f:
+            f.write("> Source: " + title + "\n")
+        with open(decision, "w", encoding="utf-8") as f:
+            json.dump({"partition": "02", "topic": "Atlas", "type": "Report", "title": title,
+                       "close_read": False, "same_version": same}, f)
+        return "decided"
         self.emit("session.idle", sessionID=sid)
 
 

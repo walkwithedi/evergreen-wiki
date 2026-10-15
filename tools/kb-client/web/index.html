@@ -16,6 +16,7 @@
   <div class="status" id="status"></div>
   <button type="button" class="quiet" id="quit" data-t="quit">Quit</button>
 </header>
+<div class="skill-pop" id="skill-pop" role="region" hidden></div>
 
 <main class="layout">
   <aside class="side">
@@ -98,13 +99,21 @@
       </div>
       <p class="hint" id="workdir-note" data-t="workdir_hint" hidden>The assistant reads and edits files in this folder without asking.</p>
       <div class="tasks" id="tasks">
-        <button type="button" data-task="intake" data-t="task_intake">File material</button>
-        <button type="button" data-task="note" data-t="task_note">Quick note</button>
-        <button type="button" data-task="notes" data-t="task_notes">File quick notes</button>
-        <button type="button" data-task="lint" data-t="task_lint">Health check</button>
-        <button type="button" data-task="archive" data-t="task_archive">Archive old versions</button>
-        <button type="button" data-task="resume" data-t="task_resume">Continue intake</button>
+        <button type="button" class="task-main" data-task="intake"><strong data-t="task_intake">File material</strong>
+          <span data-t="task_intake_hint">Choose files or folders; each is written into the library</span></button>
+        <button type="button" class="task-main" data-task="note"><strong data-t="task_note">Quick note</strong>
+          <span data-t="task_note_hint">Keep one sentence in the library at once</span></button>
+        <button type="button" class="task-extra" data-task="resume" id="task-resume" hidden data-t="task_resume">Continue intake</button>
+        <button type="button" class="task-extra" data-task="notes" id="task-notes" hidden></button>
+        <details class="task-more" id="task-more">
+          <summary data-t="task_more">More</summary>
+          <button type="button" data-task="lint"><strong data-t="task_lint">Health check</strong>
+            <span data-t="task_lint_hint">Look for broken links, missing pages and stale files</span></button>
+          <button type="button" data-task="archive"><strong data-t="task_archive">Archive old versions</strong>
+            <span data-t="task_archive_hint">Move superseded versions to the archive folder</span></button>
+        </details>
       </div>
+      <div class="intake" id="intake" hidden></div>
       <p class="hint" id="chat-one-agent" data-t="chat_one_agent">If OpenCode is also open in a terminal, quit it before filing material, so that only one of them writes to the library.</p>
       <p class="info" id="chat-info" hidden></p>
       <pre class="log" id="chat-output" hidden></pre>

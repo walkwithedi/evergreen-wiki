@@ -381,7 +381,6 @@ body.simple .skills-box { display: none !important; }
 /* The knowledge base folded (the default with --chat-first): the skills beside the conversation only */
 body:not(.kb-open) .kb-part,
 body:not(.kb-open) #step,
-body:not(.kb-open) #tasks,
 body:not(.kb-open) #stages,
 body:not(.kb-open) #chat-one-agent,
 body:not(.kb-open) .kb-only { display: none !important; }
@@ -477,3 +476,49 @@ body.kb-open .kb-toggle { background: var(--soft); color: var(--accent); }
 .tok-hunk, .tok-head { color: var(--tok-hunk); }
 .chat .composer { margin-top: auto; }
 .composer textarea { font-size: 16px; }
+
+/* the knowledge-base skills chip and its details */
+.chip-button { background: transparent; cursor: pointer; font: inherit; font-size: 13px; padding: 2px 10px; }
+.chip-button:hover:not(:disabled) { background: var(--soft); }
+.skill-pop { position: absolute; z-index: 5; left: 50%; transform: translateX(-50%); top: 58px; width: min(720px, calc(100vw - 32px));
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 6px 24px rgba(0, 0, 0, .18);
+  padding: 12px 16px; font-size: 14px; overflow-wrap: anywhere; }
+.skill-pop .pop-title { margin: 0 0 6px; font-weight: 600; }
+.skill-pop ul { margin: 0 0 6px; padding-left: 18px; }
+.skill-pop li.good { color: var(--good); list-style: none; margin-left: -18px; }
+.skill-pop li.bad { color: var(--bad); list-style: none; margin-left: -18px; }
+.skill-pop .hint { margin: 4px 0; }
+
+/* task buttons: two main ones with a line on what they do, the rest when they apply or under More */
+.tasks { align-items: stretch; }
+.tasks button.task-main, .task-more button { display: flex; flex-direction: column; align-items: flex-start; text-align: left;
+  gap: 1px; padding: 6px 14px; }
+.tasks button.task-main { border-color: var(--accent); }
+.tasks button.task-main strong { color: var(--accent); }
+.tasks button span { font-size: 12.5px; color: var(--muted); font-weight: normal; }
+.tasks button.task-extra { border-style: dashed; }
+.task-more { position: relative; align-self: center; }
+.task-more > summary { cursor: pointer; color: var(--muted); font-size: 14px; padding: 6px 8px; list-style: none; }
+.task-more > summary::-webkit-details-marker { display: none; }
+.task-more > summary::after { content: " \25BE"; }
+.task-more[open] { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; }
+.task-more[open] > summary { align-self: center; }
+
+/* intake run by the client */
+.intake { border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 8px; background: var(--soft);
+  padding: 10px 14px; display: flex; flex-direction: column; gap: 6px; }
+.intake-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.intake-step { flex: 1; color: var(--muted); font-size: 13px; }
+.intake-bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.intake-bar > span { display: block; height: 100%; background: var(--accent); transition: width .3s; }
+.intake-items { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow: auto; font-size: 13.5px; }
+.intake-items li { display: flex; gap: 8px; padding: 2px 0; align-items: baseline; }
+.intake-items .mark { width: 14px; flex: none; text-align: center; color: var(--muted); }
+.intake-items .file { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.intake-items .what { color: var(--muted); overflow-wrap: anywhere; }
+.intake-items .st-written .mark, .intake-items .st-written .what { color: var(--good); }
+.intake-items .st-working .file { font-weight: 600; }
+.intake-items .st-failed .mark, .intake-items .st-failed .what { color: var(--bad); }
+.intake-items .st-manual .mark, .intake-items .st-manual .what { color: var(--warn); }
+.intake-sum { margin: 4px 0 0; font-weight: 600; }
+.intake .hint { margin: 0; overflow-wrap: anywhere; }
