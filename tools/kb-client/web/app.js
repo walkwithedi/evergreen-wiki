@@ -135,6 +135,12 @@
       perm_other: "Use: {name}",
       allow_once: "Allow this once",
       allow_always: "Always allow",
+      allow_all: "Allow everything",
+      allow_all_on: "Everything allowed · switch off",
+      allow_all_card: "Allow everything on this page",
+      allow_all_confirm: "Allow everything the assistant asks for from now on? Reading, changing and deleting files and running any command will no longer be asked about, until you switch it off or quit the client. Changes to the knowledge-base skills stay refused.",
+      allow_all_note_on: "Everything is allowed without asking until you switch it off or quit the client.",
+      allow_all_note_off: "The assistant asks for permission again.",
       always_what: "With Always allow, OpenCode stops asking for:",
       deny: "Deny",
       q_submit: "Answer",
@@ -344,6 +350,12 @@
       perm_other: "使用：{name}",
       allow_once: "允许这一次",
       allow_always: "总是允许",
+      allow_all: "全部允许",
+      allow_all_on: "已全部允许 · 关闭",
+      allow_all_card: "本页都允许",
+      allow_all_confirm: "之后助手的所有请求都自动允许吗？读取、修改、删除文件和运行任何命令都不再询问，直到你关闭或退出客户端。修改知识库技能仍会被拒绝。",
+      allow_all_note_on: "已全部允许：之后不再询问，直到你关闭或退出客户端。",
+      allow_all_note_off: "已恢复询问授权。",
       always_what: "选「总是允许」后，以下操作不再询问：",
       deny: "拒绝",
       q_submit: "回答",
@@ -1017,7 +1029,7 @@
 
   // ---------- conversation ----------
 
-  var chat = { source: null, phase: "", ready: false, busy: false, restarting: false, simple: false, msgs: {}, parts: {}, cards: {},
+  var chat = { source: null, phase: "", ready: false, busy: false, restarting: false, simple: false, allowAll: false, msgs: {}, parts: {}, cards: {},
                model: "", workdir: "", recent: [], models: [] };
 
   function chatInfo(text, output) {
@@ -1031,6 +1043,10 @@
     var on = chat.ready && !chat.busy;
     $("chat-send").disabled = !chat.ready;  // while the assistant works, a message waits its turn
     $("chat-terminal").disabled = !chat.ready;
+    $("chat-allow-all").disabled = !chat.ready || chat.simple;
+    $("chat-allow-all").setAttribute("data-t", chat.allowAll ? "allow_all_on" : "allow_all");
+    $("chat-allow-all").textContent = t(chat.allowAll ? "allow_all_on" : "allow_all");
+    $("chat-allow-all").classList.toggle("on", chat.allowAll);
     var noLib = state !== null && !localLibs().length;
     Array.prototype.forEach.call(document.querySelectorAll("[data-task]"), function (b) {
       var batch = b.getAttribute("data-task") === "intake" || b.getAttribute("data-task") === "resume";
@@ -1245,6 +1261,7 @@
     }
     var buttons = [[t("deny"), "", function () { reply("reject"); }]];
     if (always.length) buttons.push([t("allow_always"), "", function () { reply("always"); }]);
+    buttons.push([t("allow_all_card"), "", function () { setAllowAll(true); }]);
     buttons.push([t("allow_once"), "primary", function () { reply("once"); }]);
     buttonRow(c, buttons);
     c.scrollIntoView({ block: "nearest" });
@@ -1315,6 +1332,11 @@
     else if (ev.type === "permission_done" || ev.type === "question_done") dropCard(ev.id);
     else if (ev.type === "reset") { chat.model = ""; $("model").value = ""; clearChat(); }
     else if (ev.type === "workdir") chatBar(ev);
+    else if (ev.type === "allow_all") {
+      if (chat.allowAll !== ev.on) note(t(ev.on ? "allow_all_note_on" : "allow_all_note_off"), ev.on ? "error" : "auto");
+      chat.allowAll = ev.on;
+      chatEnable();
+    }
   }
 
   // ---------- --chat-first: the knowledge base folded, a work folder, models, earlier conversations ----------
@@ -1401,6 +1423,13 @@
     });
     if (lines.length > DIFF_LINES) pre.appendChild(el("span", { "class": "hunk" }, t("diff_more", { n: lines.length - DIFF_LINES })));
     return fold(t("diff_show"), pre);
+  }
+
+  // Allow everything on the page: the client answers every request itself, except changes to the locked
+  // skills, until it is switched off or the client quits. Switching it on also answers the waiting cards.
+  function setAllowAll(on) {
+    if (on && !window.confirm(t("allow_all_confirm"))) return;
+    api("POST", "/api/chat/allow_all", { on: on }).catch(function (e) { note(String(e.message), "error"); });
   }
 
   // ---------- graph ----------
@@ -1809,6 +1838,7 @@
       st.history.forEach(showPart);
       chatAgent(st.agent);
       chatBar(st.agent);
+      chat.allowAll = !!st.agent.allow_all;
       chat.busy = st.agent.status && st.agent.status !== "idle";
       (st.agent.permissions || []).forEach(permissionCard);
       (st.agent.questions || []).forEach(questionCard);
@@ -2118,6 +2148,7 @@
         : String(e.message), "error");
     });
   });
+  $("chat-allow-all").addEventListener("click", function () { setAllowAll(!chat.allowAll); });
   $("chat-new").addEventListener("click", function () {
     api("POST", "/api/chat/new", {}).catch(function (e) { note(String(e.message), "error"); });
   });

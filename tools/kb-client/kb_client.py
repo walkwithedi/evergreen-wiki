@@ -60,7 +60,7 @@ MAX_BODY = 64 * 1024
 SIMPLE_REFUSED = {"rollback", "move", "uninstall", "skill_backup", "skill_restore", "skill_import", "skill_new",
                   "forget"}
 CHAT_ACTIONS = {name: name for name in ("start", "recheck", "send", "new", "stop", "permission", "question", "terminal", "forget",
-                                         "workdir", "sessions", "switch")}
+                                         "allow_all", "workdir", "sessions", "switch")}
 CHAT_FIRST_ACTIONS = ("workdir", "sessions", "switch")  # only with --chat-first
 MAX_TEXT = 20000  # characters of one message from the page
 MAX_PATHS = 200  # material paths sent with one message
@@ -1075,6 +1075,11 @@ class Handler(BaseHTTPRequestHandler):
             if what == "forget":
                 ag.forget()
                 return self.send(200, {"ok": True})
+            if what == "allow_all":
+                if not isinstance(body.get("on"), bool):
+                    return self.send(400, {"error": "on"})
+                ag.set_allow_all(body["on"])
+                return self.send(200, {"ok": True, "allow_all": ag.allow_all})
             if what == "stop":
                 ag.stop()
                 return self.send(200, {"ok": True})
