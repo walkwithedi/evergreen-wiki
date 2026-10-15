@@ -142,7 +142,9 @@ def check_workdir(path):
         raise ValueError("missing")
     if p == os.sep or inside(real(os.path.expanduser("~")), p):
         raise ValueError("too_wide")
-    if any(inside(p, d) for d in SYSTEM_DIRS):
+    # the system folders as written, not resolved: on some systems they are links (/var to /private/var)
+    given = os.path.normpath(os.path.abspath(os.path.expanduser(path)))
+    if any(x == d or x.startswith(d + os.sep) for x in (given, p) for d in SYSTEM_DIRS):
         raise ValueError("system")
     return p
 

@@ -557,6 +557,7 @@ class ChatTest(unittest.TestCase):
     def test_chat_first(self):
         work = self.p("home", "projects", "atlas")
         os.makedirs(work)
+        work = os.path.realpath(work)  # the temporary folder may be under a link to a system folder (/var on macOS)
         ev = self.start("", "--chat-first")
         ev.until(lambda e: e["type"] == "agent" and e["state"] == "ready", "ready")
         s = self.server
