@@ -13,4 +13,5 @@ Claude Code loads the skills in this directory in sessions on this repository. T
 ## Maintenance
 
 - The contents match upstream and are not edited here; systematic-debugging leaves out upstream's evaluation scenarios and authoring log.
+- Code scanning skips this directory (.github/codeql/codeql-config.yml).
 - To update, copy the whole directory again from the upstream commit, keep the licence file and update the commit in the table.

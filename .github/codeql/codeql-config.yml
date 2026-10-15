@@ -1,0 +1,5 @@
+# CodeQL configuration for .github/workflows/codeql.yml.
+# .claude/skills holds third-party development skills copied unchanged from upstream
+# and never edited here, so their findings cannot be fixed in this repository.
+paths-ignore:
+  - .claude/skills
