@@ -695,8 +695,8 @@ def skill_version(folder):
             for line in f.read(8192).split("\n"):
                 if line.startswith("Version:"):
                     return line.split(":", 1)[1].strip()
-    except OSError:
-        pass
+    except OSError:  # unreadable: the skill is still listed, without a version
+        return ""
     return ""
 
 
