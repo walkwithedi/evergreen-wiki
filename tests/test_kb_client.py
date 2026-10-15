@@ -17,6 +17,7 @@ FAKE = os.path.join(ROOT, "tests", "kb_client_fake_opencode.py")
 CANCEL = object()
 sys.path.insert(0, os.path.join(ROOT, "tools", "kb-client"))
 import agent  # noqa: E402
+import intake as intake_mod  # noqa: E402
 import kb_client  # noqa: E402
 
 
@@ -603,6 +604,88 @@ class ChatTest(unittest.TestCase):
         self.assertEqual(status, 200, r)
         run = self.intake_until_done()
         self.assertEqual(run["counts"], {"written": 2, "duplicate": 1}, run)
+
+    def queue_rows(self):
+        text = read(self.p("home", "kb", "work", "_Consolidation-Queue.md"))
+        return [ln for ln in text.split("\n") if ln.startswith("|") and ".md" in ln.split("|")[1]]
+
+    def test_intake_then_consolidation_unattended(self):
+        self.env["FAKE_OPENCODE_CONSOLIDATE"] = "ask"
+        ev, material = self.intake_library()
+        self.assertEqual(self.server.post("/api/chat/allow_all", {"on": True})[0], 200)
+        self.server.post("/api/intake", {"library": "work", "paths": [material]})
+        run = self.intake_until_done()
+        cons = run["consolidation"]
+        self.assertEqual((run["state"], cons["state"]), ("done", "done"), run)
+        self.assertEqual((cons["files"], cons["changes"], cons["queue"], cons["round"]), (2, 4, 0, 2), cons)
+        self.assertEqual(self.queue_rows(), [])
+        text = read(run["log"])
+        self.assertIn("question answered as recommended", text)
+        self.assertIn("Accept all (recommended)", text)
+        sent = [c["body"]["parts"][0]["text"] for c in self.calls() if c.get("path", "").endswith("/prompt_async")]
+        rounds = [x for x in sent if "consolidate_" in x]
+        self.assertEqual(len(rounds), 2)
+        self.assertTrue(all("unattended" in x for x in rounds), rounds)
+
+    def test_consolidation_waits_for_a_person(self):
+        self.env["FAKE_OPENCODE_CONSOLIDATE"] = "ask"
+        ev, material = self.intake_library()
+        self.server.post("/api/intake", {"library": "work", "paths": [os.path.join(material, "Atlas weekly 1.md")]})
+        q = ev.until(lambda e: e["type"] == "question", "the step-5 question", timeout=60)
+        time.sleep(3)
+        run = self.server.get("/api/intake")[1]["run"]
+        self.assertEqual((run["state"], run["step"], run["consolidation"]["state"]), ("running", "consolidate", "running"))
+        self.assertIn("a card waits for a person", read(run["log"]))
+        status, _ = self.server.post("/api/chat/question", {"id": q["id"], "answers": [["Accept all (recommended)"]]})
+        self.assertEqual(status, 200)
+        run = self.intake_until_done()
+        self.assertEqual((run["consolidation"]["state"], run["consolidation"]["files"]), ("done", 1), run)
+        sent = [c["body"]["parts"][0]["text"] for c in self.calls() if c.get("path", "").endswith("/prompt_async")]
+        self.assertTrue(any("At step 5 ask the user as usual" in x for x in sent))
+
+    def test_consolidation_that_does_not_move(self):
+        self.env["FAKE_OPENCODE_CONSOLIDATE"] = "stuck"
+        _, material = self.intake_library()
+        self.server.post("/api/intake", {"library": "work", "paths": [os.path.join(material, "Atlas weekly 1.md")]})
+        run = self.intake_until_done()
+        cons = run["consolidation"]
+        self.assertEqual((run["state"], cons["state"], cons["round"], cons["queue"]), ("done", "failed", 2, 1), cons)
+        self.assertIn("2 rounds", cons["reason"])
+
+    def test_consolidation_stopped_and_continued(self):
+        self.env["FAKE_OPENCODE_CONSOLIDATE"] = "ask"
+        ev, material = self.intake_library()
+        self.server.post("/api/intake", {"library": "work", "paths": [os.path.join(material, "Atlas weekly 1.md")]})
+        ev.until(lambda e: e["type"] == "question", "the step-5 question", timeout=60)
+        self.server.post("/api/intake/stop", {})
+        run = self.intake_until_done()
+        self.assertEqual((run["state"], run["consolidation"]["state"]), ("stopped", "stopped"), run)
+        self.assertEqual(self.server.post("/api/chat/allow_all", {"on": True})[0], 200)
+        status, r = self.server.post("/api/intake", {"resume": True})
+        self.assertEqual((status, r["run"]["total"]), (200, 0), r)
+        run = self.intake_until_done()
+        self.assertEqual((run["state"], run["consolidation"]["state"], run["consolidation"]["queue"]), ("done", "done", 0), run)
+        self.assertEqual(self.server.post("/api/intake", {"resume": True})[0], 409)  # nothing is left
+
+    def test_intake_prompt_keeps_the_text(self):
+        for lang, t in intake_mod.PROMPT.items():
+            item = t["item"]
+            self.assertNotRegex(item.replace("不做脱敏或打码", "").replace("Do no masking or redaction", ""),
+                                "脱敏|打码|[Mm]ask|[Rr]edact", lang)
+            self.assertTrue("不做脱敏或打码" in item or "Do no masking or redaction" in item, lang)
+
+    def test_answer_recommended(self):
+        ag = agent.Agent.__new__(agent.Agent)
+        sent = []
+        ag.reply_question = lambda rid, answers: sent.append(answers) or True
+        ag.questions = {"q1": {"id": "q1", "questions": [
+            {"options": [{"label": "Leave some out", "description": ""}, {"label": "全部采用（推荐）", "description": ""}],
+             "custom": True},
+            {"options": [{"label": "A", "description": ""}, {"label": "B", "description": "recommended"}], "custom": True},
+            {"options": [{"label": "A", "description": ""}], "custom": True},
+            {"options": [], "custom": True}, {"options": [], "custom": False}]}}
+        self.assertEqual(ag.answer_recommended("q1", "go on"), [["全部采用（推荐）"], ["B"], ["A"], ["go on"], []])
+        self.assertIsNone(ag.answer_recommended("q2", "go on"))
 
     def test_idle_waits_for_an_intake(self):
         app = kb_client.App.__new__(kb_client.App)

@@ -1,10 +1,11 @@
 """Intake driven by the client, for local libraries: the fixed steps of kb-incremental's fast intake
-(references/fast.md) run here, the judgement steps go to the assistant with a fixed answer.
+(references/fast.md) run here, the judgement steps go to the assistant with a fixed answer; then the
+consolidation queue is worked through, a round at a time (references/consolidate.md).
 
 For each file, in order:
   1. prep.py scan (duplicate check by content hash, conversion, cleanup into <work>/body_<n>.md, card)
-  2. the assistant, in a new conversation: masking and term fixes in the body file, the head file
-     (metadata only) and a decision file <work>/decision_<n>.json:
+  2. the assistant, in a new conversation: term fixes in the body file (no masking: the body stays as it
+     is), the head file (metadata only) and a decision file <work>/decision_<n>.json:
      {"partition", "topic", "type", "title", "close_read", "same_version"}; checked here, asked again
      up to MAX_ASKS times with the reason when it is missing or wrong
   3. prep.py file (file name, index check, assembly); a file name already in the index goes back to
@@ -13,6 +14,16 @@ For each file, in order:
 A file that is a duplicate upload is skipped; one that cannot be converted (a scan, a picture) is
 left for the user, who can hand it to the assistant afterwards. Delivery happens here, so an item is
 "written" only when package.py deliver went through.
+
+Then, while the library's consolidation queue has files: one consolidation round per new conversation,
+the queue read again after each (consolidate.py list). It ends when the queue is empty, when it did not
+get shorter in STUCK_ROUNDS rounds in a row, or after as many rounds as the queue had files plus
+STUCK_ROUNDS (a round that does less than its share still counts as progress). With Allow
+everything on, the round is unattended: the summary changes are all accepted, as the skill recommends.
+
+A question card or permission card that waits during a turn: with Allow everything on, a question is
+answered with its recommended option (permissions are allowed by the agent already); otherwise the card
+waits for a person on the page, and the time it waits does not count against the turn's time limit.
 
 Events go to the conversation feed as type "intake" with the run's snapshot. Each run has its own work
 folder under <state dir>/intake/<id>/ (outside the system temporary folder, which the client empties when
@@ -36,6 +47,8 @@ log = logging.getLogger("kb_client.intake")
 MAX_FILES = 2000  # files of one run, after folders are expanded
 MAX_ASKS = 3  # the assistant's turns for one item (the first and two corrections)
 ASK_TIMEOUT = 1200  # seconds for one turn of the assistant
+CONSOLIDATE_TIMEOUT = 3600  # seconds for one consolidation round
+STUCK_ROUNDS = 2  # rounds in a row without a shorter queue end the consolidation
 SCRIPT_TIMEOUT = 900  # seconds for one script run (conversion of a large file)
 FIELD_MAX = 200
 KEEP_DAYS = 7  # a finished run's work folder and log are kept this long
@@ -55,7 +68,7 @@ Scan card:
 {card}
 
 Handle this item with steps 2 to 4 of "Each item" in the kb-incremental skill's fast intake (references/fast.md), and do only these three things:
-1. Masking and term fixes in the body file {body}, following the library's _kb-params.md and spec; change only what needs it.
+1. Term fixes in the body file {body}, following the library's _kb-params.md and spec; change only what needs it. Do no masking or redaction: the body stays as it is.
 2. Write the head file {head}: metadata only, in the head format of the params; no key conclusions.
 3. Decide the placement and write it into {decision} as one JSON object:
 {{"partition": "two-digit partition", "topic": "topic", "type": "document type", "title": "short title", "close_read": true or false, "same_version": false}}
@@ -65,6 +78,14 @@ Do not run prep.py file or package.py, write no entity pages and change nothing 
 Decide whether this item is the next version of that file (compare dates and content). If it is, set "same_version" to true in the decision file; if it is different material, choose a short title that tells them apart. Then write {decision} again.""",
         "retry": """The decision was not accepted: {why}
 Correct it and write {decision} again (and {head} where needed).""",
+        "consolidate": """[Client consolidation, round {r}] Library: {label} ({root})
+Do one round of consolidation with the kb-incremental skill (references/consolidate.md): the steps before the first round, then this one round only. Use {work} as the work folder. {mode}
+Stop when this round is delivered and do not go on with the next one: the client starts it in a new conversation. Last, write this round's result into {result} as one JSON object:
+{{"files": files consolidated, "changes": summary changes applied}}
+and answer with one line. An empty queue: write {{"files": 0, "changes": 0}} and stop.""",
+        "unattended": """This run is unattended (Allow everything is on): at step 5 do not ask; take the recommended "Accept all" and note "unattended, all accepted" in the readme. Wherever else a choice comes up, go on with the recommended option instead of waiting for an answer.""",
+        "attended": "At step 5 ask the user as usual.",
+        "fallback": "Go on as you judge best.",
     },
     "zh": {
         "item": """【客户端入库 第 {n}/{total} 项】知识库：{label}（{root}）
@@ -73,7 +94,7 @@ Correct it and write {decision} again (and {head} where needed).""",
 {card}
 
 请按 kb-incremental 技能快速入库（references/fast.md）「每一项」的第 2–4 步处理这一项，只做下面三件事：
-1. 在正文文件 {body} 里做脱敏和术语修正（按知识库的 _kb-params.md 和规范），只改需要改的地方；
+1. 在正文文件 {body} 里做术语修正（按知识库的 _kb-params.md 和规范），只改需要改的地方；不做脱敏或打码，正文保持原样；
 2. 写头文件 {head}：只写元数据（按参数里的头部格式），不写关键结论；
 3. 决定放置，把结果写进 {decision}，内容是一个 JSON 对象：
 {{"partition": "两位分区号", "topic": "主题", "type": "文档类型", "title": "短标题", "close_read": true 或 false, "same_version": false}}
@@ -83,6 +104,14 @@ Correct it and write {decision} again (and {head} where needed).""",
 判断这一项是不是那个文件的新版本（对比日期和内容）。是新版本：把决定文件里的 "same_version" 设为 true；是不同的材料：换一个能区分开的短标题。然后重写 {decision}。""",
         "retry": """上一次的决定没有通过：{why}
 请修正后重写 {decision}（需要时也改 {head}）。""",
+        "consolidate": """【客户端整合 第 {r} 轮】知识库：{label}（{root}）
+请用 kb-incremental 技能做一轮整合（references/consolidate.md）：先做「第一轮之前」的准备，然后只做这一轮。工作文件夹用 {work}。{mode}
+这一轮送达后就停下，不要接着做下一轮：下一轮由客户端在新对话里发起。最后把这一轮的结果写进 {result}，内容是一个 JSON 对象：
+{{"files": 整合的文件数, "changes": 采用的状态卡等改动条数}}
+然后回复一句话即可。队列为空时，写入 {{"files": 0, "changes": 0}} 并停止。""",
+        "unattended": """这是无人值守的运行（已全部允许）：第 5 步不要提问，按推荐直接「全部采用」，并在说明文件里注明「无人值守，全部采用」；其他需要选择的地方也按推荐项继续，不要等待回答。""",
+        "attended": "第 5 步照常请用户选择。",
+        "fallback": "按你的判断继续。",
     },
 }
 
@@ -94,7 +123,11 @@ WHY = {
            "timeout": "the assistant did not answer in time", "agent": "OpenCode is not ready",
            "asks": "no usable decision after {n} answers", "scan": "scan failed", "file": "assembly failed",
            "preview": "the delivery check failed", "deliver": "writing into the library failed",
-           "convert": "no text could be read from it (a scan, a picture or an unknown format)"},
+           "convert": "no text could be read from it (a scan, a picture or an unknown format)",
+           "stuck": "the consolidation queue did not get shorter in {n} rounds in a row (changes not accepted, or the "
+                    "round was not delivered); say \"consolidate\" in the conversation to go on",
+           "rounds": "the consolidation took more rounds than the queue has files; say \"consolidate\" in the "
+                     "conversation to go on"},
     "zh": {"no_decision": "决定文件不存在，或不是一个 JSON 对象",
            "field": "\"{k}\" 必须是不超过 {n} 个字符的非空文本",
            "flag": "\"{k}\" 只能是 true 或 false", "no_head": "头文件不存在或是空的",
@@ -102,7 +135,9 @@ WHY = {
            "timeout": "助手没有按时答复", "agent": "OpenCode 没有就绪",
            "asks": "答复 {n} 次后仍没有可用的决定", "scan": "扫描失败", "file": "组装失败",
            "preview": "写入前的检查没有通过", "deliver": "写进知识库时出错",
-           "convert": "读不出文字（扫描件、图片或无法识别的格式）"},
+           "convert": "读不出文字（扫描件、图片或无法识别的格式）",
+           "stuck": "整合队列连续 {n} 轮没有变少（改动没有采用，或这一轮没有送达）；可以在对话里说「整合」接着做",
+           "rounds": "整合的轮数超过了队列里的文件数；可以在对话里说「整合」接着做"},
 }
 
 
@@ -189,7 +224,10 @@ class Run:
         self.lock = threading.Lock()
         self.thread = None
         self.names = None
+        self.conf = None
         self.started = time.time()
+        # the consolidation after the files: state "", running, done, stopped or failed
+        self.cons = {"state": "", "round": 0, "rounds": 0, "queue": 0, "files": 0, "changes": 0, "reason": ""}
 
     @classmethod
     def restore(cls, work):
@@ -202,6 +240,7 @@ class Run:
             run = cls(None, data["lib"], [], data["scripts"], work, data["lang"], snap["id"], data.get("back_to", ""))
             run.items = [dict(it) for it in snap["items"]]
             run.started = data.get("started", 0)
+            run.cons.update(snap.get("consolidation") or {})
         except (OSError, ValueError, KeyError, TypeError):
             return None
         if snap["state"] in ("running", "stopping"):
@@ -210,6 +249,8 @@ class Run:
                 if it["status"] == "working":
                     it["status"], it["reason"] = "waiting", ""
             run.state = "stopped"
+            if run.cons["state"] == "running":
+                run.cons["state"] = "stopped"
         else:
             run.state = snap["state"]
         return run
@@ -224,7 +265,8 @@ class Run:
                 counts[it["status"]] = counts.get(it["status"], 0) + 1
             return {"id": self.id, "library": self.lib["id"], "label": self.lib["label"], "root": self.lib["root"],
                     "state": self.state, "step": self.step, "total": len(self.items), "counts": counts,
-                    "items": [dict(it) for it in self.items], "log": os.path.join(self.work, LOG)}
+                    "items": [dict(it) for it in self.items], "consolidation": dict(self.cons),
+                    "log": os.path.join(self.work, LOG)}
 
     def emit(self):
         snap = self.snapshot()
@@ -282,6 +324,11 @@ class Run:
     def running(self):
         return self.state in ("running", "stopping")
 
+    def left(self):
+        """What a stopped run leaves to continue: (the files not reached, whether consolidation is left)."""
+        sources = [it["source"] for it in self.items if it["status"] == "waiting"]
+        return sources, self.state == "stopped" and self.cons["state"] not in ("done", "failed")
+
     def main(self):
         self.note(f"run {self.id}: {len(self.items)} files into {self.lib['label']} ({self.lib['root']}); "
                   f"scripts {self.scripts}; Python {sys.version.split()[0]}")
@@ -291,6 +338,8 @@ class Run:
                 if self.stop_flag.is_set():
                     break
                 self.one(item)
+            if not self.stop_flag.is_set():
+                self.consolidate()
         except Exception as e:  # shown on the page as a failed item; the client keeps running
             log.exception("intake run %s", self.id)
             self.note(f"error: {type(e).__name__}: {e}")
@@ -298,6 +347,8 @@ class Run:
             with self.lock:
                 self.state = "stopped" if self.stop_flag.is_set() else "done"
                 self.step = ""
+                if self.cons["state"] == "running":
+                    self.cons["state"] = "stopped" if self.stop_flag.is_set() else "failed"
                 for it in self.items:
                     if it["status"] == "working":
                         it["status"], it["reason"] = "waiting", WHY[self.lang]["stopped"]
@@ -347,17 +398,22 @@ class Run:
             log.info("%s exit %s: %s", args[0], p.returncode, p.stderr.strip()[-500:])
         return p.returncode, p.stdout
 
-    def library_names(self):
-        if self.names is None:
+    def library_conf(self):
+        if self.conf is None:
             sys.path.insert(0, self.scripts)
             try:
                 import kbconf  # the installed skill's own copy
-                self.names = kbconf.load_library(self.lib["root"])["names"]
+                self.conf = kbconf.load_library(self.lib["root"])
             except Exception:  # noqa: BLE001 - a library prep.py refuses shows there
-                self.names = {}
+                self.conf = {}
             finally:
                 if sys.path and sys.path[0] == self.scripts:
                     sys.path.pop(0)
+        return self.conf
+
+    def library_names(self):
+        if self.names is None:
+            self.names = self.library_conf().get("names") or {}
         return self.names
 
     def one(self, item):
@@ -442,8 +498,98 @@ class Run:
         written = sorted(f for f in os.listdir(out_dir) if f.endswith(".md") and f not in skip)
         self.set(item, status="written", name=written[0] if written else "")
 
-    def ask(self, text, material, new):
-        """One turn of the assistant: text in a new conversation (or the item's own), until it is idle."""
+    def queue_length(self):
+        """Files in the library's consolidation queue (consolidate.py list); 0 when there is no queue."""
+        name = self.library_names().get("consolidation_queue") or "_Consolidation-Queue.md"
+        queue = os.path.join(self.lib["root"], name)
+        if not os.path.isfile(queue):
+            return 0
+        code, out = self.script("consolidate.py", "list", queue, "--limit", 1)
+        for ln in (out or "").split("\n"):
+            if code == 0 and ln.startswith("queue: "):
+                try:
+                    return int(ln.split()[1])
+                except (IndexError, ValueError):
+                    break
+        return None
+
+    def cset(self, **kw):
+        with self.lock:
+            self.cons.update(kw)
+        self.emit()
+
+    def consolidate(self):
+        """Consolidation rounds until the queue is empty, each in a new conversation."""
+        w, t = WHY[self.lang], PROMPT[self.lang]
+        q = self.queue_length()
+        if q is None:
+            self.cset(state="failed", reason=w["scan"])
+            return
+        if q == 0:
+            self.note("consolidation: the queue is empty")
+            self.cset(state="done", queue=0)
+            return
+        intake = self.library_conf().get("intake") or {}
+        per = intake.get("consolidate_files") if isinstance(intake.get("consolidate_files"), int) else 10
+        per = max(1, per)
+        rounds = -(-q // per)
+        self.note(f"consolidation: {q} files in the queue, {per} a round")
+        self.step = "consolidate"
+        self.cset(state="running", round=0, rounds=rounds, queue=q, files=0, changes=0, reason="")
+        stuck, most = 0, q + STUCK_ROUNDS
+        while q > 0:
+            r = self.cons["round"] + 1
+            if r > most:
+                self.cset(state="failed", reason=w["rounds"])
+                return
+            unattended = bool(getattr(self.agent, "allow_all", False))
+            work = os.path.join(self.work, f"consolidate_{r}")
+            result = os.path.join(self.work, f"consolidate_{r}.json")
+            os.makedirs(work, mode=0o700, exist_ok=True)
+            self.cset(round=r, rounds=max(rounds, r))
+            self.note(f"consolidation round {r} ({'unattended' if unattended else 'the user decides'})")
+            text = t["consolidate"].format(r=r, label=self.lib["label"], root=self.lib["root"], work=work,
+                                           result=result, mode=t["unattended" if unattended else "attended"])
+            try:
+                self.ask(text, [], True, CONSOLIDATE_TIMEOUT)
+            except Stopped as e:
+                self.cset(state="stopped" if self.stop_flag.is_set() else "failed", reason=str(e))
+                return
+            got = read_result(result)
+            left = self.queue_length()
+            if left is None:
+                left = q
+            stuck = 0 if left < q else stuck + 1
+            self.note(f"consolidation round {r}: queue {q} -> {left}; reported {json.dumps(got)}")
+            with self.lock:
+                self.cons["files"] += max(0, q - left)
+                self.cons["changes"] += got.get("changes", 0)
+                self.cons["queue"] = left
+                self.cons["rounds"] = r + -(-left // per)  # the estimate, from what is left
+            self.emit()
+            q = left
+            if stuck >= STUCK_ROUNDS:
+                self.cset(state="failed", reason=w["stuck"].format(n=STUCK_ROUNDS))
+                return
+            if self.stop_flag.is_set():
+                self.cset(state="stopped", reason=w["stopped"])
+                return
+        self.cset(state="done")
+
+    def waiting_cards(self):
+        """Answers the question cards waiting (Allow everything on); True while a card waits for a person."""
+        ag = self.agent
+        questions = list(ag.questions.values())
+        if getattr(ag, "allow_all", False):
+            for q in questions:
+                answers = ag.answer_recommended(q["id"], PROMPT[self.lang]["fallback"])
+                self.note(f"  question answered as recommended: {json.dumps(answers, ensure_ascii=False)[:300]}")
+            return False
+        return bool(questions or ag.permissions)
+
+    def ask(self, text, material, new, timeout=ASK_TIMEOUT):
+        """One turn of the assistant: text in a new conversation (or the item's own), until it is idle. The
+        time a card waits for a person does not count against timeout."""
         ag = self.agent
         if ag.state != "ready":
             self.note(f"assistant not ready ({ag.state})")
@@ -458,10 +604,17 @@ class Run:
         except (OSError, RuntimeError, ValueError) as e:
             log.warning("intake message not sent: %s", type(e).__name__)
             raise Stopped(WHY[self.lang]["agent"])
-        busy, deadline = False, time.time() + ASK_TIMEOUT
+        busy, deadline, waited = False, time.time() + timeout, None
         while time.time() < deadline:
             if self.stop_flag.is_set():
                 raise Stopped(WHY[self.lang]["stopped"])
+            if self.waiting_cards():  # the time left stands still while a card waits
+                if waited is None:
+                    waited = max(5.0, deadline - time.time())
+                    self.note("  a card waits for a person on the page")
+                deadline = time.time() + waited
+            else:
+                waited = None
             for ev in ag.feed.since(seq, 2):
                 seq = ev["seq"]
                 if ev["type"] == "status":
@@ -478,12 +631,24 @@ class Run:
                 elif ev["type"] in ("auto", "permission"):
                     what = " | ".join(ev.get("patterns") or [])[:200]
                     self.note(f"  {'allowed' if ev['type'] == 'auto' else 'card'}: {ev.get('permission')} {what}")
-        self.note(f"  no answer in {ASK_TIMEOUT} s")
+        self.note(f"  no answer in {timeout} s")
         try:
             ag.stop()
         except (OSError, RuntimeError):
             log.debug("nothing to stop")
         raise Stopped(WHY[self.lang]["timeout"])
+
+
+def read_result(path):
+    """{"files", "changes"} from a round's result file; {} when it is missing or unusable."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {k: v for k, v in data.items() if k in ("files", "changes") and isinstance(v, int) and 0 <= v < 100000}
 
 
 def latest(root):

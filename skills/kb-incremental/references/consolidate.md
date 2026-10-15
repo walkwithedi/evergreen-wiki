@@ -29,7 +29,7 @@ Then the summary files:
    <n>. <status card | change log | open items>: <old wording> -> <new wording> (<file>, <section>)
    Deletions: <n>. Delete: <old wording> (reason).
    No change: "No summary rewrite this round".
-5. Ask once, as a choice: Accept all (recommended) / Leave some out first / Cancel the round. In Chinese: 全部采用 / 先剔除其中几条 / 取消本轮. "Leave some out": ask which numbers, as a second choice when there are four or fewer, otherwise in one line; changes left out are not applied and their files stay in the queue with a note in the readme ("changes not accepted: <numbers>"). Cancel: nothing is written; the queue is unchanged.
+5. Ask once, as a choice: Accept all (recommended) / Leave some out first / Cancel the round. In Chinese: 全部采用 / 先剔除其中几条 / 取消本轮. When the request says the run is unattended (the user allowed everything beforehand and nobody answers), do not ask: take Accept all, and write "unattended, all accepted" into the readme's change section. "Leave some out": ask which numbers, as a second choice when there are four or fewer, otherwise in one line; changes left out are not applied and their files stay in the queue with a note in the readme ("changes not accepted: <numbers>"). Cancel: nothing is written; the queue is unchanged.
 6. Rewrite the accepted changes into the status card, change log and open items (and entity overviews where a trigger names a core entity), as SKILL.md step 5 says, and run the rewrite check for every rewritten file. Never deliver a file that fails it.
 7. Remove the consolidated files from the queue copy:
    python3 scripts/consolidate.py done <work>/<queue name> --name <file> [--name <file> ...]
