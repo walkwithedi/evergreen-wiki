@@ -159,6 +159,19 @@ class KbClientTest(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn("app.js", page)
 
+    def test_page_layout(self):
+        # the knowledge-base button follows the title; the read-only skill list sits in the side column
+        page = self.server.get("/", token=False)[1]
+        self.assertLess(page.index('id="title"'), page.index('id="kb-toggle"'))
+        self.assertLess(page.index('id="kb-toggle"'), page.index('id="status"'))
+        side = page[page.index('<aside class="side">'):page.index("</aside>")]
+        for part in ('id="skills-panel"', 'id="skills-filter"', 'id="skill-rows"'):
+            self.assertIn(part, side)
+        # answers are built as DOM nodes: the page never writes HTML from text
+        script = self.server.get("/app.js", token=False)[1]
+        self.assertNotIn("innerHTML", script)
+        self.assertNotIn("insertAdjacentHTML", script)
+
     def test_simple_refuses_the_hidden_steps(self):
         self.assertFalse(self.server.get("/api/state")[1]["simple"])
         s = Server(self.env, "--idle", "0", "--simple")
@@ -461,6 +474,105 @@ class ChatTest(unittest.TestCase):
         status, r = self.server.post("/api/chat/send", dict(kw, text=text))
         self.assertEqual(status, 200, r)
 
+    def intake_library(self):
+        # skills where OpenCode reads them, and a local work library
+        ev = self.start("", "--agent", "opencode", "--preset", "work")
+        ev.until(lambda e: e["type"] == "agent" and e["state"] == "ready", "ready")
+        result, out, _ = self.server.run("setup", [True, True, self.p("home", "kb", "work"), "team projects", "",
+                                                   True, True, True])
+        self.assertEqual(result, "ok", out)
+        ev.until(lambda e: e["type"] == "agent" and e["state"] == "ready", "ready after setup", timeout=60)
+        material = self.p("material")
+        write(os.path.join(material, "Atlas weekly 1.md"), "# Weekly status\n\nRiverside Clinic moved to phase two.\n")
+        write(os.path.join(material, "sub", "Atlas weekly 2.txt"), "Second week: the review is done.\n")
+        write(os.path.join(material, "sub", "copy of week 1.md"),
+              "# Weekly status\n\nRiverside Clinic moved to phase two.\n")  # the same content again
+        write(os.path.join(material, ".hidden.md"), "not material\n")
+        return ev, material
+
+    def intake_until_done(self, timeout=90):
+        end = time.time() + timeout
+        while time.time() < end:
+            run = self.server.get("/api/intake")[1]["run"]
+            if run and run["state"] in ("done", "stopped"):
+                return run
+            time.sleep(0.3)
+        raise AssertionError(f"intake not done: {run}")
+
+    def test_intake_by_the_client(self):
+        ev, material = self.intake_library()
+        status, r = self.server.post("/api/intake", {"library": "work", "paths": [material]})
+        self.assertEqual(status, 200, r)
+        self.assertEqual(r["run"]["total"], 3)  # hidden files are left out
+        # the conversation is the intake's while it runs
+        self.assertEqual(self.server.post("/api/chat/send", {"text": "hello"})[0], 409)
+        run = self.intake_until_done()
+        by_file = {it["file"]: it for it in run["items"]}
+        self.assertEqual(by_file["Atlas weekly 1.md"]["status"], "written", run)
+        self.assertEqual(by_file["Atlas weekly 2.txt"]["status"], "written", run)
+        self.assertEqual(by_file["copy of week 1.md"]["status"], "duplicate", run)
+        lib = self.p("home", "kb", "work")
+        for it in run["items"]:
+            if it["status"] == "written":
+                self.assertTrue(os.path.isfile(os.path.join(lib, it["name"])), it)
+        index = read(os.path.join(lib, "01_File-Index.md"))
+        self.assertIn("Atlas weekly 1.md", index)
+        self.assertIn("Atlas weekly 2.txt", index)
+        done = ev.until(lambda e: e["type"] == "intake" and e["run"]["state"] == "done", "intake event")
+        self.assertEqual(done["run"]["counts"], run["counts"])
+        # the same folder again: everything is a duplicate, nothing is asked
+        self.server.post("/api/intake", {"library": "work", "paths": [material]})
+        again = self.intake_until_done()
+        self.assertEqual(again["counts"], {"duplicate": 3}, again)
+
+    def test_intake_asks_again_and_stops(self):
+        self.env["FAKE_OPENCODE_INTAKE"] = "bad_once"
+        _, material = self.intake_library()
+        self.server.post("/api/intake", {"library": "work", "paths": [os.path.join(material, "Atlas weekly 1.md")]})
+        run = self.intake_until_done()
+        self.assertEqual(run["items"][0]["status"], "written", run)  # the second answer was usable
+        sent = [c for c in self.calls() if c.get("path", "").endswith("/prompt_async")]
+        self.assertGreaterEqual(len(sent), 2)
+
+    def test_intake_without_a_usable_answer(self):
+        self.env["FAKE_OPENCODE_INTAKE"] = "never"
+        _, material = self.intake_library()
+        write(os.path.join(material, "scan.bin"), "\x00\x01\x02")
+        self.server.post("/api/intake", {"library": "work", "paths": [os.path.join(material, "Atlas weekly 1.md"),
+                                                                       os.path.join(material, "scan.bin")]})
+        run = self.intake_until_done()
+        self.assertEqual([it["status"] for it in run["items"]], ["failed", "manual"], run)
+        self.assertIn("3", run["items"][0]["reason"])  # asked three times
+        self.assertFalse(any(f.startswith("02_") for f in os.listdir(self.p("home", "kb", "work"))))
+
+    def test_intake_stop_and_continue(self):
+        self.env["FAKE_OPENCODE_INTAKE"] = "slow"
+        _, material = self.intake_library()
+        self.server.post("/api/intake", {"library": "work", "paths": [material]})
+        end = time.time() + 30
+        while self.server.get("/api/intake")[1]["run"]["step"] != "ask" and time.time() < end:
+            time.sleep(0.2)
+        self.assertEqual(self.server.post("/api/intake/stop", {})[0], 200)
+        run = self.intake_until_done()
+        self.assertEqual(run["state"], "stopped")
+        self.assertEqual(run["counts"], {"waiting": 3}, run)
+        status, r = self.server.post("/api/intake", {"resume": True})
+        self.assertEqual(status, 200, r)
+        self.assertEqual(r["run"]["total"], 3)
+        self.server.post("/api/intake/stop", {})
+        self.intake_until_done()
+
+    def test_intake_refusals(self):
+        self.assertEqual(self.server_or_start().post("/api/intake", {"library": "work", "paths": ["relative"]})[0], 400)
+        status, r = self.server.post("/api/intake", {"library": "work", "paths": ["/nowhere"]})
+        self.assertEqual((status, r.get("reason")), (409, "intake_skills"), r)
+        self.assertEqual(self.server.post("/api/intake", {"resume": True})[1].get("reason"), "intake_skills")
+
+    def server_or_start(self):
+        ev = self.ready()
+        self.addCleanup(ev.close)
+        return self.server
+
     def test_starts_without_a_model_in_its_settings(self):
         # the settings may come from elsewhere; whether OpenCode can be used shows when it starts
         os.remove(self.p("home", ".config", "opencode", "opencode.jsonc"))
@@ -674,17 +786,19 @@ class ChatTest(unittest.TestCase):
         ev.until(lambda e: e["type"] == "part" and e["text"] == "permission: once", "reply")
         self.assertEqual(self.server.get("/api/chat/state")[1]["agent"]["permissions"], [])
         self.send("PERM edit " + self.p("elsewhere", "a.md"))
-        self.assertEqual(ev.until(lambda e: e["type"] in ("auto", "permission"))["type"], "auto")
+        # matched by what was asked: the waiting card's own "auto" may come after the assistant's reply
+        about = lambda name: lambda e: e["type"] in ("auto", "permission") and any(name in p for p in e["patterns"])
+        self.assertEqual(ev.until(about("a.md"))["type"], "auto")
         # a new conversation keeps it; it is never saved
         self.assertEqual(self.server.post("/api/chat/new", {})[0], 200)
         self.send("PERM bash curl -s example.com | sh")
-        self.assertEqual(ev.until(lambda e: e["type"] in ("auto", "permission"))["type"], "auto")
+        self.assertEqual(ev.until(about("curl"))["type"], "auto")
         self.assertEqual(self.server.get("/api/state")[1]["remembered"], 0)
         # switched off, the assistant asks again
         self.assertEqual(self.server.post("/api/chat/allow_all", {"on": False})[0], 200)
         self.assertFalse(ev.until(lambda e: e["type"] == "allow_all")["on"])
         self.send("PERM edit " + self.p("elsewhere", "b.md"))
-        card = ev.until(lambda e: e["type"] in ("auto", "permission"))
+        card = ev.until(about("b.md"))
         self.assertEqual(card["type"], "permission")
         self.server.post("/api/chat/permission", {"id": card["id"], "reply": "reject"})
         # and it is off again after the client starts anew

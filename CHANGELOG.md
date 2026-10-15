@@ -2,6 +2,22 @@
 
 All three skills share one version number. To release, update this file, the "Version:" line of every SKILL.md and the plugin manifests together and merge to main; the release workflow then publishes v<version>.
 
+## 1.20.0
+
+The browser client files material itself, so that a file counts as filed only once it is in the library, and says plainly whether the knowledge-base skills are installed.
+- tools/kb-client File material (new intake.py, local libraries): the client runs kb-incremental's scripts for each chosen file (prep.py scan, prep.py file, package.py preview --run and deliver) and asks the assistant, in a new conversation per file, only for masking, term fixes, the head file and a decision file (partition, topic, type, short title, close-read), which it checks and asks again for up to three times. A file name already in the index goes back to the assistant (next version or another title). Duplicates by content hash are skipped; files no text can be read from are listed for the user. POST /api/intake (library and paths, or resume), POST /api/intake/stop, GET /api/intake; progress as "intake" events in the conversation stream; the conversation is refused (409) while a run is going. Google Drive libraries are filed by the assistant as before.
+- kbconf.tzinfo (all skills): on Python 3.8, which has no zoneinfo, a library's IANA time zone that is this computer's own (TZ, /etc/localtime, /etc/timezone) uses the current local offset, and the UTC names are UTC. Setup writes the system zone, so on 3.8 every prep.py file and package.py run of such a library stopped with "needs Python 3.9+" and nothing could be filed. Other names still ask for a fixed offset.
+- tools/kb-client intake: a script refusal that no answer can fix (refused: from prep.py file) fails the file at once with the reason; a file that fails after three answers names the last reason.
+- tools/kb-client task buttons: File material and Quick note with a line each; Continue intake only while files are left, File quick notes only while notes wait (libraries report their count as notes), Health check and Archive old versions under More. The buttons stay visible with the knowledge base folded.
+- tools/kb-client knowledge-base skills: one rule for the status chip and Getting started, the three skills in the folders OpenCode reads (/api/state kb_skills: found with folder and version, missing, folders checked). The chip is always shown and opens the details, with Install them when one is missing. The skill lists reload after Set up, Uninstall and Roll back, which left them out of date until the page was reloaded.
+
+## 1.19.0
+
+The browser client folds the knowledge base the same way with or without --chat-first, keeps a skill list beside the conversation and formats the assistant's answers.
+- tools/kb-client: the Knowledge base button sits beside the title as a filled button and is shown in every mode. Folded, the page fills the window: a read-only skill list (one line per skill in use, opened for the description and trigger phrases, knowledge-base skills first, scrolling in its column, a filter past eight skills) and the conversation. Unfolded, the libraries, Manage, the Skills section and the step panel come back; with --simple the read-only list stays in place of the Skills section. The page starts unfolded, folded with --chat-first; the browser remembers each apart.
+- tools/kb-client: the assistant's answers are shown as Markdown (headings, lists, quotes, tables, rules, inline code, bold, italic, web links), built as DOM nodes so that nothing in an answer runs. Fenced code has a Copy button and colours for Python, shell, JavaScript, JSON, YAML, SQL and diff. The user's messages stay plain text.
+- tools/kb-client: larger text in the conversation (16px, code 14px), a page up to 1440px wide and a four-line input box.
+
 ## 1.18.0
 
 The browser client can open as a front end for OpenCode, with the knowledge base folded away.

@@ -80,8 +80,10 @@
       agent_ok: "OpenCode ready",
       agent_no_model: "OpenCode: no model set",
       agent_missing: "OpenCode not found",
-      skills_none: "Skills not installed",
-      skills_in: "Skills: {names}",
+      kb_skills_ok: "Knowledge-base skills: {n}/{total} installed", kb_skills_missing: "Knowledge-base skills: {names} missing",
+      kb_skills_title: "Knowledge-base skills where OpenCode reads them",
+      kb_skills_found: "{name} (version {version}): {folder}", kb_skills_not_found: "{name}: not found",
+      kb_skills_checked: "Folders checked, in the order OpenCode reads them:", kb_skills_install: "Install them",
       backups: "{n} backups",
       no_backups: "No backups yet",
       result_ok: "Finished.",
@@ -103,6 +105,21 @@
       task_lint: "Health check",
       task_archive: "Archive old versions",
       task_resume: "Continue intake",
+      task_intake_hint: "Choose files or folders; each is written into the library",
+      task_note_hint: "Keep one sentence in the library at once",
+      task_lint_hint: "Look for broken links, missing pages and stale files",
+      task_archive_hint: "Move superseded versions to the archive folder",
+      task_more: "More", task_notes_n: "File quick notes ({n})",
+      intake_title: "Filing into {lib}: {done}/{total}",
+      intake_step_scan: "Reading {file}", intake_step_ask: "The assistant masks and places {file}",
+      intake_step_file: "Assembling {file}", intake_step_write: "Writing {file} into the library",
+      intake_st_waiting: "waiting", intake_st_working: "in progress", intake_st_written: "written",
+      intake_st_duplicate: "already in the library", intake_st_manual: "needs you", intake_st_failed: "failed",
+      intake_stop: "Stop", intake_stopping: "Stopping\u2026",
+      intake_done: "Done: {written} written, {duplicate} already in the library, {failed} failed, {manual} to handle by hand.",
+      intake_stopped: "Stopped: {waiting} not done yet. Continue picks them up.",
+      intake_continue: "Continue", intake_where: "Written into {root}",
+      intake_manual_go: "Hand the {n} unreadable files to the assistant",
       chat_one_agent: "If OpenCode is also open in a terminal, quit it before filing material, so that only one of them writes to the library.",
       chat_keys: "Enter sends, Shift+Enter starts a new line.",
       chat_stop: "Stop",
@@ -209,7 +226,10 @@
       forget_confirm: "Forget every Always allow answer? The assistant will ask again for those actions, and OpenCode is restarted so that it forgets them too.",
       chat_restarting_forget: "Restarting OpenCode so that it forgets the Always allow answers...",
       title_chat: "OpenCode",
-      kb_open: "Knowledge base \u25b8", kb_close: "Fold the knowledge base",
+      kb_open: "Knowledge base", kb_close: "Fold the knowledge base",
+      skills_panel_intro: "What the assistant can do. Say one of the phrases, or ask in your own words.",
+      skills_filter: "Filter skills", skills_no_match: "No skill matches.",
+      copy_code: "Copy",
       workdir_label: "Work folder:", workdir_none: "none chosen (your home folder; edits ask first)",
       workdir_change: "Change\u2026", workdir_recent: "Recent folders", workdir_title: "Choose the work folder",
       workdir_hint: "The assistant reads and edits files in this folder without asking; commands and anything outside it still ask.",
@@ -295,8 +315,10 @@
       agent_ok: "OpenCode 已就绪",
       agent_no_model: "OpenCode 未配置模型",
       agent_missing: "未找到 OpenCode",
-      skills_none: "技能未安装",
-      skills_in: "技能：{names}",
+      kb_skills_ok: "知识库技能：已安装 {n}/{total}", kb_skills_missing: "知识库技能：缺 {names}",
+      kb_skills_title: "知识库技能（OpenCode 读得到的位置）",
+      kb_skills_found: "{name}（版本 {version}）：{folder}", kb_skills_not_found: "{name}：没有找到",
+      kb_skills_checked: "检查过的文件夹（按 OpenCode 的读取顺序）：", kb_skills_install: "去安装",
       backups: "共 {n} 次备份",
       no_backups: "还没有备份",
       result_ok: "已完成。",
@@ -318,6 +340,21 @@
       task_lint: "体检",
       task_archive: "归档旧版",
       task_resume: "继续入库",
+      task_intake_hint: "选文件或文件夹，逐个写进知识库",
+      task_note_hint: "记一句话，马上存进知识库",
+      task_lint_hint: "查断链、缺页和过期文件",
+      task_archive_hint: "把被新版本取代的文件移到归档文件夹",
+      task_more: "更多", task_notes_n: "整理随手记（{n} 条）",
+      intake_title: "入库到「{lib}」：{done}/{total}",
+      intake_step_scan: "正在读取 {file}", intake_step_ask: "助手正在为 {file} 脱敏、决定放置",
+      intake_step_file: "正在组装 {file}", intake_step_write: "正在把 {file} 写进知识库",
+      intake_st_waiting: "等待", intake_st_working: "处理中", intake_st_written: "已写入",
+      intake_st_duplicate: "库里已有（重复）", intake_st_manual: "需要你处理", intake_st_failed: "失败",
+      intake_stop: "停止", intake_stopping: "正在停止\u2026",
+      intake_done: "完成：写入 {written} 个，库里已有 {duplicate} 个，失败 {failed} 个，需要手动处理 {manual} 个。",
+      intake_stopped: "已停止：还有 {waiting} 个没做，点「继续」接着做。",
+      intake_continue: "继续", intake_where: "写入位置：{root}",
+      intake_manual_go: "把 {n} 个读不出文字的文件交给助手",
       chat_one_agent: "如果终端里也开着 OpenCode，入库前请先退出它，免得两边同时写同一个知识库。",
       chat_keys: "回车发送，Shift+回车换行。",
       chat_stop: "停止",
@@ -424,7 +461,10 @@
       forget_confirm: "清除所有「总是允许」吗？之后这些操作助手会再次询问；OpenCode 会重新启动，让它也忘掉这些授权。",
       chat_restarting_forget: "正在重新启动 OpenCode，让它忘掉「总是允许」的授权…",
       title_chat: "OpenCode 工作台",
-      kb_open: "知识库 \u25b8", kb_close: "收起知识库",
+      kb_open: "知识库", kb_close: "收起知识库",
+      skills_panel_intro: "助手能做的事。说出其中的话，或者用自己的话提出要求。",
+      skills_filter: "筛选技能", skills_no_match: "没有匹配的技能。",
+      copy_code: "复制",
       workdir_label: "工作文件夹：", workdir_none: "未选择（家目录；改文件前会先问）",
       workdir_change: "更换\u2026", workdir_recent: "最近的文件夹", workdir_title: "选择工作文件夹",
       workdir_hint: "助手在这个文件夹里读、改文件不再询问；运行命令和文件夹以外的操作仍会询问。",
@@ -646,10 +686,14 @@
     var a = state.agent;
     var chip = !a.program ? ["bad", t("agent_missing")] : (a.model ? ["good", t("agent_ok")] : ["warn", t("agent_no_model")]);
     status.appendChild(el("span", { "class": "chip " + chip[0], title: a.program ? a.program + "  (" + a.how + ")" : "" }, chip[1]));
-    var names = state.skills.map(function (s) { return s.name; });
-    status.appendChild(el("span", { "class": "chip kb-only " + (names.length ? "good" : "warn"),
-      title: state.skills.map(function (s) { return s.folder; }).join("\n") },
-      names.length ? t("skills_in", { names: names.join(", ") }) : t("skills_none")));
+    var ks = state.kb_skills || { ok: false, found: [], missing: [], checked: [] };
+    var sc = el("button", { type: "button", "class": "chip chip-button " + (ks.ok ? "good" : "bad"), id: "kb-skills-chip",
+      "aria-expanded": $("skill-pop").hidden ? "false" : "true", "aria-controls": "skill-pop" },
+      ks.ok ? t("kb_skills_ok", { n: ks.found.length, total: ks.found.length })
+        : t("kb_skills_missing", { names: ks.missing.join(", ") }));
+    sc.addEventListener("click", function () { show($("skill-pop"), $("skill-pop").hidden); drawSkillPop(); });
+    status.appendChild(sc);
+    drawSkillPop();
     $("backups").textContent = state.backups ? t("backups", { n: state.backups }) : t("no_backups");
     $("remembered-text").textContent = t("remembered", { n: state.remembered || 0 });
     show($("remembered"), !!state.remembered);
@@ -681,8 +725,8 @@
 
   function renderChecklist() {
     if (!state) return;
-    // --chat-first with the knowledge base folded: only whether OpenCode can be used
-    var kbShown = !state.chat_first || kbOpen();
+    // With the knowledge base folded: only whether OpenCode can be used
+    var kbShown = document.body.classList.contains("kb-open");
     var items = kbShown ? checklist() : checklist().slice(0, 2);
     var need = kbShown ? 5 : 2;
     var list = $("check-list");
@@ -808,6 +852,7 @@
     show($("result"), false);
     clearAsk();
     setBusy(true);
+    applyKb();
     var src = new EventSource("/api/events?job=" + encodeURIComponent(id) + "&t=" + encodeURIComponent(token));
     job.source = src;
     src.onmessage = function (m) {
@@ -838,7 +883,7 @@
     var after = afterJob;
     afterJob = null;
     if (res === "ok" && after) after($("log").textContent);
-    if (action && action.indexOf("skill_") === 0) loadSkills();
+    if (action) loadSkills();  // Set up, Uninstall and Roll back change the skills too
     foldStep(res === "ok");
     refresh();
   }
@@ -1041,20 +1086,22 @@
 
   function chatEnable() {
     var on = chat.ready && !chat.busy;
-    $("chat-send").disabled = !chat.ready;  // while the assistant works, a message waits its turn
     $("chat-terminal").disabled = !chat.ready;
     $("chat-allow-all").disabled = !chat.ready || chat.simple;
     $("chat-allow-all").setAttribute("data-t", chat.allowAll ? "allow_all_on" : "allow_all");
     $("chat-allow-all").textContent = t(chat.allowAll ? "allow_all_on" : "allow_all");
     $("chat-allow-all").classList.toggle("on", chat.allowAll);
     var noLib = state !== null && !localLibs().length;
+    var filing = intakeRunning();
+    $("chat-send").disabled = !chat.ready || filing;  // while the assistant works, a message waits its turn
     Array.prototype.forEach.call(document.querySelectorAll("[data-task]"), function (b) {
       var batch = b.getAttribute("data-task") === "intake" || b.getAttribute("data-task") === "resume";
-      b.disabled = !on || noLib || (chat.simple && batch);
+      b.disabled = !on || noLib || filing || (chat.simple && batch);
       b.title = noLib ? t("chat_no_library") : (chat.simple && batch ? t("simple_no_intake") : "");
     });
-    $("chat-new").disabled = !chat.ready || chat.busy;
-    ["workdir-change", "workdir-recent", "sessions"].forEach(function (id) { $(id).disabled = !chat.ready || chat.busy; });
+    showTasks();
+    $("chat-new").disabled = !chat.ready || chat.busy || filing;
+    ["workdir-change", "workdir-recent", "sessions"].forEach(function (id) { $(id).disabled = !chat.ready || chat.busy || filing; });
     show($("chat-stop"), chat.ready && chat.busy);
     $("chat-state").textContent = !chat.ready ? "" : (chat.busy ? t("chat_busy") : t("chat_ready"));
     renderChecklist();
@@ -1145,10 +1192,326 @@
       p.dataset.tool = ev.tool || "";
       if (ev.diff) p.appendChild(diffFold(ev.diff));
     } else {
-      p.textContent = ev.text;
+      setText(p, ev.text, ev.role);
       if (ev.role === "user") dropQueued(ev.text);
     }
     scrollChat();
+  }
+
+  // ---------- Markdown in the assistant's answers ----------
+  // A small subset, built as DOM nodes (never as HTML, so that nothing in an answer runs): headings,
+  // lists, quotes, tables, rules, fenced code with colours, inline code, bold, italic and web links.
+  // The user's own messages stay plain text.
+
+  function setText(p, text, role) {
+    p.dataset.raw = text || "";
+    if (role === "user") { p.textContent = text; return; }
+    p.dataset.md = "1";
+    p.textContent = "";
+    p.appendChild(markdown(text || ""));
+  }
+
+  // While an answer streams in, it is drawn again at most once per frame.
+  function addText(p, delta, role) {
+    p.dataset.raw = (p.dataset.raw || "") + delta;
+    if (role === "user") { p.textContent = p.dataset.raw; return; }
+    if (p.dataset.drawing) return;
+    p.dataset.drawing = "1";
+    requestAnimationFrame(function () {
+      delete p.dataset.drawing;
+      setText(p, p.dataset.raw, role);
+      scrollChat();
+    });
+  }
+
+  var MD_FENCE = /^ {0,3}(`{3,}|~{3,})\s*([\w+#.-]*)/;
+  var MD_HEAD = /^ {0,3}(#{1,6})\s+(.*?)(?:\s+#+)?\s*$/;
+  var MD_RULE = /^ {0,3}([-*_])(?:\s*\1){2,}\s*$/;
+  var MD_QUOTE = /^ {0,3}>\s?/;
+  var MD_ITEM = /^(\s*)([-*+]|\d{1,9}[.)])\s+(.*)$/;
+  var MD_TABLE_SEP = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/;
+
+  function indentOf(line) { return /^\s*/.exec(line)[0].replace(/\t/g, "    ").length; }
+
+  function markdown(text) {
+    var frag = document.createDocumentFragment();
+    mdBlocks(text.replace(/\r\n?/g, "\n").split("\n"), frag);
+    return frag;
+  }
+
+  function mdBlocks(lines, into) {
+    var i = 0, para = [];
+    function flush() {
+      if (!para.length) return;
+      var p = el("p", { "class": "md-p" });
+      para.forEach(function (l, k) {
+        if (k) p.appendChild(el("br"));
+        mdInline(l.trim(), p);
+      });
+      into.appendChild(p);
+      para = [];
+    }
+    while (i < lines.length) {
+      var line = lines[i], m;
+      if (!line.trim()) { flush(); i++; continue; }
+      if ((m = MD_FENCE.exec(line))) {
+        flush();
+        var mark = m[1], body = [];
+        i++;
+        while (i < lines.length && !(lines[i].trim().indexOf(mark) === 0 &&
+               lines[i].trim().split(mark.charAt(0)).join("") === "")) body.push(lines[i++]);
+        i++;  // the closing fence; an answer still streaming may not have it yet
+        into.appendChild(codeBlock(body.join("\n"), m[2]));
+        continue;
+      }
+      if ((m = MD_HEAD.exec(line))) {
+        flush();
+        var h = el("p", { "class": "md-h md-h" + m[1].length });
+        mdInline(m[2], h);
+        into.appendChild(h);
+        i++;
+        continue;
+      }
+      if (MD_RULE.test(line)) { flush(); into.appendChild(el("hr", { "class": "md-rule" })); i++; continue; }
+      if (MD_QUOTE.test(line)) {
+        flush();
+        var q = [];
+        while (i < lines.length && MD_QUOTE.test(lines[i])) q.push(lines[i++].replace(MD_QUOTE, ""));
+        var bq = el("blockquote", { "class": "md-quote" });
+        mdBlocks(q, bq);
+        into.appendChild(bq);
+        continue;
+      }
+      if (line.indexOf("|") >= 0 && i + 1 < lines.length && MD_TABLE_SEP.test(lines[i + 1]) &&
+          lines[i + 1].indexOf("|") >= 0) {
+        flush();
+        var rows = [line];
+        i += 2;
+        while (i < lines.length && lines[i].indexOf("|") >= 0 && lines[i].trim()) rows.push(lines[i++]);
+        into.appendChild(table(rows));
+        continue;
+      }
+      if ((m = MD_ITEM.exec(line))) {
+        flush();
+        i = list(lines, i, into);
+        continue;
+      }
+      para.push(line);
+      i++;
+    }
+    flush();
+  }
+
+  // A list from line i: its items at the first item's indent, each with the more indented lines under it
+  // (nested lists, continued text). Returns the line after the list.
+  function list(lines, i, into) {
+    var first = MD_ITEM.exec(lines[i]);
+    var base = indentOf(first[1]);
+    var ordered = /\d/.test(first[2]);
+    var ol = el(ordered ? "ol" : "ul", { "class": "md-list" });
+    if (ordered && parseInt(first[2], 10) !== 1) ol.setAttribute("start", String(parseInt(first[2], 10)));
+    var item = null;
+    while (i < lines.length) {
+      var line = lines[i], m = MD_ITEM.exec(line);
+      if (m && indentOf(m[1]) <= base + 1) {
+        if (/\d/.test(m[2]) !== ordered) break;
+        if (item) ol.appendChild(listItem(item));
+        item = [m[3]];
+        i++;
+      } else if (line.trim() && indentOf(line) > base) {
+        item.push(line.slice(Math.min(indentOf(line), base + 2)));
+        i++;
+      } else if (!line.trim() && i + 1 < lines.length && lines[i + 1].trim() &&
+                 (indentOf(lines[i + 1]) > base || MD_ITEM.test(lines[i + 1]) &&
+                  indentOf(MD_ITEM.exec(lines[i + 1])[1]) <= base + 1)) {
+        i++;  // a blank line inside the list
+      } else break;
+    }
+    if (item) ol.appendChild(listItem(item));
+    into.appendChild(ol);
+    return i;
+  }
+
+  function listItem(lines) {
+    var li = el("li");
+    if (lines.length === 1) mdInline(lines[0], li);
+    else mdBlocks(lines, li);
+    return li;
+  }
+
+  function cells(row) {
+    var s = row.trim().replace(/^\|/, "").replace(/\|$/, "");
+    var out = [""];
+    for (var k = 0; k < s.length; k++) {
+      if (s.charAt(k) === "\\" && s.charAt(k + 1) === "|") { out[out.length - 1] += "|"; k++; }
+      else if (s.charAt(k) === "|") out.push("");
+      else out[out.length - 1] += s.charAt(k);
+    }
+    return out.map(function (c) { return c.trim(); });
+  }
+
+  function table(rows) {
+    var wrap = el("div", { "class": "md-table" });
+    var tb = el("table");
+    rows.forEach(function (r, k) {
+      var tr = el("tr");
+      cells(r).forEach(function (c) {
+        var td = el(k ? "td" : "th");
+        mdInline(c, td);
+        tr.appendChild(td);
+      });
+      tb.appendChild(tr);
+    });
+    wrap.appendChild(tb);
+    return wrap;
+  }
+
+  var MD_INLINE = /(`+)([\s\S]*?[^`])\1(?!`)|\*\*(?=\S)([\s\S]*?\S)\*\*|__(?=\S)([\s\S]*?\S)__|\*(?=[^\s*])([^*]*?[^\s*])\*|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>()　-〿＀-￯]+[^\s<>().,;:!?'"　-〿＀-￯])/g;
+
+  function mdInline(text, into) {
+    var re = new RegExp(MD_INLINE.source, "g"), last = 0, m;  // its own: bold and italic call this again
+    while ((m = re.exec(text))) {
+      if (m.index > last) into.appendChild(document.createTextNode(text.slice(last, m.index)));
+      if (m[1]) into.appendChild(el("code", { "class": "md-code" }, m[2].replace(/^ (.*) $/, "$1")));
+      else if (m[3] !== undefined || m[4] !== undefined) {
+        var b = el("strong");
+        mdInline(m[3] !== undefined ? m[3] : m[4], b);
+        into.appendChild(b);
+      } else if (m[5] !== undefined) {
+        var e = el("em");
+        mdInline(m[5], e);
+        into.appendChild(e);
+      } else {
+        var href = m[7] || m[8];
+        var a = el("a", { href: href, target: "_blank", rel: "noopener noreferrer" }, m[6] || href);
+        into.appendChild(a);
+      }
+      last = re.lastIndex;
+    }
+    if (last < text.length) into.appendChild(document.createTextNode(text.slice(last)));
+  }
+
+  function copyText(text, button) {
+    var done = function () {
+      button.textContent = t("copied");
+      setTimeout(function () { button.textContent = t("copy_code"); }, 1500);
+    };
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(done, function () {});
+      return;
+    }
+    var box = el("textarea");
+    box.value = text;
+    box.style.position = "fixed";
+    box.style.opacity = "0";
+    document.body.appendChild(box);
+    box.select();
+    try { if (document.execCommand("copy")) done(); } catch (e) { /* the text stays selectable */ }
+    box.remove();
+  }
+
+  function codeBlock(code, lang) {
+    var wrap = el("div", { "class": "md-pre" });
+    var head = el("div", { "class": "md-pre-head" });
+    head.appendChild(el("span", { "class": "md-lang" }, lang || ""));
+    var copy = el("button", { type: "button", "class": "quiet small" }, t("copy_code"));
+    copy.addEventListener("click", function () { copyText(code, copy); });
+    head.appendChild(copy);
+    wrap.appendChild(head);
+    var pre = el("pre");
+    var c = el("code");
+    highlight(code, lang, c);
+    pre.appendChild(c);
+    wrap.appendChild(pre);
+    return wrap;
+  }
+
+  // ---------- code colours ----------
+  // A token pass per language: comments, strings, variables or keys, numbers and keywords get a class
+  // (tok-com, tok-str, tok-var, tok-num, tok-kw); everything else stays plain text. Not a parser: unusual
+  // code may be coloured wrongly, its text is always shown as it is.
+
+  function words(s) {
+    var o = {};
+    s.split(" ").forEach(function (w) { o[w] = true; });
+    return o;
+  }
+
+  var STR_DQ = '"(?:[^"\\\\\\n]|\\\\.)*"', STR_SQ = "'(?:[^'\\\\\\n]|\\\\.)*'";
+  var NUM = "\\b(?:0[xX][\\da-fA-F]+|\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?)\\b";
+  var WORD = "[A-Za-z_$][\\w$]*";
+  var JS_KW = words("var let const function return if else for while do switch case break continue new try catch " +
+    "finally throw typeof instanceof in of class extends import export from default async await yield null " +
+    "undefined true false this super delete void static get set");
+  var LANGS = {
+    python: { tokens: [["com", "#.*"], ["str", "[rRbBuUfF]{0,2}(?:\"\"\"[\\s\\S]*?\"\"\"|'''[\\s\\S]*?'''|" + STR_DQ + "|" + STR_SQ + ")"],
+                       ["var", "@[\\w.]+"]],
+              kw: words("and as assert async await break class continue def del elif else except False finally for " +
+                        "from global if import in is lambda None nonlocal not or pass raise return True try while " +
+                        "with yield self print len range") },
+    shell: { tokens: [["com", "(?:^|\\s)#.*"], ["str", STR_DQ + "|'[^']*'"],
+                      ["var", "\\$(?:\\{[^}\\n]*\\}|[\\w@#?*!$-]+)"]],
+             kw: words("if then else elif fi for while until do done case esac in function return local export " +
+                       "readonly declare set unset echo printf cd exit source sudo shift break continue true false") },
+    js: { tokens: [["com", "\\/\\/.*|\\/\\*[\\s\\S]*?\\*\\/"], ["str", STR_DQ + "|" + STR_SQ + "|`(?:[^`\\\\]|\\\\.)*`"]],
+          kw: JS_KW },
+    json: { tokens: [["var", STR_DQ + "(?=\\s*:)"], ["str", STR_DQ]], kw: words("true false null") },
+    yaml: { tokens: [["com", "(?:^|\\s)#.*"], ["var", "^[ \\t]*(?:- +)?[^\\s:#'\"][^:#\\n]*(?=:(?:\\s|$))"],
+                     ["str", STR_DQ + "|" + STR_SQ]],
+            kw: words("true false null yes no on off True False Null ~") },
+    sql: { tokens: [["com", "--.*|\\/\\*[\\s\\S]*?\\*\\/"], ["str", STR_SQ + "|" + STR_DQ]],
+           kw: words("select from where and or not insert into values update set delete create table view index " +
+                     "drop alter add join left right inner outer full on group by order having limit offset as " +
+                     "distinct null is in like between union all case when then else end exists primary key " +
+                     "references default count sum avg min max asc desc with"), lower: true }
+  };
+  var LANG_NAMES = { py: "python", python: "python", python3: "python", sh: "shell", bash: "shell", shell: "shell",
+    zsh: "shell", console: "shell", js: "js", javascript: "js", ts: "js", typescript: "js", mjs: "js",
+    jsx: "js", json: "json", jsonc: "js", yaml: "yaml", yml: "yaml", sql: "sql" };
+  var LANG_RE = {};
+
+  function langRe(name) {
+    if (!LANG_RE[name]) {
+      var spec = LANGS[name];
+      var parts = spec.tokens.map(function (x) { return "(" + x[1] + ")"; });
+      parts.push("(" + NUM + ")", "(" + WORD + ")");
+      LANG_RE[name] = new RegExp(parts.join("|"), "gm");
+    }
+    return LANG_RE[name];
+  }
+
+  function highlight(code, lang, into) {
+    lang = (lang || "").toLowerCase();
+    if (lang === "diff" || lang === "patch") { diffLines(code, into); return; }
+    var name = LANG_NAMES[lang];
+    if (!name) { into.textContent = code; return; }
+    var spec = LANGS[name], re = langRe(name), last = 0, m;
+    var classes = spec.tokens.map(function (x) { return x[0]; }).concat(["num", "word"]);
+    re.lastIndex = 0;
+    while ((m = re.exec(code))) {
+      if (m[0] === "") { re.lastIndex++; continue; }
+      var k = 1;
+      while (m[k] === undefined) k++;
+      var cls = classes[k - 1];
+      if (cls === "word") {
+        cls = spec.kw[spec.lower ? m[0].toLowerCase() : m[0]] ? "kw" : "";
+        if (!cls) continue;  // left in the plain text before the next token
+      }
+      if (m.index > last) into.appendChild(document.createTextNode(code.slice(last, m.index)));
+      into.appendChild(el("span", { "class": "tok-" + cls }, m[0]));
+      last = re.lastIndex;
+    }
+    if (last < code.length) into.appendChild(document.createTextNode(code.slice(last)));
+  }
+
+  function diffLines(code, into) {
+    var lines = code.split("\n");
+    lines.forEach(function (l, k) {
+      var cls = /^(\+\+\+|---)/.test(l) ? "head" : l.charAt(0) === "+" ? "add" : l.charAt(0) === "-" ? "del"
+        : l.indexOf("@@") === 0 ? "hunk" : "";
+      into.appendChild(cls ? el("span", { "class": "tok-" + cls }, l) : document.createTextNode(l));
+      if (k < lines.length - 1) into.appendChild(document.createTextNode("\n"));
+    });
   }
 
   // A finished turn keeps its answer in view and folds its steps into one line, so that the conversation
@@ -1312,7 +1675,7 @@
     }
     else if (ev.type === "delta") {
       var p = partEl({ partID: ev.partID, messageID: ev.messageID, role: ev.role, child: ev.child, kind: "text" });
-      p.textContent += ev.delta;
+      addText(p, ev.delta, ev.role);
       scrollChat();
     } else if (ev.type === "status") {
       chat.busy = ev.status !== "idle";
@@ -1332,6 +1695,7 @@
     else if (ev.type === "permission_done" || ev.type === "question_done") dropCard(ev.id);
     else if (ev.type === "reset") { chat.model = ""; $("model").value = ""; clearChat(); }
     else if (ev.type === "workdir") chatBar(ev);
+    else if (ev.type === "intake") { intake.run = ev.run; drawIntake(); chatEnable(); }
     else if (ev.type === "allow_all") {
       if (chat.allowAll !== ev.on) note(t(ev.on ? "allow_all_note_on" : "allow_all_note_off"), ev.on ? "error" : "auto");
       chat.allowAll = ev.on;
@@ -1341,18 +1705,25 @@
 
   // ---------- --chat-first: the knowledge base folded, a work folder, models, earlier conversations ----------
 
+  // Whether the knowledge base is unfolded: remembered by the browser, apart for --chat-first. It starts
+  // folded with --chat-first and unfolded otherwise.
+  function kbKey() { return state && state.chat_first ? "kb-client-kb-open" : "kb-client-kb-open-full"; }
+
   function kbOpen() {
-    try { return localStorage.getItem("kb-client-kb-open") === "open"; } catch (e) { return false; }
+    var v = null;
+    try { v = localStorage.getItem(kbKey()); } catch (e) { v = null; }
+    return v === null ? !(state && state.chat_first) : v === "open";
   }
 
-  // body.chat-first hides the knowledge-base parts of the page (style.css) until body.kb-open.
+  // Without body.kb-open the page shows the skills and the conversation only (style.css); a running step
+  // unfolds it.
   function applyKb() {
     var cf = !!(state && state.chat_first);
     document.body.classList.toggle("chat-first", cf);
-    document.body.classList.toggle("kb-open", cf && (kbOpen() || !!job));
-    show($("kb-toggle"), cf);
+    document.body.classList.toggle("kb-open", kbOpen() || !!job);
+    show($("kb-toggle"), !!state);
     show($("chat-bar"), cf);
-    $("kb-toggle").textContent = t(kbOpen() ? "kb_close" : "kb_open");
+    $("kb-toggle-text").textContent = t(kbOpen() ? "kb_close" : "kb_open");
     $("kb-toggle").setAttribute("aria-expanded", kbOpen() ? "true" : "false");
     var title = t(cf ? "title_chat" : "title");
     $("title").textContent = title;
@@ -1360,7 +1731,7 @@
   }
 
   function toggleKb() {
-    try { localStorage.setItem("kb-client-kb-open", kbOpen() ? "folded" : "open"); } catch (e) { /* this view only */ }
+    try { localStorage.setItem(kbKey(), kbOpen() ? "folded" : "open"); } catch (e) { /* this view only */ }
     applyKb();
     renderChecklist();
   }
@@ -1922,12 +2293,128 @@
 
   function task(name) {
     if (name === "note") { noteCard(); return; }
+    if (name === "resume" && intakeLeft()) { startIntake({ resume: true }); return; }
     pickLibrary(function (lib) {
       if (name !== "intake") { say(withWork(t("say_" + name, { lib: lib.label }))); return; }
       openBrowser((state && state.home) || "", function (paths) {
-        say(withWork(t("say_intake", { lib: lib.label, paths: paths.join("\n") })), paths);
+        startIntake({ library: lib.id, paths: paths });
       }, true);
     });
+  }
+
+  // Which of the extra buttons apply: Continue intake while a run stopped with files left (or a batch
+  // intake of the skill is open), File quick notes while notes wait.
+  function showTasks() {
+    show($("task-resume"), !!(intakeLeft() || openRun()));
+    var notes = localLibs().reduce(function (n, l) { return n + (l.notes || 0); }, 0);
+    $("task-notes").textContent = t("task_notes_n", { n: notes });
+    show($("task-notes"), notes > 0);
+  }
+
+  // ---------- intake run by the client ----------
+  // The client runs the skill's scripts for each file and asks the assistant only to mask and place it
+  // (intake.py); the page shows each file's state, and what was written where once the run ends.
+
+  var intake = { run: null, closed: "" };
+
+  function intakeRunning() {
+    return !!(intake.run && (intake.run.state === "running" || intake.run.state === "stopping"));
+  }
+
+  function intakeLeft() {
+    var r = intake.run;
+    return !!(r && r.state === "stopped" && (r.counts.waiting || 0) > 0);
+  }
+
+  function startIntake(body) {
+    api("POST", "/api/intake", body).then(function (r) {
+      intake.run = r.run;
+      intake.closed = "";
+      drawIntake();
+      chatEnable();
+    }).catch(function (e) { note(String(e.message), "error"); });
+  }
+
+  function loadIntake() {
+    return api("GET", "/api/intake").then(function (r) {
+      intake.run = r.run;
+      drawIntake();
+      chatEnable();
+    }).catch(function () {});
+  }
+
+  var INTAKE_MARK = { waiting: "\u2022", working: "\u2026", written: "\u2713", duplicate: "=", manual: "!", failed: "\u2717" };
+
+  function drawIntake() {
+    var r = intake.run, box = $("intake");
+    if (!r || intake.closed === r.id + r.state) { show(box, false); return; }
+    show(box, true);
+    box.textContent = "";
+    var c = r.counts || {};
+    var done = (c.written || 0) + (c.duplicate || 0) + (c.manual || 0) + (c.failed || 0);
+    var head = el("div", { "class": "intake-head" });
+    head.appendChild(el("strong", {}, t("intake_title", { lib: r.label, done: done, total: r.total })));
+    var cur = r.items.filter(function (it) { return it.status === "working"; })[0];
+    var step = el("span", { "class": "intake-step" },
+      r.state === "stopping" ? t("intake_stopping") : cur && r.step ? t("intake_step_" + r.step, { file: cur.file }) : "");
+    head.appendChild(step);
+    if (r.state === "running") {
+      var stop = el("button", { type: "button", "class": "quiet small" }, t("intake_stop"));
+      stop.addEventListener("click", function () { api("POST", "/api/intake/stop", {}).catch(function () {}); });
+      head.appendChild(stop);
+    } else if (r.state !== "stopping") {
+      var close = el("button", { type: "button", "class": "quiet small" }, t("close"));
+      close.addEventListener("click", function () { intake.closed = r.id + r.state; drawIntake(); });
+      head.appendChild(close);
+    }
+    box.appendChild(head);
+    var bar = el("div", { "class": "intake-bar" });
+    var fill = el("span");
+    fill.style.width = (r.total ? Math.round(100 * done / r.total) : 0) + "%";
+    bar.appendChild(fill);
+    box.appendChild(bar);
+    var ul = el("ul", { "class": "intake-items" });
+    r.items.forEach(function (it) {
+      var li = el("li", { "class": "st-" + it.status });
+      li.appendChild(el("span", { "class": "mark", "aria-hidden": "true" }, INTAKE_MARK[it.status] || ""));
+      li.appendChild(el("span", { "class": "file" }, it.file));
+      var what = t("intake_st_" + it.status) + (it.name ? " \u2192 " + it.name : "") + (it.reason ? ": " + it.reason : "");
+      li.appendChild(el("span", { "class": "what" }, what));
+      ul.appendChild(li);
+    });
+    box.appendChild(ul);
+    if (cur) {
+      var at = ul.children[r.items.indexOf(cur)];
+      if (at) ul.scrollTop = Math.max(0, at.offsetTop - ul.offsetTop - 40);
+    }
+    if (r.state === "done" || r.state === "stopped") {
+      var sum = el("p", { "class": "intake-sum" }, r.state === "done"
+        ? t("intake_done", { written: c.written || 0, duplicate: c.duplicate || 0, failed: c.failed || 0, manual: c.manual || 0 })
+        : t("intake_stopped", { waiting: c.waiting || 0 }));
+      box.appendChild(sum);
+      if (c.written) box.appendChild(el("p", { "class": "hint" }, t("intake_where", { root: r.root })));
+      var row = el("div", { "class": "buttons" });
+      if (r.state === "stopped" && c.waiting) {
+        var go = el("button", { type: "button", "class": "primary small" }, t("intake_continue"));
+        go.addEventListener("click", function () { startIntake({ resume: true }); });
+        row.appendChild(go);
+      }
+      var manual = r.items.filter(function (it) { return it.status === "manual"; });
+      if (manual.length) {
+        var hand = el("button", { type: "button", "class": "small" }, t("intake_manual_go", { n: manual.length }));
+        hand.addEventListener("click", function () {
+          var paths = manual.map(function (it) { return it.source; });
+          say(withWork(t("say_intake", { lib: r.label, paths: paths.join("\n") })), paths);
+        });
+        row.appendChild(hand);
+      }
+      if (c.written) {
+        var g = el("button", { type: "button", "class": "quiet small" }, t("view_graph"));
+        g.addEventListener("click", function () { openGraph(r.library, true); });
+        row.appendChild(g);
+      }
+      if (row.children.length) box.appendChild(row);
+    }
   }
 
   // ---------- skills ----------
@@ -2001,6 +2488,89 @@
     });
     show($("skills-empty"), skills.list.length === 0);
     setBusy(job !== null);
+    drawSkillRows();
+  }
+
+  // The details under the knowledge-base skills chip: where each skill was found, which are missing,
+  // and the folders looked in.
+  function drawSkillPop() {
+    var pop = $("skill-pop");
+    var chip = $("kb-skills-chip");
+    if (chip) chip.setAttribute("aria-expanded", pop.hidden ? "false" : "true");
+    if (pop.hidden || !state) return;
+    var ks = state.kb_skills || { ok: false, found: [], missing: [], checked: [] };
+    pop.textContent = "";
+    pop.appendChild(el("p", { "class": "pop-title" }, t("kb_skills_title")));
+    var ul = el("ul");
+    ks.found.forEach(function (x) {
+      ul.appendChild(el("li", { "class": "good" }, "\u2713 " + t("kb_skills_found", { name: x.name, version: x.version || "?", folder: x.folder })));
+    });
+    ks.missing.forEach(function (name) { ul.appendChild(el("li", { "class": "bad" }, "! " + t("kb_skills_not_found", { name: name }))); });
+    pop.appendChild(ul);
+    pop.appendChild(el("p", { "class": "hint" }, t("kb_skills_checked")));
+    var cl = el("ul", { "class": "hint" });
+    ks.checked.forEach(function (f) { cl.appendChild(el("li", {}, f)); });
+    pop.appendChild(cl);
+    var row = el("div", { "class": "buttons" });
+    if (!ks.ok) {
+      var go = el("button", { type: "button", "class": "primary small" }, t("kb_skills_install"));
+      go.disabled = job !== null;
+      go.addEventListener("click", function () {
+        show(pop, false);
+        try { localStorage.setItem(kbKey(), "open"); } catch (e) { /* this view only */ }
+        startAction("setup");
+      });
+      row.appendChild(go);
+    }
+    var close = el("button", { type: "button", "class": "quiet small" }, t("close"));
+    close.addEventListener("click", function () { show(pop, false); drawSkillPop(); });
+    row.appendChild(close);
+    pop.appendChild(row);
+  }
+
+  function firstSentence(text) {
+    var end = /^[\s\S]*?[.。](?=\s|$)/.exec(text || "");
+    return end ? end[0] : text || "";
+  }
+
+  // The read-only list beside the conversation: one line per skill in use, opened for the whole description
+  // and the phrases that start it. A filter appears past eight skills.
+  function drawSkillRows() {
+    var used = skills.list.filter(function (x) { return x.used; });
+    var box = $("skills-filter");
+    box.placeholder = t("skills_filter");
+    box.setAttribute("aria-label", t("skills_filter"));
+    show(box, used.length > 8);
+    var q = used.length > 8 ? box.value.trim().toLowerCase() : "";
+    var shown = used.filter(function (sk) {
+      return !q || [sk.name, sk.description].concat(sk.triggers || []).join("\n").toLowerCase().indexOf(q) >= 0;
+    });
+    var ul = $("skill-rows");
+    ul.textContent = "";
+    [[t("skill_kb_group"), shown.filter(function (x) { return x.locked; })],
+     [t("skill_other_group"), shown.filter(function (x) { return !x.locked; })]].forEach(function (g) {
+      if (!g[1].length) return;
+      ul.appendChild(el("li", { "class": "skill-group" }, g[0]));
+      g[1].forEach(function (sk) {
+        var li = el("li", { "class": "skill-row" + (sk.locked ? " locked" : "") });
+        var d = el("details");
+        var sum = el("summary");
+        sum.appendChild(el("strong", { "class": "skill-name" }, sk.name));
+        sum.appendChild(el("span", { "class": "skill-line", title: sk.description || "" }, firstSentence(sk.description)));
+        d.appendChild(sum);
+        d.appendChild(el("p", { "class": "skill-full" }, sk.description || ""));
+        if (sk.triggers && sk.triggers.length) {
+          var tr = el("p", { "class": "skill-triggers" }, t("skill_triggers"));
+          sk.triggers.slice(0, 6).forEach(function (phrase) { tr.appendChild(el("span", { "class": "trigger" }, phrase)); });
+          d.appendChild(tr);
+        }
+        li.appendChild(d);
+        ul.appendChild(li);
+      });
+    });
+    var empty = $("skill-rows-empty");
+    empty.textContent = used.length ? t("skills_no_match") : t("skills_none_found");
+    show(empty, shown.length === 0);
   }
 
   function modifyCard(sk) {
@@ -2059,6 +2629,7 @@
   $("sessions").addEventListener("click", sessionsCard);
   $("skill-new").addEventListener("click", newSkill);
   $("skill-import").addEventListener("click", function () { startAction("skill_import"); });
+  $("skills-filter").addEventListener("input", drawSkillRows);
   $("step-toggle").addEventListener("click", function () { foldStep(!$("log").hidden); });
   $("forget").addEventListener("click", function () {
     if (!window.confirm(t("forget_confirm"))) return;
@@ -2154,6 +2725,6 @@
   });
   chatEnable();
   if (!token) { result("error", t("no_token")); return; }
-  refresh().then(function () { if (state) { chatStart(); loadSkills(); } });
+  refresh().then(function () { if (state) { chatStart(); loadSkills(); loadIntake(); } });
   setInterval(function () { if (!job) refresh(); else api("GET", "/api/state").catch(function () {}); }, 20000);
 })();

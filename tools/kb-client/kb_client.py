@@ -46,6 +46,7 @@ import kb_manage  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import agent as agent_mod  # noqa: E402
+import intake as intake_mod  # noqa: E402
 import skills_admin  # noqa: E402
 
 log = logging.getLogger("kb_client")
@@ -81,6 +82,12 @@ MSG = {
         "chat_busy": "The assistant is still working; try again when it is done.",
         "no_program": "OpenCode was not found on this computer.",
         "not_ready": "The conversation is not ready yet.",
+        "intake_running": "An intake is running; stop it first or wait until it is done.",
+        "intake_agent": "Intake needs OpenCode running (not the simple mode); see Getting started.",
+        "intake_skills": "kb-incremental is not installed where OpenCode reads it: choose Set up first.",
+        "intake_library": "Choose a library on this computer.",
+        "intake_empty": "No files found in what was chosen.",
+        "intake_nothing": "Nothing is left to continue.",
         "confirm": "Write the library as previewed above?",
         "write": "Write",
         "change": "Change an item first",
@@ -101,6 +108,12 @@ MSG = {
         "chat_busy": "助手还在处理，等它处理完再试。",
         "no_program": "本机没有找到 OpenCode。",
         "not_ready": "对话还没有准备好。",
+        "intake_running": "正在入库：先停止，或等它做完。",
+        "intake_agent": "入库需要 OpenCode 正常运行（不能是简易模式），见首次使用清单。",
+        "intake_skills": "OpenCode 读得到的位置里没有 kb-incremental：请先「安装与建库」。",
+        "intake_library": "请选择本机上的知识库。",
+        "intake_empty": "所选的内容里没有找到文件。",
+        "intake_nothing": "没有可以继续的文件。",
         "confirm": "按上面的预览写入知识库吗？",
         "write": "写入",
         "change": "先修改某一项",
@@ -248,6 +261,7 @@ class App:
         self.last_seen = time.time()
         self.output = None
         self.server = None
+        self.intake = None  # the last intake run (intake.Run)
 
     # ---------- steps ----------
 
@@ -304,6 +318,7 @@ class App:
             "registry": kb_manage.registry_path(),
             "work": self.work,
             "opencode_skills": opencode_skills(),
+            "kb_skills": kb_skills(),
             "instructions": instructions_line(),
             "pdftotext": bool(shutil.which("pdftotext")),
             "remembered": self.remembered(),
@@ -344,6 +359,41 @@ class App:
             return self.start_agent()
         self.agent.retry(prog)
         return self.agent, None
+
+    def start_intake(self, lib_id, paths, resume=False):
+        """Starts an intake run of paths into the local library lib_id, or of the files a stopped run did
+        not reach. (run, None), or (None, the reason as a MSG key)."""
+        with self.lock:
+            last = self.intake
+            if last is not None and last.running():
+                return None, "intake_running"
+            ag = self.agent
+            if ag is None or ag.state != "ready":
+                return None, "intake_agent"
+            folder = next((f["folder"] for f in kb_skills()["found"] if f["name"] == "kb-incremental"), "")
+            scripts = os.path.join(folder, "scripts")
+            if not os.path.isfile(os.path.join(scripts, "prep.py")):
+                return None, "intake_skills"
+            if resume:
+                if last is None:
+                    return None, "intake_nothing"
+                lib_id = last.lib["id"]
+                sources = [it["source"] for it in last.items if it["status"] == "waiting"]
+                if not sources:
+                    return None, "intake_nothing"
+            lib = next((x for x in libraries() if x["id"] == lib_id and x["root"] and x["exists"]), None)
+            if lib is None:
+                return None, "intake_library"
+            if not resume:
+                sources = intake_mod.expand(paths, lib["root"])
+                if not sources:
+                    return None, "intake_empty"
+            run_id = secrets.token_hex(4)
+            work = os.path.join(self.work, "intake-" + run_id)
+            os.makedirs(work, exist_ok=True)
+            self.intake = intake_mod.Run(ag, lib, sources, scripts, work, self.lang, run_id)
+        self.intake.start()
+        return self.intake, None
 
     def places(self):
         pl = agent_places()
@@ -459,8 +509,20 @@ def libraries():
         out.append({"id": lib.get("id", ""), "label": lib.get("label") or lib.get("id", ""),
                     "scope": lib.get("scope", ""), "type": kind, "root": root,
                     "exists": bool(root) and os.path.isdir(root),
-                    "movable": bool(root) and kb_manage.lib_check(root, install.MANAGE_DEFAULTS) is None})
+                    "movable": bool(root) and kb_manage.lib_check(root, install.MANAGE_DEFAULTS) is None,
+                    "notes": quick_notes(root) if root else 0})
     return out
+
+
+def quick_notes(root):
+    """How many quick notes wait in a local library's notes folder (names.notes_dir) to be filed."""
+    cfg = kb_manage.read_json(os.path.join(root, "_kb.json"), {})
+    names = cfg.get("names") if isinstance(cfg, dict) else None
+    folder = os.path.join(root, (names or {}).get("notes_dir") or "Quick-Notes")
+    try:
+        return sum(1 for f in os.listdir(folder) if f.endswith(".md") and not f.startswith((".", "_")))
+    except OSError:
+        return 0
 
 
 def progress():
@@ -626,10 +688,36 @@ def skills_installed():
 OPENCODE_SKILL_AGENTS = ("opencode", "claude-code", "agents")
 
 
+def skill_version(folder):
+    """The Version: line of a SKILL.md, or ""."""
+    try:
+        with open(os.path.join(folder, "SKILL.md"), encoding="utf-8", errors="replace") as f:
+            for line in f.read(8192).split("\n"):
+                if line.startswith("Version:"):
+                    return line.split(":", 1)[1].strip()
+    except OSError:  # unreadable: the skill is still listed, without a version
+        return ""
+    return ""
+
+
+def kb_skills():
+    """The knowledge-base skills where OpenCode reads them, the only skills the status line counts:
+    {"ok", "found": [{name, folder, version}], "missing": [names], "checked": [folders]}. Each skill is
+    taken from the first folder in OpenCode's order that holds it."""
+    checked = [install.TARGETS[a][0] for a in OPENCODE_SKILL_AGENTS if a in install.TARGETS]
+    found, missing = [], []
+    for name in kb_manage.SKILLS:
+        where = next((os.path.join(f, name) for f in checked if os.path.isfile(os.path.join(f, name, "SKILL.md"))), "")
+        if where:
+            found.append({"name": name, "folder": where, "version": skill_version(where)})
+        else:
+            missing.append(name)
+    return {"ok": not missing, "found": found, "missing": missing, "checked": checked}
+
+
 def opencode_skills():
-    """True when a skills folder OpenCode reads holds all the skills."""
-    return any(s["agent"] in OPENCODE_SKILL_AGENTS and set(kb_manage.SKILLS) <= set(s["skills"])
-               for s in skills_installed())
+    """True when the folders OpenCode reads hold every knowledge-base skill."""
+    return kb_skills()["ok"]
 
 
 def instructions_line():
@@ -880,6 +968,9 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, dict(graph(lib["root"], self.app.started), label=lib["label"], root=lib["root"]))
         if path == "/api/skills":
             return self.send(200, {"skills": skills_admin.list_skills(), "folder": skills_admin.own_folder()})
+        if path == "/api/intake":
+            run = self.app.intake
+            return self.send(200, {"run": run.snapshot() if run is not None else None})
         if path == "/api/progress":
             return self.send(200, {"progress": progress()})
         if path == "/api/places":
@@ -937,6 +1028,24 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200 if ok else 409, {"ok": ok})
         if path.startswith("/api/chat/"):
             return self.chat_post(path[len("/api/chat/"):], body)
+        if path == "/api/intake":
+            paths = body.get("paths") or []
+            if not isinstance(paths, list) or len(paths) > MAX_PATHS or \
+                    not all(isinstance(x, str) and os.path.isabs(x) for x in paths):
+                return self.send(400, {"error": "paths"})
+            lib_id = body.get("library")
+            resume = body.get("resume") is True
+            if not resume and (not isinstance(lib_id, str) or not paths):
+                return self.send(400, {"error": "library"})
+            run, why = self.app.start_intake(lib_id, paths, resume)
+            if run is None:
+                return self.send(409, {"error": MSG[self.app.lang][why], "reason": why})
+            return self.send(200, {"run": run.snapshot()})
+        if path == "/api/intake/stop":
+            run = self.app.intake
+            if run is not None and run.running():
+                run.stop()
+            return self.send(200, {"ok": True})
         if path == "/api/quit":
             self.send(200, {"ok": True})
             job = self.app.job
@@ -1039,6 +1148,8 @@ class Handler(BaseHTTPRequestHandler):
         if ag is None or ag.state not in ("ready", "simple"):
             return self.send(409, {"error": m["not_ready"]})
         try:
+            if what in ("send", "new", "switch", "workdir") and self.app.intake is not None and self.app.intake.running():
+                return self.send(409, {"error": m["intake_running"]})
             if what == "send":
                 text, material = body.get("text"), body.get("material") or []
                 if not isinstance(text, str) or not text.strip() or len(text) > MAX_TEXT:
