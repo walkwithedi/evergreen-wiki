@@ -55,6 +55,10 @@ ACTIONS = ("setup", "backup", "rollback", "move", "uninstall",
            "skill_backup", "skill_restore", "skill_import", "skill_new")
 LANGS = ("en", "zh")
 MAX_BODY = 64 * 1024
+# Steps and chat requests a client started with --simple refuses (and its page hides): the ones that move,
+# remove or roll back libraries and skills, change skills, or forget permission answers.
+SIMPLE_REFUSED = {"rollback", "move", "uninstall", "skill_backup", "skill_restore", "skill_import", "skill_new",
+                  "forget"}
 CHAT_ACTIONS = {name: name for name in ("start", "recheck", "send", "new", "stop", "permission", "question", "terminal", "forget",
                                          "allow_all")}
 MAX_TEXT = 20000  # characters of one message from the page
@@ -69,6 +73,7 @@ MSG = {
         "move_none": "No registered library on this computer can be moved.",
         "move_to": "Choose the folder to move the library into. The library keeps its folder name.",
         "busy": "Another step is still running.",
+        "simple": "This version of the client does not offer this.",
         "no_program": "OpenCode was not found on this computer.",
         "not_ready": "The conversation is not ready yet.",
         "confirm": "Write the library as previewed above?",
@@ -84,6 +89,7 @@ MSG = {
         "move_none": "本机没有可以移动的已登记知识库。",
         "move_to": "选择要把知识库移到哪个文件夹里。知识库的文件夹名不变。",
         "busy": "还有一个步骤在运行。",
+        "simple": "这个版本的客户端不提供这一项。",
         "no_program": "本机没有找到 OpenCode。",
         "not_ready": "对话还没有准备好。",
         "confirm": "按上面的预览写入知识库吗？",
@@ -279,6 +285,7 @@ class App:
         job = self.job
         return {
             "lang": self.lang,
+            "simple": bool(self.options.get("simple")),
             "home": os.path.expanduser("~"),
             "libraries": libraries(),
             "skills": skills_installed(),
@@ -902,6 +909,8 @@ class Handler(BaseHTTPRequestHandler):
             action = body.get("action")
             if action not in ACTIONS:
                 return self.send(400, {"error": "unknown action"})
+            if action in SIMPLE_REFUSED and self.app.options.get("simple"):
+                return self.send(403, {"error": MSG[self.app.lang]["simple"]})
             arg = body.get("skill") if action.startswith("skill_") else body.get("library")
             job = self.app.start(action, arg if isinstance(arg, str) else None)
             if job is None:
@@ -1007,6 +1016,8 @@ class Handler(BaseHTTPRequestHandler):
         if what is None:
             return self.send(404, {"error": "not found"})
         m = MSG[self.app.lang]
+        if what in SIMPLE_REFUSED and self.app.options.get("simple"):
+            return self.send(403, {"error": m["simple"]})
         if what in ("start", "recheck"):
             ag, why = self.app.start_agent() if what == "start" else self.app.recheck()
             if ag is None:
@@ -1119,6 +1130,8 @@ def main():
     ap.add_argument("--agent", choices=sorted(install.TARGETS))
     ap.add_argument("--preset", choices=["life", "work"])
     ap.add_argument("--descriptions", metavar="FILE")
+    ap.add_argument("--simple", action="store_true",
+                    help="hide and refuse moving, uninstalling, rolling back and changing skills")
     ap.add_argument("--log-level", default=os.environ.get("LOG_LEVEL", "WARNING").upper(),
                     choices=["DEBUG", "INFO", "WARNING", "ERROR"])
     a = ap.parse_args()
@@ -1138,7 +1151,8 @@ def main():
     # folder is taken from there, never from wherever the program was started.
     os.chdir(os.path.expanduser("~"))
     find_opencode(a.opencode)
-    app = App(lang, {"agent": a.agent, "preset": a.preset, "descriptions": a.descriptions, "opencode": a.opencode},
+    app = App(lang, {"agent": a.agent, "preset": a.preset, "descriptions": a.descriptions, "opencode": a.opencode,
+               "simple": a.simple},
               a.idle, a.start_timeout)
     app.output = Output(sys.stdout)
     sys.stdout = app.output

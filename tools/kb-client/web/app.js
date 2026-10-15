@@ -590,6 +590,9 @@
   }
 
   function render() {
+    // A client started with --simple refuses moving, uninstalling, rolling back, changing skills and
+    // forgetting permission answers; style.css hides their buttons under body.simple.
+    document.body.classList.toggle("simple", !!state.simple);
     var libs = $("libs");
     libs.textContent = "";
     state.libraries.forEach(function (lib) {
@@ -600,7 +603,7 @@
       li.appendChild(head);
       li.appendChild(el("div", { "class": "where" }, lib.root || t("not_local")));
       if (lib.root && !lib.exists) li.appendChild(el("div", { "class": "warn" }, t("missing")));
-      if (lib.movable) {
+      if (lib.movable && !state.simple) {
         var b = el("button", { type: "button", "class": "quiet small" }, t("move_this"));
         b.addEventListener("click", function () { startAction("move", lib.id); });
         li.appendChild(b);

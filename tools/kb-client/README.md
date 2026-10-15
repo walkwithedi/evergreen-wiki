@@ -65,7 +65,7 @@ Simple mode. When OpenCode's server does not start in time or lacks the requests
 
 Typed folders that are not absolute are taken from the home folder.
 
-Options: `--lang en|zh` (default: the system language), `--port N` (default: a free port), `--no-browser` (print the address only), `--idle SECONDS` (stop when no page has been open that long and no step is running; 0 never; default 120), `--start-timeout SECONDS` (wait that long for OpenCode to start; default 90), `--opencode PATH` (the OpenCode program to use), `--log-level`. For Set up, the kind of library suggested is work; `--agent <target>` and `--preset life|work` answer those questions in advance and `--descriptions <file>` replaces the skill descriptions, as with `install.py`; a wrapper script or a copy of the .desktop entry can fix them for a group of users.
+Options: `--lang en|zh` (default: the system language), `--port N` (default: a free port), `--no-browser` (print the address only), `--idle SECONDS` (stop when no page has been open that long and no step is running; 0 never; default 120), `--start-timeout SECONDS` (wait that long for OpenCode to start; default 90), `--opencode PATH` (the OpenCode program to use), `--log-level`. For Set up, the kind of library suggested is work; `--agent <target>` and `--preset life|work` answer those questions in advance and `--descriptions <file>` replaces the skill descriptions, as with `install.py`; a wrapper script or a copy of the .desktop entry can fix them for a group of users. `--simple`: Roll back, Move, Uninstall, the Skills section and Clear for remembered answers are hidden, and the client refuses those requests (403); Set up, Back up, the graph and the conversation stay.
 
 ## Safety
 
