@@ -520,6 +520,7 @@ class Agent:
         self.events_thread = None
         self.restart_pending = False
         self.always = self._load_always()  # {permission: [patterns]} answered with Always allow
+        self.allow_all = False  # Allow everything on the page: until switched off or the client quits, never saved
 
     # ----- start and stop -----
 
@@ -794,7 +795,7 @@ class Agent:
                 return
             except OSError as e:
                 log.warning("automatic reject failed: %s", type(e).__name__)
-        if decide(perm, patterns, places, self.cwd) or remembered(perm, patterns, self.always):
+        if self.allow_all or decide(perm, patterns, places, self.cwd) or remembered(perm, patterns, self.always):
             try:
                 self.call("POST", f"/permission/{quote(rid, safe='')}/reply", {"reply": "once"})
                 self.feed.emit("auto", permission=perm, patterns=patterns[:5], child=child)
@@ -938,6 +939,17 @@ class Agent:
             return True
         return False
 
+    def set_allow_all(self, on):
+        """Allow everything on the page (on) or ask again (off). Switching it on also answers the requests
+        already waiting with "once". Requests on the locked folders are still rejected."""
+        with self.lock:
+            self.allow_all = bool(on)
+            waiting = list(self.permissions.values()) if self.allow_all else []
+        self.feed.emit("allow_all", on=self.allow_all)
+        for ev in waiting:
+            if self.reply_permission(ev["id"], "once"):
+                self.feed.emit("auto", permission=ev["permission"], patterns=ev["patterns"][:5], child=ev["child"])
+
     def reply_question(self, rid, answers):
         if rid not in self.questions:
             return False
@@ -993,4 +1005,5 @@ class Agent:
     def snapshot(self):
         return {"state": self.state, "reason": self.reason, "session": self.session, "status": self.status,
                 "output": "\n".join(self.output[-10:]) if self.state in ("simple", "failed") else "",
-                "permissions": list(self.permissions.values()), "questions": list(self.questions.values())}
+                "permissions": list(self.permissions.values()), "questions": list(self.questions.values()),
+                "allow_all": self.allow_all}

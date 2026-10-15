@@ -69,6 +69,7 @@ button.primary:hover:not(:disabled) { filter: brightness(1.08); }
 button.quiet { background: transparent; }
 button.quiet:hover:not(:disabled) { background: var(--soft); }
 button.small { padding: 2px 8px; font-size: 13px; }
+#chat-allow-all.on { color: var(--bad); border-color: var(--bad); }
 button:focus-visible, input:focus-visible, li:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 input[type=text] {
   font: inherit;
