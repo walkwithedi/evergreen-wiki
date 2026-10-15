@@ -369,3 +369,10 @@ textarea {
 .skill-triggers { margin: 6px 0 0; font-size: 12.5px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .trigger { background: var(--soft); color: var(--ink); border-radius: 6px; padding: 0 6px; }
 .skill-actions { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+
+/* --simple: the steps the client refuses are not shown */
+body.simple [data-action="rollback"],
+body.simple [data-action="move"],
+body.simple [data-action="uninstall"],
+body.simple #remembered,
+body.simple .skills-box { display: none !important; }

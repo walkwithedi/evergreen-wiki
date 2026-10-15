@@ -4,6 +4,8 @@ All three skills share one version number. To release, update this file, the "Ve
 
 ## 1.17.0
 
+The browser client runs skill scripts written over several lines, and has a simpler version for groups of users.
+- tools/kb-client --simple: Roll back, Move, Uninstall, the Skills section and Clear for remembered answers are hidden, and the client refuses those steps and requests with 403 (kb_client.SIMPLE_REFUSED); Set up, Back up, the graph and the conversation stay. /api/state reports simple.
 - tools/kb-client: a skill script command written over several lines with backslashes, or ending in 2>&1 or 2>/dev/null, counts as the skill's own script (agent.plain_command): it is answered by the client like the one-line form and is no longer refused as a change to a locked skill folder. Any other shell syntax still goes to the user, and to the lock check.
 
 ## 1.16.0
