@@ -359,11 +359,10 @@ textarea {
 .skill-group { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em;
   margin-top: 6px; }
 .skill { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
-.skill.locked { border-left: 3px solid var(--accent); }
+.skill.kb { border-left: 3px solid var(--accent); }
 .skill.shadowed { opacity: .65; }
 .skill-head { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
 .badge { font-size: 12px; padding: 0 7px; border-radius: 999px; background: var(--log); color: var(--muted); border: 1px solid var(--line); }
-.badge.lock { color: var(--accent); border-color: var(--accent); background: transparent; }
 .skill-desc { font-size: 13px; color: var(--muted); margin-top: 4px; }
 .skill-desc > summary { cursor: pointer; }
 .skill-desc > p { margin: 6px 0 0; overflow-wrap: anywhere; }
@@ -425,7 +424,7 @@ body.kb-open .kb-toggle { background: var(--soft); color: var(--accent); }
 .skill-rows .skill-group { margin: 8px 0 2px; }
 .skill-rows .skill-group:first-child { margin-top: 0; }
 .skill-row { border-bottom: 1px solid var(--line); }
-.skill-row.locked { border-left: 3px solid var(--accent); padding-left: 6px; }
+.skill-row.kb { border-left: 3px solid var(--accent); padding-left: 6px; }
 .skill-row summary { cursor: pointer; list-style: none; padding: 4px 2px; display: flex; flex-direction: column; min-width: 0; }
 .skill-row summary::-webkit-details-marker { display: none; }
 .skill-row summary:hover { background: var(--soft); }
@@ -522,3 +521,8 @@ body.kb-open .kb-toggle { background: var(--soft); color: var(--accent); }
 .intake-items .st-manual .mark, .intake-items .st-manual .what { color: var(--warn); }
 .intake-sum { margin: 4px 0 0; font-weight: 600; }
 .intake .hint { margin: 0; overflow-wrap: anywhere; }
+
+/* where the logs are */
+.log-where { overflow-wrap: anywhere; }
+.log-where code { font-size: 12.5px; }
+.log-where .log-note { display: block; font-size: 12px; }
