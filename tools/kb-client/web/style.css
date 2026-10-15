@@ -376,3 +376,24 @@ body.simple [data-action="move"],
 body.simple [data-action="uninstall"],
 body.simple #remembered,
 body.simple .skills-box { display: none !important; }
+
+/* --chat-first: the conversation first, the knowledge base folded until opened */
+body.chat-first:not(.kb-open) .side,
+body.chat-first:not(.kb-open) #step,
+body.chat-first:not(.kb-open) #tasks,
+body.chat-first:not(.kb-open) #stages,
+body.chat-first:not(.kb-open) #chat-one-agent { display: none !important; }
+body.chat-first:not(.kb-open) .layout { grid-template-columns: 1fr; max-width: 1040px; }
+body.chat-first:not(.kb-open) .messages { max-height: max(360px, 66vh); }
+.chat-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 13px; }
+.chat-bar .hint { margin: 0; }
+.chat-bar code { overflow-wrap: anywhere; }
+.chat-bar select { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 6px; padding: 3px 6px; max-width: 100%; }
+.card .session { text-align: left; }
+.diff { font: 12px/1.45 var(--mono); background: var(--log); border: 1px solid var(--line); border-radius: 6px;
+  padding: 6px 8px; margin: 4px 0 0; max-height: 360px; overflow: auto; white-space: pre-wrap; color: var(--ink); }
+.diff .add { color: var(--good); }
+.diff .del { color: var(--bad); }
+.diff .hunk, .diff .head { color: var(--muted); }
+body.chat-first:not(.kb-open) .kb-only { display: none !important; }

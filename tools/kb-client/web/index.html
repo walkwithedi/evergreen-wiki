@@ -8,8 +8,9 @@
 </head>
 <body>
 <header class="top">
-  <h1 data-t="title">Knowledge base</h1>
+  <h1 id="title" data-t="title">Knowledge base</h1>
   <div class="status" id="status"></div>
+  <button type="button" class="quiet" id="kb-toggle" aria-expanded="false" hidden>Knowledge base</button>
   <button type="button" class="quiet" id="quit" data-t="quit">Quit</button>
 </header>
 
@@ -76,6 +77,15 @@
         <button type="button" class="quiet small" id="chat-terminal" data-t="chat_terminal">Open in a terminal</button>
         <button type="button" class="quiet small" id="chat-new" data-t="chat_new">New conversation</button>
       </div>
+      <div class="chat-bar" id="chat-bar" hidden>
+        <span class="hint" data-t="workdir_label">Work folder:</span>
+        <code id="workdir"></code>
+        <button type="button" class="quiet small" id="workdir-change" data-t="workdir_change">Change</button>
+        <select id="workdir-recent" aria-label="recent folders" hidden></select>
+        <select id="model" aria-label="model" hidden></select>
+        <button type="button" class="quiet small" id="sessions" data-t="sessions_btn">Earlier conversations</button>
+      </div>
+      <p class="hint" id="workdir-note" data-t="workdir_hint" hidden>The assistant reads and edits files in this folder without asking.</p>
       <div class="tasks" id="tasks">
         <button type="button" data-task="intake" data-t="task_intake">File material</button>
         <button type="button" data-task="note" data-t="task_note">Quick note</button>
@@ -84,7 +94,7 @@
         <button type="button" data-task="archive" data-t="task_archive">Archive old versions</button>
         <button type="button" data-task="resume" data-t="task_resume">Continue intake</button>
       </div>
-      <p class="hint" data-t="chat_one_agent">If OpenCode is also open in a terminal, quit it before filing material, so that only one of them writes to the library.</p>
+      <p class="hint" id="chat-one-agent" data-t="chat_one_agent">If OpenCode is also open in a terminal, quit it before filing material, so that only one of them writes to the library.</p>
       <p class="info" id="chat-info" hidden></p>
       <pre class="log" id="chat-output" hidden></pre>
       <div class="stages" id="stages" hidden>

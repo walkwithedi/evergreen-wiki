@@ -59,7 +59,9 @@ MAX_BODY = 64 * 1024
 # remove or roll back libraries and skills, change skills, or forget permission answers.
 SIMPLE_REFUSED = {"rollback", "move", "uninstall", "skill_backup", "skill_restore", "skill_import", "skill_new",
                   "forget"}
-CHAT_ACTIONS = {name: name for name in ("start", "recheck", "send", "new", "stop", "permission", "question", "terminal", "forget")}
+CHAT_ACTIONS = {name: name for name in ("start", "recheck", "send", "new", "stop", "permission", "question", "terminal", "forget",
+                                         "workdir", "sessions", "switch")}
+CHAT_FIRST_ACTIONS = ("workdir", "sessions", "switch")  # only with --chat-first
 MAX_TEXT = 20000  # characters of one message from the page
 MAX_PATHS = 200  # material paths sent with one message
 MAX_ENTRIES = 2000  # entries listed per folder; the page says when a folder holds more
@@ -73,6 +75,10 @@ MSG = {
         "move_to": "Choose the folder to move the library into. The library keeps its folder name.",
         "busy": "Another step is still running.",
         "simple": "This version of the client does not offer this.",
+        "workdir_missing": "Choose an existing folder.",
+        "workdir_too_wide": "Choose a folder inside your home folder or elsewhere, not the home folder itself or a folder holding it.",
+        "workdir_system": "A system folder cannot be the work folder.",
+        "chat_busy": "The assistant is still working; try again when it is done.",
         "no_program": "OpenCode was not found on this computer.",
         "not_ready": "The conversation is not ready yet.",
         "confirm": "Write the library as previewed above?",
@@ -89,6 +95,10 @@ MSG = {
         "move_to": "选择要把知识库移到哪个文件夹里。知识库的文件夹名不变。",
         "busy": "还有一个步骤在运行。",
         "simple": "这个版本的客户端不提供这一项。",
+        "workdir_missing": "请选择一个已有的文件夹。",
+        "workdir_too_wide": "请选择家目录里或其他位置的某个文件夹，不能是家目录本身或包含家目录的文件夹。",
+        "workdir_system": "系统文件夹不能作为工作文件夹。",
+        "chat_busy": "助手还在处理，等它处理完再试。",
         "no_program": "本机没有找到 OpenCode。",
         "not_ready": "对话还没有准备好。",
         "confirm": "按上面的预览写入知识库吗？",
@@ -285,6 +295,7 @@ class App:
         return {
             "lang": self.lang,
             "simple": bool(self.options.get("simple")),
+            "chat_first": bool(self.options.get("chat_first")),
             "home": os.path.expanduser("~"),
             "libraries": libraries(),
             "skills": skills_installed(),
@@ -311,7 +322,7 @@ class App:
                     return None, "no_program"
                 self.agent = agent_mod.Agent(OPENCODE["program"], os.path.expanduser("~"), self.places,
                                              os.path.join(kb_manage.state_dir(), "kb-client.json"),
-                                             self.start_timeout)
+                                             self.start_timeout, chat_first=bool(self.options.get("chat_first")))
         self.agent.start()
         return self.agent, None
 
@@ -1017,6 +1028,8 @@ class Handler(BaseHTTPRequestHandler):
         m = MSG[self.app.lang]
         if what in SIMPLE_REFUSED and self.app.options.get("simple"):
             return self.send(403, {"error": m["simple"]})
+        if what in CHAT_FIRST_ACTIONS and not self.app.options.get("chat_first"):
+            return self.send(404, {"error": "not found"})
         if what in ("start", "recheck"):
             ag, why = self.app.start_agent() if what == "start" else self.app.recheck()
             if ag is None:
@@ -1033,8 +1046,29 @@ class Handler(BaseHTTPRequestHandler):
                 if not isinstance(material, list) or len(material) > MAX_PATHS or \
                         not all(isinstance(x, str) and os.path.isabs(x) for x in material):
                     return self.send(400, {"error": "material"})
-                ag.send(text.strip(), material + text_paths(text))
+                model = body.get("model") or ""
+                if not isinstance(model, str) or (model and not self.app.options.get("chat_first")):
+                    return self.send(400, {"error": "model"})
+                try:
+                    ag.send(text.strip(), material + text_paths(text), model)
+                except ValueError:
+                    return self.send(400, {"error": "model"})
                 return self.send(200, {"ok": True})
+            if what == "workdir":
+                try:
+                    return self.send(200, {"ok": True, "workdir": ag.set_workdir(body.get("path"))})
+                except ValueError as e:
+                    return self.send(400, {"error": m.get("workdir_" + str(e), m["workdir_missing"]), "reason": str(e)})
+                except RuntimeError:
+                    return self.send(409, {"error": m["chat_busy"]})
+            if what == "sessions":
+                return self.send(200, {"sessions": ag.sessions(), "current": ag.session})
+            if what == "switch":
+                try:
+                    ok = ag.switch(body.get("session"))
+                except RuntimeError:
+                    return self.send(409, {"error": m["chat_busy"]})
+                return self.send(200 if ok else 404, {"ok": ok})
             if what == "new":
                 ag.new()
                 return self.send(200, {"ok": True, "session": ag.session})
@@ -1124,6 +1158,8 @@ def main():
     ap.add_argument("--agent", choices=sorted(install.TARGETS))
     ap.add_argument("--preset", choices=["life", "work"])
     ap.add_argument("--descriptions", metavar="FILE")
+    ap.add_argument("--chat-first", action="store_true",
+                    help="open on the conversation with the knowledge base folded away; a work folder can be chosen")
     ap.add_argument("--simple", action="store_true",
                     help="hide and refuse moving, uninstalling, rolling back and changing skills")
     ap.add_argument("--log-level", default=os.environ.get("LOG_LEVEL", "WARNING").upper(),
@@ -1146,7 +1182,7 @@ def main():
     os.chdir(os.path.expanduser("~"))
     find_opencode(a.opencode)
     app = App(lang, {"agent": a.agent, "preset": a.preset, "descriptions": a.descriptions, "opencode": a.opencode,
-               "simple": a.simple},
+               "simple": a.simple, "chat_first": a.chat_first},
               a.idle, a.start_timeout)
     app.output = Output(sys.stdout)
     sys.stdout = app.output
