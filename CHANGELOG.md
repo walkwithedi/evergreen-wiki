@@ -2,6 +2,10 @@
 
 All three skills share one version number. To release, update this file, the "Version:" line of every SKILL.md and the plugin manifests together and merge to main; the release workflow then publishes v<version>.
 
+## Unreleased
+
+- tools/kb-client: Allow everything (conversation header, and Allow everything on this page on each card; POST /api/chat/allow_all). After one confirmation the client answers every request itself, including the cards already waiting, until it is switched off or the client quits; kept in memory only, so it outlasts reloading the page and New conversation but not a restart. Changes to the knowledge-base skills are still refused.
+
 ## 1.16.0
 
 Intake is fast by default: each file is written into the library as soon as it is placed, and reconciling it with the summary files waits for consolidation, reviewed change by change. The browser client shows the ideas behind the knowledge base, has a new look, and lists and manages skills, with the knowledge-base skills locked.
