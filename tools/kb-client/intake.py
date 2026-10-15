@@ -283,7 +283,7 @@ class Run:
         fill = dict(n=n, total=len(self.items), label=self.lib["label"], root=root, source=src, card=card.strip(),
                     body=p["body"], head=p["head"], decision=p["decision"])
         message = t["item"].format(**fill)
-        new = True
+        new, last = True, ""
         for _ in range(MAX_ASKS):
             self.step = "ask"
             self.emit()
@@ -295,6 +295,7 @@ class Run:
             new = False
             d, why = read_decision(p["decision"], p["head"], p["body"], self.lang)
             if d is None:
+                last = why
                 message = t["retry"].format(why=why, **fill)
                 continue
             self.step = "file"
@@ -306,14 +307,19 @@ class Run:
             args += ["--same-version"] if d["same_version"] else []
             code, out = self.script(*args)
             if code == 3 and "File name: HIT" in out:
+                last = tail(out)
                 message = t["name_hit"].format(out=out.strip(), **fill)
                 continue
+            if code and "refused:" in out:  # the library or this computer, not the answer: asking again cannot help
+                self.set(item, status="failed", reason=f"{w['file']}: {tail(out)}")
+                return
             if code:
-                message = t["retry"].format(why=f"{w['file']}: {tail(out)}", **fill)
+                last = f"{w['file']}: {tail(out)}"
+                message = t["retry"].format(why=last, **fill)
                 continue
             self.deliver(item, n, p["plan"])
             return
-        self.set(item, status="failed", reason=w["asks"].format(n=MAX_ASKS))
+        self.set(item, status="failed", reason=w["asks"].format(n=MAX_ASKS) + (f" ({last})" if last else ""))
 
     def deliver(self, item, n, plan):
         w = WHY[self.lang]

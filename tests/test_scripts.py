@@ -94,6 +94,19 @@ class KbconfTest(Tmp):
         self.assertEqual(kbconf.check_timezone("+08:00"), [])
         self.assertTrue(kbconf.check_timezone("not a zone!"))
 
+    def test_timezone_without_zone_data(self):
+        # Python 3.8 has no zoneinfo: the system's own zone uses the current local offset, UTC names
+        # are UTC, and any other name still asks for a fixed offset
+        from unittest import mock
+        with mock.patch.dict(sys.modules, {"zoneinfo": None}), \
+                mock.patch.object(kbconf, "system_zone", return_value="Asia/Example"):
+            self.assertEqual(kbconf.tzinfo("Asia/Example").utcoffset(None),
+                             kbconf.datetime.now().astimezone().utcoffset())
+            self.assertEqual(kbconf.tzinfo("Etc/UTC"), kbconf.timezone.utc)
+            with self.assertRaises(kbconf.TimezoneUnavailable):
+                kbconf.tzinfo("Europe/Elsewhere")
+            self.assertEqual(kbconf.check_timezone("Europe/Elsewhere"), [])
+
     def test_limits(self):
         self.assertEqual(kbconf.default_limits("zh-CN"), (55, 80))
         self.assertEqual(kbconf.default_limits("en"), (90, 120))

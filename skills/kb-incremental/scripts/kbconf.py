@@ -354,6 +354,27 @@ def check_timezone(name):
     return []
 
 
+UTC_NAMES = ("Etc/UTC", "Etc/GMT", "Etc/Universal", "Etc/Zulu", "GMT", "Universal", "Zulu")
+
+
+def system_zone():
+    """The IANA name of this computer's time zone (TZ, /etc/localtime, /etc/timezone), or ""."""
+    tz = os.environ.get("TZ", "").lstrip(":")
+    if tz:
+        return tz
+    try:
+        m = re.search(r"zoneinfo/(?:posix/|right/)?(.+)$", os.path.realpath("/etc/localtime"))
+        if m:
+            return m.group(1)
+    except OSError:
+        pass
+    try:
+        with open("/etc/timezone", encoding="utf-8") as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
 def tzinfo(name):
     """IANA name or a fixed offset such as +08:00 / UTC."""
     if name in (None, "", "UTC", "Z"):
@@ -362,9 +383,15 @@ def tzinfo(name):
     if m:
         sign = 1 if m.group(1) == "+" else -1
         return timezone(sign * timedelta(hours=int(m.group(2)), minutes=int(m.group(3))))
+    if name in UTC_NAMES:
+        return timezone.utc
     try:
         import zoneinfo  # Python 3.9+
     except ImportError:
+        # The library's zone is usually this computer's own (setup writes the system zone): its current
+        # offset is then the right one, without the zone data this Python lacks.
+        if name == system_zone():
+            return datetime.now().astimezone().tzinfo
         raise TimezoneUnavailable(f"timezone {name!r} needs Python 3.9+; use a fixed offset like +08:00")
     try:
         return zoneinfo.ZoneInfo(name)
