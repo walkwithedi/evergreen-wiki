@@ -367,7 +367,7 @@ def system_zone():
         if m:
             return m.group(1)
     except OSError:
-        pass
+        log.debug("/etc/localtime cannot be read; trying /etc/timezone")
     try:
         with open("/etc/timezone", encoding="utf-8") as f:
             return f.read().strip()
