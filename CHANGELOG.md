@@ -2,6 +2,13 @@
 
 All three skills share one version number. To release, update this file, the "Version:" line of every SKILL.md and the plugin manifests together and merge to main; the release workflow then publishes v<version>.
 
+## 1.20.2
+
+The browser client files material without masking it and, with Allow everything on, goes on from the files to the end of consolidation without anybody answering.
+- tools/kb-client intake: the assistant is asked for term fixes only, and told to do no masking or redaction: the body stays as it is. A library's own sensitivity setting is unchanged.
+- tools/kb-client intake: after the files, the run consolidates the library's queue, one round of references/consolidate.md per new conversation, until the queue is empty (or it did not get shorter in two rounds in a row, or as many rounds as the queue had files plus two are used). With Allow everything on, the round is unattended (Accept all) and question cards during the run are answered with their recommended option (agent.answer_recommended); otherwise the round asks as usual, and a card waiting for a person does not count against the turn's time limit. The run's snapshot has a consolidation section; Stop and Continue cover it. The panel shows the round and says that the run takes long, with how to use OpenCode from a terminal meanwhile; Open in a terminal is refused (409) during a run.
+- kb-incremental consolidation step 5: an unattended request takes Accept all without asking and notes it in the readme.
+
 ## 1.20.1
 
 The browser client no longer locks the knowledge-base skills, keeps an intake going when it stops in the middle, and writes logs.

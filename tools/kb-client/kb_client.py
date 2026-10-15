@@ -389,8 +389,8 @@ class App:
                 if last is None:
                     return None, "intake_nothing"
                 lib_id = last.lib["id"]
-                sources = [it["source"] for it in last.items if it["status"] == "waiting"]
-                if not sources:
+                sources, cons_left = last.left()
+                if not sources and not cons_left:
                     return None, "intake_nothing"
             lib = next((x for x in libraries() if x["id"] == lib_id and x["root"] and x["exists"]), None)
             if lib is None:
@@ -1161,7 +1161,7 @@ class Handler(BaseHTTPRequestHandler):
         if ag is None or ag.state not in ("ready", "simple"):
             return self.send(409, {"error": m["not_ready"]})
         try:
-            if what in ("send", "new", "switch", "workdir") and self.app.intake is not None and self.app.intake.running():
+            if what in ("send", "new", "switch", "workdir", "terminal") and self.app.intake is not None and self.app.intake.running():
                 return self.send(409, {"error": m["intake_running"]})
             if what == "send":
                 text, material = body.get("text"), body.get("material") or []

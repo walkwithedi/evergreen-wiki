@@ -10,7 +10,10 @@ make the session ask for a permission, ask a question or wait to be aborted; SUB
 <pattern> starts a subagent session that asks for that permission; THINK sends reasoning first; RUN <command>
 shows a finished bash step running that command; STEPS <n> gives one answer with n tool steps (the third
 one failed); EDIT shows a finished edit step with a diff. A message naming a decision_<n>.json file is a
-client intake turn: the head and decision files are written (FAKE_OPENCODE_INTAKE: bad_once, never, slow). GET /session lists the sessions with this
+client intake turn: the head and decision files are written (FAKE_OPENCODE_INTAKE: bad_once, never, slow).
+A message naming a consolidate_<r>.json file is a client consolidation round: one row leaves the library's
+queue and the result file is written (FAKE_OPENCODE_CONSOLIDATE: "ask" asks the step-5 question first and
+consolidates only when it is answered with Accept all, "stuck" changes nothing). GET /session lists the sessions with this
 server's folder, their time and parent; GET /config/providers offers example/model-1 and example/model-2.
 """
 import json
@@ -25,6 +28,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 LOG = os.environ.get("FAKE_OPENCODE_LOG", "")
 INTAKE_RE = re.compile(r"/[^\s，。）]+decision_\d+\.json")
+CONSOLIDATE_RE = re.compile(r"/[^\s，。）]+consolidate_\d+\.json")
 MODE = os.environ.get("FAKE_OPENCODE_MODE", "")
 
 
@@ -160,11 +164,47 @@ class World:
             ev = self.aborts.setdefault(sid, threading.Event())
             ev.clear()
             self.message(sid, "assistant", "aborted" if ev.wait(20) else "slow done")
+        elif CONSOLIDATE_RE.search(text):
+            self.message(sid, "assistant", self.consolidate(text, sid))
         elif INTAKE_RE.search(text):
             self.message(sid, "assistant", self.intake(text, sid))
         else:
             self.message(sid, "assistant", "echo: " + text)
         self.emit("session.status", sessionID=sid, status={"type": "idle"})
+
+    def consolidate(self, text, sid):
+        """A client consolidation round: the first row of the queue named by the library root leaves it."""
+        result = CONSOLIDATE_RE.search(text).group(0)
+        mode = os.environ.get("FAKE_OPENCODE_CONSOLIDATE", "")
+        root = re.search(r"(?:Library|知识库)[:：][^(（]*[(（](.+?)[)）]\n", text).group(1)
+        files = 0
+        if mode == "ask":
+            rid = self.next("que")
+            self.waits[rid] = (threading.Event(), [])
+            self.emit("question.asked", id=rid, sessionID=sid, questions=[
+                {"question": "Apply these changes?", "header": "Changes",
+                 "options": [{"label": "Leave some out first", "description": ""},
+                             {"label": "Accept all (recommended)", "description": ""},
+                             {"label": "Cancel the round", "description": ""}]}])
+            got = self.wait_for(rid, 60)
+            self.emit("question.replied", sessionID=sid, requestID=rid, answers=got)
+            if not (got and got[0] and got[0][0].startswith("Accept all")):
+                mode = "stuck"
+        if mode != "stuck":
+            queue = os.path.join(root, "_Consolidation-Queue.md")
+            with open(queue, encoding="utf-8") as f:
+                lines = f.read().split("\n")
+            for i, ln in enumerate(lines):
+                cells = [c.strip() for c in ln.strip().strip("|").split("|")]
+                if ln.strip().startswith("|") and cells[0].endswith(".md"):
+                    del lines[i]
+                    files = 1
+                    break
+            with open(queue, "w", encoding="utf-8") as f:
+                f.write("\n".join(lines))
+        with open(result, "w", encoding="utf-8") as f:
+            json.dump({"files": files, "changes": 2 * files}, f)
+        return "round done"
 
     def intake(self, text, sid):
         """A client intake turn: writes the head file and the decision file the message names. The title

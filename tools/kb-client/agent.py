@@ -31,6 +31,8 @@ FEED_KEEP = 5000  # events kept for a page that reconnects; older ones come back
 ASK_ALL = {"permission": {name: "ask" for name in (
     "read", "edit", "glob", "grep", "list", "bash", "task", "external_directory", "webfetch", "websearch",
     "lsp", "skill")}}
+# An option a question marks as the recommended one
+RECOMMENDED = re.compile(r"recommend|推荐", re.I)
 # The skills load their own instructions; reading a skill is never a question for the user.
 ASK_ALL["permission"]["skill"] = "allow"
 # Subagents that only look things up; what they do in turn is asked for like everything else.
@@ -1083,6 +1085,21 @@ class Agent:
         for ev in waiting:
             if self.reply_permission(ev["id"], "once"):
                 self.feed.emit("auto", permission=ev["permission"], patterns=ev["patterns"][:5], child=ev["child"])
+
+    def answer_recommended(self, rid, fallback):
+        """Answers a question card for a run the client drives with Allow everything on: each question with
+        its recommended option (one whose label or description says so), else its first option, else
+        fallback as a typed answer. The answers sent, or None."""
+        q = self.questions.get(rid)
+        if q is None:
+            return None
+        answers = []
+        for x in q["questions"]:
+            opts = x["options"]
+            pick = next((o for o in opts if RECOMMENDED.search(o["label"] + " " + o["description"])),
+                        opts[0] if opts else None)
+            answers.append([pick["label"]] if pick else [fallback] if x["custom"] else [])
+        return answers if self.reply_question(rid, answers) else None
 
     def reply_question(self, rid, answers):
         if rid not in self.questions:

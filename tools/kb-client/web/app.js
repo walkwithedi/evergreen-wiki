@@ -110,13 +110,21 @@
       task_archive_hint: "Move superseded versions to the archive folder",
       task_more: "More", task_notes_n: "File quick notes ({n})",
       intake_title: "Filing into {lib}: {done}/{total}",
-      intake_step_scan: "Reading {file}", intake_step_ask: "The assistant masks and places {file}",
+      intake_step_scan: "Reading {file}", intake_step_ask: "The assistant fixes terms and places {file}",
       intake_step_file: "Assembling {file}", intake_step_write: "Writing {file} into the library",
       intake_st_waiting: "waiting", intake_st_working: "in progress", intake_st_written: "written",
       intake_st_duplicate: "already in the library", intake_st_manual: "needs you", intake_st_failed: "failed",
       intake_stop: "Stop", intake_stopping: "Stopping\u2026",
       intake_done: "Done: {written} written, {duplicate} already in the library, {failed} failed, {manual} to handle by hand.",
       intake_stopped: "Stopped: {waiting} not done yet. Continue picks them up.",
+      intake_stopped_cons: "Stopped before the consolidation was done. Continue picks it up.",
+      intake_step_consolidate: "Consolidating, round {round}/{rounds}: {files} files done, {changes} summary changes, {queue} left in the queue",
+      intake_cons_done: "Consolidated: {files} files, {changes} changes to the status card and other summary files.",
+      intake_cons_failed: "Consolidation not finished: {reason}",
+      intake_long: "Filing and consolidating take a long time (hours for many files). You can leave this page as it is; the result shows here when it is done. To use OpenCode for something else meanwhile, open another terminal and run opencode there, but do not change this library from it, so that only one of them writes to it.",
+      intake_cli: "How to open it from a terminal", intake_cli_copy: "Copy",
+      intake_cli_hint: "In a terminal, go to your own work folder and run:",
+      intake_terminal_off: "Not while filing: it would join the conversation the run is using.",
       intake_continue: "Continue", intake_where: "Written into {root}",
       intake_manual_go: "Hand the {n} unreadable files to the assistant",
       intake_log: "This run's log:", log_dir: "Logs:",
@@ -346,13 +354,21 @@
       task_archive_hint: "把被新版本取代的文件移到归档文件夹",
       task_more: "更多", task_notes_n: "整理随手记（{n} 条）",
       intake_title: "入库到「{lib}」：{done}/{total}",
-      intake_step_scan: "正在读取 {file}", intake_step_ask: "助手正在为 {file} 脱敏、决定放置",
+      intake_step_scan: "正在读取 {file}", intake_step_ask: "助手正在为 {file} 修正术语、决定放置",
       intake_step_file: "正在组装 {file}", intake_step_write: "正在把 {file} 写进知识库",
       intake_st_waiting: "等待", intake_st_working: "处理中", intake_st_written: "已写入",
       intake_st_duplicate: "库里已有（重复）", intake_st_manual: "需要你处理", intake_st_failed: "失败",
       intake_stop: "停止", intake_stopping: "正在停止\u2026",
       intake_done: "完成：写入 {written} 个，库里已有 {duplicate} 个，失败 {failed} 个，需要手动处理 {manual} 个。",
       intake_stopped: "已停止：还有 {waiting} 个没做，点「继续」接着做。",
+      intake_stopped_cons: "已停止：整合还没做完，点「继续」接着做。",
+      intake_step_consolidate: "整合第 {round}/{rounds} 轮：已整合 {files} 个，状态卡等改动 {changes} 条，队列还剩 {queue} 个",
+      intake_cons_done: "整合完成：{files} 个文件，状态卡等汇总文件改动 {changes} 条。",
+      intake_cons_failed: "整合没有做完：{reason}",
+      intake_long: "入库和整合会运行较长时间（文件多时可能要几个小时），可以把页面留在这里不用管，做完会在这里显示结果。需要用 OpenCode 做别的事，可以另开一个终端运行 opencode 继续使用；那边请不要改这个知识库，以免两边同时写。",
+      intake_cli: "如何在命令行打开", intake_cli_copy: "复制",
+      intake_cli_hint: "在终端里进入自己的工作文件夹，运行：",
+      intake_terminal_off: "入库期间不能用：它会接到入库正在用的对话上。",
       intake_continue: "继续", intake_where: "写入位置：{root}",
       intake_manual_go: "把 {n} 个读不出文字的文件交给助手",
       intake_log: "本轮日志：", log_dir: "日志文件夹：",
@@ -1089,7 +1105,8 @@
 
   function chatEnable() {
     var on = chat.ready && !chat.busy;
-    $("chat-terminal").disabled = !chat.ready;
+    $("chat-terminal").disabled = !chat.ready || intakeRunning();
+    $("chat-terminal").title = intakeRunning() ? t("intake_terminal_off") : "";
     $("chat-allow-all").disabled = !chat.ready || chat.simple;
     $("chat-allow-all").setAttribute("data-t", chat.allowAll ? "allow_all_on" : "allow_all");
     $("chat-allow-all").textContent = t(chat.allowAll ? "allow_all_on" : "allow_all");
@@ -2313,8 +2330,9 @@
   }
 
   // ---------- intake run by the client ----------
-  // The client runs the skill's scripts for each file and asks the assistant only to mask and place it
-  // (intake.py); the page shows each file's state, and what was written where once the run ends.
+  // The client runs the skill's scripts for each file and asks the assistant only to fix terms and place it
+  // (intake.py), then works through the consolidation queue; the page shows each file's state, the
+  // consolidation round, and what was written where once the run ends.
 
   var intake = { run: null, closed: "" };
 
@@ -2324,7 +2342,12 @@
 
   function intakeLeft() {
     var r = intake.run;
-    return !!(r && r.state === "stopped" && (r.counts.waiting || 0) > 0);
+    return !!(r && r.state === "stopped" && ((r.counts.waiting || 0) > 0 || consLeft(r)));
+  }
+
+  function consLeft(r) {
+    var s = (r.consolidation || {}).state || "";
+    return s !== "done" && s !== "failed";
   }
 
   function startIntake(body) {
@@ -2348,6 +2371,8 @@
 
   function drawIntake() {
     var r = intake.run, box = $("intake");
+    // while a run goes on: it takes long, the page can be left alone, OpenCode can be used from a terminal
+    show($("intake-long"), intakeRunning());
     if (!r || intake.closed === r.id + r.state) { show(box, false); return; }
     show(box, true);
     box.textContent = "";
@@ -2356,8 +2381,11 @@
     var head = el("div", { "class": "intake-head" });
     head.appendChild(el("strong", {}, t("intake_title", { lib: r.label, done: done, total: r.total })));
     var cur = r.items.filter(function (it) { return it.status === "working"; })[0];
+    var cons = r.consolidation || {};
     var step = el("span", { "class": "intake-step" },
-      r.state === "stopping" ? t("intake_stopping") : cur && r.step ? t("intake_step_" + r.step, { file: cur.file }) : "");
+      r.state === "stopping" ? t("intake_stopping")
+        : r.step === "consolidate" && cons.state === "running" ? t("intake_step_consolidate", cons)
+        : cur && r.step ? t("intake_step_" + r.step, { file: cur.file }) : "");
     head.appendChild(step);
     if (r.state === "running") {
       var stop = el("button", { type: "button", "class": "quiet small" }, t("intake_stop"));
@@ -2391,11 +2419,13 @@
     if (r.state === "done" || r.state === "stopped") {
       var sum = el("p", { "class": "intake-sum" }, r.state === "done"
         ? t("intake_done", { written: c.written || 0, duplicate: c.duplicate || 0, failed: c.failed || 0, manual: c.manual || 0 })
-        : t("intake_stopped", { waiting: c.waiting || 0 }));
+        : c.waiting ? t("intake_stopped", { waiting: c.waiting }) : t("intake_stopped_cons"));
       box.appendChild(sum);
+      if (cons.state === "done" && cons.files) box.appendChild(el("p", { "class": "intake-sum" }, t("intake_cons_done", cons)));
+      if (cons.state === "failed") box.appendChild(el("p", { "class": "intake-sum" }, t("intake_cons_failed", cons)));
       if (c.written) box.appendChild(el("p", { "class": "hint" }, t("intake_where", { root: r.root })));
       var row = el("div", { "class": "buttons" });
-      if (r.state === "stopped" && c.waiting) {
+      if (r.state === "stopped" && (c.waiting || consLeft(r))) {
         var go = el("button", { type: "button", "class": "primary small" }, t("intake_continue"));
         go.addEventListener("click", function () { startIntake({ resume: true }); });
         row.appendChild(go);
@@ -2731,6 +2761,7 @@
     runs.stopped = true;
     api("POST", "/api/chat/stop", {}).catch(function () {});
   });
+  $("intake-cli-copy").addEventListener("click", function () { copyText("opencode", $("intake-cli-copy")); });
   $("chat-terminal").addEventListener("click", function () {
     if (!window.confirm(t("terminal_confirm"))) return;
     api("POST", "/api/chat/terminal", {}).then(function (r) {

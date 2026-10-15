@@ -521,6 +521,9 @@ body.kb-open .kb-toggle { background: var(--soft); color: var(--accent); }
 .intake-items .st-manual .mark, .intake-items .st-manual .what { color: var(--warn); }
 .intake-sum { margin: 4px 0 0; font-weight: 600; }
 .intake .hint { margin: 0; overflow-wrap: anywhere; }
+.intake-long { margin: 0; }
+.intake-long p { margin: 0 0 4px; overflow-wrap: anywhere; }
+.intake-long summary { cursor: pointer; }
 
 /* where the logs are */
 .log-where { overflow-wrap: anywhere; }
