@@ -159,6 +159,19 @@ class KbClientTest(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn("app.js", page)
 
+    def test_page_layout(self):
+        # the knowledge-base button follows the title; the read-only skill list sits in the side column
+        page = self.server.get("/", token=False)[1]
+        self.assertLess(page.index('id="title"'), page.index('id="kb-toggle"'))
+        self.assertLess(page.index('id="kb-toggle"'), page.index('id="status"'))
+        side = page[page.index('<aside class="side">'):page.index("</aside>")]
+        for part in ('id="skills-panel"', 'id="skills-filter"', 'id="skill-rows"'):
+            self.assertIn(part, side)
+        # answers are built as DOM nodes: the page never writes HTML from text
+        script = self.server.get("/app.js", token=False)[1]
+        self.assertNotIn("innerHTML", script)
+        self.assertNotIn("insertAdjacentHTML", script)
+
     def test_simple_refuses_the_hidden_steps(self):
         self.assertFalse(self.server.get("/api/state")[1]["simple"])
         s = Server(self.env, "--idle", "0", "--simple")

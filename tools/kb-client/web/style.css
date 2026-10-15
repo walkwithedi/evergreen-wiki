@@ -98,10 +98,10 @@ input[type=text] {
 
 .layout {
   display: grid;
-  grid-template-columns: minmax(240px, 320px) 1fr;
+  grid-template-columns: minmax(240px, 300px) 1fr;
   gap: 20px;
   padding: 20px;
-  max-width: 1280px;
+  max-width: 1440px;
   margin: 0 auto;
 }
 .side section, .panel {
@@ -198,7 +198,7 @@ input[type=text] {
 .entries li.file { color: var(--muted); padding-left: 24px; }
 
 @media (max-width: 760px) {
-  .layout { grid-template-columns: 1fr; padding: 16px; gap: 16px; }
+  .layout { grid-template-columns: minmax(0, 1fr); padding: 16px; gap: 16px; }
   .top { flex-wrap: wrap; padding: 12px 16px; }
   .status { order: 3; flex-basis: 100%; }
   .side { order: 2; }
@@ -217,12 +217,12 @@ input[type=text] {
   overflow: auto;
 }
 .messages:empty { display: none; }
-.msg { border-radius: 12px; padding: 10px 14px; max-width: 88%; word-break: break-word; line-height: 1.65; }
+.msg { border-radius: 12px; padding: 10px 14px; max-width: 88%; word-break: break-word; line-height: 1.65; font-size: 16px; }
 .msg.user { align-self: flex-end; background: var(--user); border: 1px solid transparent; border-bottom-right-radius: 4px; }
 .msg.assistant { align-self: flex-start; background: var(--panel); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
 .msg .text { white-space: pre-wrap; }
 .msg .text + .text { margin-top: 6px; }
-.msg .tool { color: var(--muted); font: 12.5px/1.5 var(--mono); white-space: pre-wrap; background: var(--log);
+.msg .tool { color: var(--muted); font: 13.5px/1.5 var(--mono); white-space: pre-wrap; background: var(--log);
   border-radius: 6px; padding: 3px 8px; margin: 4px 0; }
 .msg .tool.failed { color: var(--bad); border-left: 3px solid var(--bad); }
 .note { font-size: 13px; color: var(--muted); }
@@ -378,23 +378,102 @@ body.simple [data-action="uninstall"],
 body.simple #remembered,
 body.simple .skills-box { display: none !important; }
 
-/* --chat-first: the conversation first, the knowledge base folded until opened */
-body.chat-first:not(.kb-open) .side,
-body.chat-first:not(.kb-open) #step,
-body.chat-first:not(.kb-open) #tasks,
-body.chat-first:not(.kb-open) #stages,
-body.chat-first:not(.kb-open) #chat-one-agent { display: none !important; }
-body.chat-first:not(.kb-open) .layout { grid-template-columns: 1fr; max-width: 1040px; }
-body.chat-first:not(.kb-open) .messages { max-height: max(360px, 66vh); }
+/* The knowledge base folded (the default with --chat-first): the skills beside the conversation only */
+body:not(.kb-open) .kb-part,
+body:not(.kb-open) #step,
+body:not(.kb-open) #tasks,
+body:not(.kb-open) #stages,
+body:not(.kb-open) #chat-one-agent,
+body:not(.kb-open) .kb-only { display: none !important; }
+/* Unfolded, the full Skills section takes the list's place where the client can change skills */
+body.kb-open:not(.simple) .skills-panel { display: none !important; }
+
+/* Folded on a wide screen: the page fills the window, the conversation and the skill list scroll inside */
+@media (min-width: 761px) {
+  body:not(.kb-open) { height: 100vh; display: flex; flex-direction: column; }
+  body:not(.kb-open) .top { flex: none; }
+  body:not(.kb-open) .layout { flex: 1; min-height: 0; width: 100%; grid-template-rows: minmax(0, 1fr); }
+  body:not(.kb-open) .side, body:not(.kb-open) .work { min-height: 0; }
+  body:not(.kb-open) .skills-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  body:not(.kb-open) .skill-rows { flex: 1; max-height: none; }
+  body:not(.kb-open) .chat { flex: 1; min-height: 0; }
+  body:not(.kb-open) .messages { flex: 1; min-height: 120px; max-height: none; }
+  body:not(.kb-open) .messages:empty { display: block; }
+}
 .chat-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 13px; }
 .chat-bar .hint { margin: 0; }
 .chat-bar code { overflow-wrap: anywhere; }
 .chat-bar select { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line);
   border-radius: 6px; padding: 3px 6px; max-width: 100%; }
 .card .session { text-align: left; }
-.diff { font: 12px/1.45 var(--mono); background: var(--log); border: 1px solid var(--line); border-radius: 6px;
+.diff { font: 13.5px/1.45 var(--mono); background: var(--log); border: 1px solid var(--line); border-radius: 6px;
   padding: 6px 8px; margin: 4px 0 0; max-height: 360px; overflow: auto; white-space: pre-wrap; color: var(--ink); }
 .diff .add { color: var(--good); }
 .diff .del { color: var(--bad); }
 .diff .hunk, .diff .head { color: var(--muted); }
-body.chat-first:not(.kb-open) .kb-only { display: none !important; }
+
+/* the knowledge-base button beside the title */
+.kb-toggle { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; padding: 6px 14px; }
+.kb-toggle svg { flex: none; }
+body.kb-open .kb-toggle { background: var(--soft); color: var(--accent); }
+
+/* read-only skill list beside the conversation */
+.skills-panel h2 { margin-bottom: 4px; }
+.skills-panel .hint { margin: 0 0 8px; }
+#skills-filter { width: 100%; margin-bottom: 8px; font: inherit; font-size: 14px; color: var(--ink); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+.skill-rows { list-style: none; margin: 0; padding: 0 2px 0 0; overflow: auto; max-height: 60vh; }
+.skill-rows .skill-group { margin: 8px 0 2px; }
+.skill-rows .skill-group:first-child { margin-top: 0; }
+.skill-row { border-bottom: 1px solid var(--line); }
+.skill-row.locked { border-left: 3px solid var(--accent); padding-left: 6px; }
+.skill-row summary { cursor: pointer; list-style: none; padding: 4px 2px; display: flex; flex-direction: column; min-width: 0; }
+.skill-row summary::-webkit-details-marker { display: none; }
+.skill-row summary:hover { background: var(--soft); }
+.skill-name { font-size: 14px; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.skill-line { font-size: 12.5px; line-height: 1.4; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.skill-row[open] .skill-line { display: none; }
+.skill-full { margin: 0 0 4px; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.skill-row .skill-triggers { margin: 0 0 6px; }
+
+/* Markdown in the assistant's answers */
+.msg .text[data-md] { white-space: normal; }
+.msg .text[data-md] > :first-child { margin-top: 0; }
+.msg .text[data-md] > :last-child { margin-bottom: 0; }
+.md-p { margin: 0 0 8px; }
+.md-h { font-weight: 650; margin: 12px 0 6px; line-height: 1.4; }
+.md-h1 { font-size: 20px; } .md-h2 { font-size: 18px; } .md-h3 { font-size: 17px; }
+.md-h4, .md-h5, .md-h6 { font-size: 16px; }
+.md-list { margin: 0 0 8px; padding-left: 24px; }
+.md-list li + li { margin-top: 2px; }
+.md-list li > .md-p { margin-bottom: 4px; }
+.md-quote { margin: 0 0 8px; padding: 2px 12px; border-left: 3px solid var(--line); color: var(--muted); }
+.md-rule { border: 0; border-top: 1px solid var(--line); margin: 10px 0; }
+.md-code { font: 14px/1.4 var(--mono); background: var(--log); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+.md-table { overflow-x: auto; margin: 0 0 8px; }
+.md-table table { border-collapse: collapse; font-size: 14.5px; }
+.md-table th, .md-table td { border: 1px solid var(--line); padding: 4px 10px; text-align: left; vertical-align: top; }
+.md-table th { background: var(--log); font-weight: 600; }
+.msg a { color: var(--accent); }
+.md-pre { margin: 0 0 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--code-bg); overflow: hidden; }
+.md-pre-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 6px 2px 12px;
+  border-bottom: 1px solid var(--line); font: 12px/1.6 var(--mono); color: var(--muted); }
+.md-pre-head button { font-size: 12px; }
+.md-pre pre { margin: 0; padding: 10px 12px; overflow: auto; max-height: 520px; font: 14px/1.55 var(--mono);
+  color: var(--code-ink); white-space: pre; tab-size: 4; }
+:root { --code-bg: #f6f8fa; --code-ink: #1f2328; --tok-com: #6e7781; --tok-str: #0a3069; --tok-kw: #cf222e;
+  --tok-num: #0550ae; --tok-var: #8250df; --tok-add: #116329; --tok-del: #82071e; --tok-hunk: #6e7781; }
+@media (prefers-color-scheme: dark) {
+  :root { --code-bg: #0f141a; --code-ink: #e6edf3; --tok-com: #8b949e; --tok-str: #a5d6ff; --tok-kw: #ff7b72;
+    --tok-num: #79c0ff; --tok-var: #d2a8ff; --tok-add: #7ee787; --tok-del: #ffa198; --tok-hunk: #8b949e; }
+}
+.tok-com { color: var(--tok-com); font-style: italic; }
+.tok-str { color: var(--tok-str); }
+.tok-kw { color: var(--tok-kw); }
+.tok-num { color: var(--tok-num); }
+.tok-var { color: var(--tok-var); }
+.tok-add { color: var(--tok-add); }
+.tok-del { color: var(--tok-del); }
+.tok-hunk, .tok-head { color: var(--tok-hunk); }
+.chat .composer { margin-top: auto; }
+.composer textarea { font-size: 16px; }

@@ -9,19 +9,22 @@
 <body>
 <header class="top">
   <h1 id="title" data-t="title">Knowledge base</h1>
+  <button type="button" class="primary kb-toggle" id="kb-toggle" aria-expanded="false" hidden>
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.4"
+      stroke-linejoin="round" d="M2 3.2C3.8 2.4 5.9 2.4 8 3.6v9.6c-2.1-1.2-4.2-1.2-6-.4zM14 3.2c-1.8-.8-3.9-.8-6 .4v9.6c2.1-1.2 4.2-1.2 6-.4z"/></svg>
+    <span id="kb-toggle-text">Knowledge base</span></button>
   <div class="status" id="status"></div>
-  <button type="button" class="quiet" id="kb-toggle" aria-expanded="false" hidden>Knowledge base</button>
   <button type="button" class="quiet" id="quit" data-t="quit">Quit</button>
 </header>
 
 <main class="layout">
   <aside class="side">
-    <section>
+    <section class="kb-part">
       <h2 data-t="libraries">Libraries</h2>
       <ul class="libs" id="libs"></ul>
       <p class="empty" id="libs-empty" data-t="no_libraries" hidden>No library yet.</p>
     </section>
-    <section>
+    <section class="kb-part">
       <h2 data-t="manage">Manage</h2>
       <div class="actions">
         <button type="button" data-action="setup" data-t="setup">Set up</button>
@@ -34,7 +37,7 @@
       <p class="hint" id="remembered" hidden><span id="remembered-text"></span>
         <button type="button" class="quiet small" id="forget" data-t="forget">Clear</button></p>
     </section>
-    <section class="skills-box">
+    <section class="skills-box kb-part">
       <h2 data-t="skills_title">Skills</h2>
       <p class="hint skills-intro" data-t="skills_intro">What the assistant can do. Knowledge-base skills are locked and only upgraded; the others can be changed, imported or created.</p>
       <div class="skill-tools">
@@ -43,6 +46,13 @@
       </div>
       <ul class="skills" id="skills"></ul>
       <p class="empty" id="skills-empty" data-t="skills_none_found" hidden>No skills found where OpenCode reads them.</p>
+    </section>
+    <section class="skills-panel" id="skills-panel">
+      <h2 data-t="skills_title">Skills</h2>
+      <p class="hint" data-t="skills_panel_intro">What the assistant can do. Say one of the phrases, or ask in your own words.</p>
+      <input type="search" id="skills-filter" spellcheck="false" autocomplete="off" hidden>
+      <ul class="skill-rows" id="skill-rows"></ul>
+      <p class="empty" id="skill-rows-empty" hidden></p>
     </section>
   </aside>
 
@@ -107,7 +117,7 @@
       <div class="messages" id="messages"></div>
       <div class="cards" id="cards"></div>
       <form class="composer" id="composer">
-        <textarea id="input" rows="3" spellcheck="false"></textarea>
+        <textarea id="input" rows="4" spellcheck="false"></textarea>
         <div class="buttons">
           <span class="hint" data-t="chat_keys">Enter sends, Shift+Enter starts a new line.</span>
           <button type="button" class="quiet" id="chat-stop" data-t="chat_stop" hidden>Stop</button>

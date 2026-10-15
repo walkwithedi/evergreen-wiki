@@ -2,6 +2,13 @@
 
 All three skills share one version number. To release, update this file, the "Version:" line of every SKILL.md and the plugin manifests together and merge to main; the release workflow then publishes v<version>.
 
+## 1.19.0
+
+The browser client folds the knowledge base the same way with or without --chat-first, keeps a skill list beside the conversation and formats the assistant's answers.
+- tools/kb-client: the Knowledge base button sits beside the title as a filled button and is shown in every mode. Folded, the page fills the window: a read-only skill list (one line per skill in use, opened for the description and trigger phrases, knowledge-base skills first, scrolling in its column, a filter past eight skills) and the conversation. Unfolded, the libraries, Manage, the Skills section and the step panel come back; with --simple the read-only list stays in place of the Skills section. The page starts unfolded, folded with --chat-first; the browser remembers each apart.
+- tools/kb-client: the assistant's answers are shown as Markdown (headings, lists, quotes, tables, rules, inline code, bold, italic, web links), built as DOM nodes so that nothing in an answer runs. Fenced code has a Copy button and colours for Python, shell, JavaScript, JSON, YAML, SQL and diff. The user's messages stay plain text.
+- tools/kb-client: larger text in the conversation (16px, code 14px), a page up to 1440px wide and a four-line input box.
+
 ## 1.18.0
 
 The browser client can open as a front end for OpenCode, with the knowledge base folded away.

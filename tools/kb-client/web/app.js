@@ -209,7 +209,10 @@
       forget_confirm: "Forget every Always allow answer? The assistant will ask again for those actions, and OpenCode is restarted so that it forgets them too.",
       chat_restarting_forget: "Restarting OpenCode so that it forgets the Always allow answers...",
       title_chat: "OpenCode",
-      kb_open: "Knowledge base \u25b8", kb_close: "Fold the knowledge base",
+      kb_open: "Knowledge base", kb_close: "Fold the knowledge base",
+      skills_panel_intro: "What the assistant can do. Say one of the phrases, or ask in your own words.",
+      skills_filter: "Filter skills", skills_no_match: "No skill matches.",
+      copy_code: "Copy",
       workdir_label: "Work folder:", workdir_none: "none chosen (your home folder; edits ask first)",
       workdir_change: "Change\u2026", workdir_recent: "Recent folders", workdir_title: "Choose the work folder",
       workdir_hint: "The assistant reads and edits files in this folder without asking; commands and anything outside it still ask.",
@@ -424,7 +427,10 @@
       forget_confirm: "清除所有「总是允许」吗？之后这些操作助手会再次询问；OpenCode 会重新启动，让它也忘掉这些授权。",
       chat_restarting_forget: "正在重新启动 OpenCode，让它忘掉「总是允许」的授权…",
       title_chat: "OpenCode 工作台",
-      kb_open: "知识库 \u25b8", kb_close: "收起知识库",
+      kb_open: "知识库", kb_close: "收起知识库",
+      skills_panel_intro: "助手能做的事。说出其中的话，或者用自己的话提出要求。",
+      skills_filter: "筛选技能", skills_no_match: "没有匹配的技能。",
+      copy_code: "复制",
       workdir_label: "工作文件夹：", workdir_none: "未选择（家目录；改文件前会先问）",
       workdir_change: "更换\u2026", workdir_recent: "最近的文件夹", workdir_title: "选择工作文件夹",
       workdir_hint: "助手在这个文件夹里读、改文件不再询问；运行命令和文件夹以外的操作仍会询问。",
@@ -681,8 +687,8 @@
 
   function renderChecklist() {
     if (!state) return;
-    // --chat-first with the knowledge base folded: only whether OpenCode can be used
-    var kbShown = !state.chat_first || kbOpen();
+    // With the knowledge base folded: only whether OpenCode can be used
+    var kbShown = document.body.classList.contains("kb-open");
     var items = kbShown ? checklist() : checklist().slice(0, 2);
     var need = kbShown ? 5 : 2;
     var list = $("check-list");
@@ -808,6 +814,7 @@
     show($("result"), false);
     clearAsk();
     setBusy(true);
+    applyKb();
     var src = new EventSource("/api/events?job=" + encodeURIComponent(id) + "&t=" + encodeURIComponent(token));
     job.source = src;
     src.onmessage = function (m) {
@@ -1145,10 +1152,326 @@
       p.dataset.tool = ev.tool || "";
       if (ev.diff) p.appendChild(diffFold(ev.diff));
     } else {
-      p.textContent = ev.text;
+      setText(p, ev.text, ev.role);
       if (ev.role === "user") dropQueued(ev.text);
     }
     scrollChat();
+  }
+
+  // ---------- Markdown in the assistant's answers ----------
+  // A small subset, built as DOM nodes (never as HTML, so that nothing in an answer runs): headings,
+  // lists, quotes, tables, rules, fenced code with colours, inline code, bold, italic and web links.
+  // The user's own messages stay plain text.
+
+  function setText(p, text, role) {
+    p.dataset.raw = text || "";
+    if (role === "user") { p.textContent = text; return; }
+    p.dataset.md = "1";
+    p.textContent = "";
+    p.appendChild(markdown(text || ""));
+  }
+
+  // While an answer streams in, it is drawn again at most once per frame.
+  function addText(p, delta, role) {
+    p.dataset.raw = (p.dataset.raw || "") + delta;
+    if (role === "user") { p.textContent = p.dataset.raw; return; }
+    if (p.dataset.drawing) return;
+    p.dataset.drawing = "1";
+    requestAnimationFrame(function () {
+      delete p.dataset.drawing;
+      setText(p, p.dataset.raw, role);
+      scrollChat();
+    });
+  }
+
+  var MD_FENCE = /^ {0,3}(`{3,}|~{3,})\s*([\w+#.-]*)/;
+  var MD_HEAD = /^ {0,3}(#{1,6})\s+(.*?)(?:\s+#+)?\s*$/;
+  var MD_RULE = /^ {0,3}([-*_])(?:\s*\1){2,}\s*$/;
+  var MD_QUOTE = /^ {0,3}>\s?/;
+  var MD_ITEM = /^(\s*)([-*+]|\d{1,9}[.)])\s+(.*)$/;
+  var MD_TABLE_SEP = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/;
+
+  function indentOf(line) { return /^\s*/.exec(line)[0].replace(/\t/g, "    ").length; }
+
+  function markdown(text) {
+    var frag = document.createDocumentFragment();
+    mdBlocks(text.replace(/\r\n?/g, "\n").split("\n"), frag);
+    return frag;
+  }
+
+  function mdBlocks(lines, into) {
+    var i = 0, para = [];
+    function flush() {
+      if (!para.length) return;
+      var p = el("p", { "class": "md-p" });
+      para.forEach(function (l, k) {
+        if (k) p.appendChild(el("br"));
+        mdInline(l.trim(), p);
+      });
+      into.appendChild(p);
+      para = [];
+    }
+    while (i < lines.length) {
+      var line = lines[i], m;
+      if (!line.trim()) { flush(); i++; continue; }
+      if ((m = MD_FENCE.exec(line))) {
+        flush();
+        var mark = m[1], body = [];
+        i++;
+        while (i < lines.length && !(lines[i].trim().indexOf(mark) === 0 &&
+               lines[i].trim().split(mark.charAt(0)).join("") === "")) body.push(lines[i++]);
+        i++;  // the closing fence; an answer still streaming may not have it yet
+        into.appendChild(codeBlock(body.join("\n"), m[2]));
+        continue;
+      }
+      if ((m = MD_HEAD.exec(line))) {
+        flush();
+        var h = el("p", { "class": "md-h md-h" + m[1].length });
+        mdInline(m[2], h);
+        into.appendChild(h);
+        i++;
+        continue;
+      }
+      if (MD_RULE.test(line)) { flush(); into.appendChild(el("hr", { "class": "md-rule" })); i++; continue; }
+      if (MD_QUOTE.test(line)) {
+        flush();
+        var q = [];
+        while (i < lines.length && MD_QUOTE.test(lines[i])) q.push(lines[i++].replace(MD_QUOTE, ""));
+        var bq = el("blockquote", { "class": "md-quote" });
+        mdBlocks(q, bq);
+        into.appendChild(bq);
+        continue;
+      }
+      if (line.indexOf("|") >= 0 && i + 1 < lines.length && MD_TABLE_SEP.test(lines[i + 1]) &&
+          lines[i + 1].indexOf("|") >= 0) {
+        flush();
+        var rows = [line];
+        i += 2;
+        while (i < lines.length && lines[i].indexOf("|") >= 0 && lines[i].trim()) rows.push(lines[i++]);
+        into.appendChild(table(rows));
+        continue;
+      }
+      if ((m = MD_ITEM.exec(line))) {
+        flush();
+        i = list(lines, i, into);
+        continue;
+      }
+      para.push(line);
+      i++;
+    }
+    flush();
+  }
+
+  // A list from line i: its items at the first item's indent, each with the more indented lines under it
+  // (nested lists, continued text). Returns the line after the list.
+  function list(lines, i, into) {
+    var first = MD_ITEM.exec(lines[i]);
+    var base = indentOf(first[1]);
+    var ordered = /\d/.test(first[2]);
+    var ol = el(ordered ? "ol" : "ul", { "class": "md-list" });
+    if (ordered && parseInt(first[2], 10) !== 1) ol.setAttribute("start", String(parseInt(first[2], 10)));
+    var item = null;
+    while (i < lines.length) {
+      var line = lines[i], m = MD_ITEM.exec(line);
+      if (m && indentOf(m[1]) <= base + 1) {
+        if (/\d/.test(m[2]) !== ordered) break;
+        if (item) ol.appendChild(listItem(item));
+        item = [m[3]];
+        i++;
+      } else if (line.trim() && indentOf(line) > base) {
+        item.push(line.slice(Math.min(indentOf(line), base + 2)));
+        i++;
+      } else if (!line.trim() && i + 1 < lines.length && lines[i + 1].trim() &&
+                 (indentOf(lines[i + 1]) > base || MD_ITEM.test(lines[i + 1]) &&
+                  indentOf(MD_ITEM.exec(lines[i + 1])[1]) <= base + 1)) {
+        i++;  // a blank line inside the list
+      } else break;
+    }
+    if (item) ol.appendChild(listItem(item));
+    into.appendChild(ol);
+    return i;
+  }
+
+  function listItem(lines) {
+    var li = el("li");
+    if (lines.length === 1) mdInline(lines[0], li);
+    else mdBlocks(lines, li);
+    return li;
+  }
+
+  function cells(row) {
+    var s = row.trim().replace(/^\|/, "").replace(/\|$/, "");
+    var out = [""];
+    for (var k = 0; k < s.length; k++) {
+      if (s.charAt(k) === "\\" && s.charAt(k + 1) === "|") { out[out.length - 1] += "|"; k++; }
+      else if (s.charAt(k) === "|") out.push("");
+      else out[out.length - 1] += s.charAt(k);
+    }
+    return out.map(function (c) { return c.trim(); });
+  }
+
+  function table(rows) {
+    var wrap = el("div", { "class": "md-table" });
+    var tb = el("table");
+    rows.forEach(function (r, k) {
+      var tr = el("tr");
+      cells(r).forEach(function (c) {
+        var td = el(k ? "td" : "th");
+        mdInline(c, td);
+        tr.appendChild(td);
+      });
+      tb.appendChild(tr);
+    });
+    wrap.appendChild(tb);
+    return wrap;
+  }
+
+  var MD_INLINE = /(`+)([\s\S]*?[^`])\1(?!`)|\*\*(?=\S)([\s\S]*?\S)\*\*|__(?=\S)([\s\S]*?\S)__|\*(?=[^\s*])([^*]*?[^\s*])\*|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>()　-〿＀-￯]+[^\s<>().,;:!?'"　-〿＀-￯])/g;
+
+  function mdInline(text, into) {
+    var re = new RegExp(MD_INLINE.source, "g"), last = 0, m;  // its own: bold and italic call this again
+    while ((m = re.exec(text))) {
+      if (m.index > last) into.appendChild(document.createTextNode(text.slice(last, m.index)));
+      if (m[1]) into.appendChild(el("code", { "class": "md-code" }, m[2].replace(/^ (.*) $/, "$1")));
+      else if (m[3] !== undefined || m[4] !== undefined) {
+        var b = el("strong");
+        mdInline(m[3] !== undefined ? m[3] : m[4], b);
+        into.appendChild(b);
+      } else if (m[5] !== undefined) {
+        var e = el("em");
+        mdInline(m[5], e);
+        into.appendChild(e);
+      } else {
+        var href = m[7] || m[8];
+        var a = el("a", { href: href, target: "_blank", rel: "noopener noreferrer" }, m[6] || href);
+        into.appendChild(a);
+      }
+      last = re.lastIndex;
+    }
+    if (last < text.length) into.appendChild(document.createTextNode(text.slice(last)));
+  }
+
+  function copyText(text, button) {
+    var done = function () {
+      button.textContent = t("copied");
+      setTimeout(function () { button.textContent = t("copy_code"); }, 1500);
+    };
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(done, function () {});
+      return;
+    }
+    var box = el("textarea");
+    box.value = text;
+    box.style.position = "fixed";
+    box.style.opacity = "0";
+    document.body.appendChild(box);
+    box.select();
+    try { if (document.execCommand("copy")) done(); } catch (e) { /* the text stays selectable */ }
+    box.remove();
+  }
+
+  function codeBlock(code, lang) {
+    var wrap = el("div", { "class": "md-pre" });
+    var head = el("div", { "class": "md-pre-head" });
+    head.appendChild(el("span", { "class": "md-lang" }, lang || ""));
+    var copy = el("button", { type: "button", "class": "quiet small" }, t("copy_code"));
+    copy.addEventListener("click", function () { copyText(code, copy); });
+    head.appendChild(copy);
+    wrap.appendChild(head);
+    var pre = el("pre");
+    var c = el("code");
+    highlight(code, lang, c);
+    pre.appendChild(c);
+    wrap.appendChild(pre);
+    return wrap;
+  }
+
+  // ---------- code colours ----------
+  // A token pass per language: comments, strings, variables or keys, numbers and keywords get a class
+  // (tok-com, tok-str, tok-var, tok-num, tok-kw); everything else stays plain text. Not a parser: unusual
+  // code may be coloured wrongly, its text is always shown as it is.
+
+  function words(s) {
+    var o = {};
+    s.split(" ").forEach(function (w) { o[w] = true; });
+    return o;
+  }
+
+  var STR_DQ = '"(?:[^"\\\\\\n]|\\\\.)*"', STR_SQ = "'(?:[^'\\\\\\n]|\\\\.)*'";
+  var NUM = "\\b(?:0[xX][\\da-fA-F]+|\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?)\\b";
+  var WORD = "[A-Za-z_$][\\w$]*";
+  var JS_KW = words("var let const function return if else for while do switch case break continue new try catch " +
+    "finally throw typeof instanceof in of class extends import export from default async await yield null " +
+    "undefined true false this super delete void static get set");
+  var LANGS = {
+    python: { tokens: [["com", "#.*"], ["str", "[rRbBuUfF]{0,2}(?:\"\"\"[\\s\\S]*?\"\"\"|'''[\\s\\S]*?'''|" + STR_DQ + "|" + STR_SQ + ")"],
+                       ["var", "@[\\w.]+"]],
+              kw: words("and as assert async await break class continue def del elif else except False finally for " +
+                        "from global if import in is lambda None nonlocal not or pass raise return True try while " +
+                        "with yield self print len range") },
+    shell: { tokens: [["com", "(?:^|\\s)#.*"], ["str", STR_DQ + "|'[^']*'"],
+                      ["var", "\\$(?:\\{[^}\\n]*\\}|[\\w@#?*!$-]+)"]],
+             kw: words("if then else elif fi for while until do done case esac in function return local export " +
+                       "readonly declare set unset echo printf cd exit source sudo shift break continue true false") },
+    js: { tokens: [["com", "\\/\\/.*|\\/\\*[\\s\\S]*?\\*\\/"], ["str", STR_DQ + "|" + STR_SQ + "|`(?:[^`\\\\]|\\\\.)*`"]],
+          kw: JS_KW },
+    json: { tokens: [["var", STR_DQ + "(?=\\s*:)"], ["str", STR_DQ]], kw: words("true false null") },
+    yaml: { tokens: [["com", "(?:^|\\s)#.*"], ["var", "^[ \\t]*(?:- +)?[^\\s:#'\"][^:#\\n]*(?=:(?:\\s|$))"],
+                     ["str", STR_DQ + "|" + STR_SQ]],
+            kw: words("true false null yes no on off True False Null ~") },
+    sql: { tokens: [["com", "--.*|\\/\\*[\\s\\S]*?\\*\\/"], ["str", STR_SQ + "|" + STR_DQ]],
+           kw: words("select from where and or not insert into values update set delete create table view index " +
+                     "drop alter add join left right inner outer full on group by order having limit offset as " +
+                     "distinct null is in like between union all case when then else end exists primary key " +
+                     "references default count sum avg min max asc desc with"), lower: true }
+  };
+  var LANG_NAMES = { py: "python", python: "python", python3: "python", sh: "shell", bash: "shell", shell: "shell",
+    zsh: "shell", console: "shell", js: "js", javascript: "js", ts: "js", typescript: "js", mjs: "js",
+    jsx: "js", json: "json", jsonc: "js", yaml: "yaml", yml: "yaml", sql: "sql" };
+  var LANG_RE = {};
+
+  function langRe(name) {
+    if (!LANG_RE[name]) {
+      var spec = LANGS[name];
+      var parts = spec.tokens.map(function (x) { return "(" + x[1] + ")"; });
+      parts.push("(" + NUM + ")", "(" + WORD + ")");
+      LANG_RE[name] = new RegExp(parts.join("|"), "gm");
+    }
+    return LANG_RE[name];
+  }
+
+  function highlight(code, lang, into) {
+    lang = (lang || "").toLowerCase();
+    if (lang === "diff" || lang === "patch") { diffLines(code, into); return; }
+    var name = LANG_NAMES[lang];
+    if (!name) { into.textContent = code; return; }
+    var spec = LANGS[name], re = langRe(name), last = 0, m;
+    var classes = spec.tokens.map(function (x) { return x[0]; }).concat(["num", "word"]);
+    re.lastIndex = 0;
+    while ((m = re.exec(code))) {
+      if (m[0] === "") { re.lastIndex++; continue; }
+      var k = 1;
+      while (m[k] === undefined) k++;
+      var cls = classes[k - 1];
+      if (cls === "word") {
+        cls = spec.kw[spec.lower ? m[0].toLowerCase() : m[0]] ? "kw" : "";
+        if (!cls) continue;  // left in the plain text before the next token
+      }
+      if (m.index > last) into.appendChild(document.createTextNode(code.slice(last, m.index)));
+      into.appendChild(el("span", { "class": "tok-" + cls }, m[0]));
+      last = re.lastIndex;
+    }
+    if (last < code.length) into.appendChild(document.createTextNode(code.slice(last)));
+  }
+
+  function diffLines(code, into) {
+    var lines = code.split("\n");
+    lines.forEach(function (l, k) {
+      var cls = /^(\+\+\+|---)/.test(l) ? "head" : l.charAt(0) === "+" ? "add" : l.charAt(0) === "-" ? "del"
+        : l.indexOf("@@") === 0 ? "hunk" : "";
+      into.appendChild(cls ? el("span", { "class": "tok-" + cls }, l) : document.createTextNode(l));
+      if (k < lines.length - 1) into.appendChild(document.createTextNode("\n"));
+    });
   }
 
   // A finished turn keeps its answer in view and folds its steps into one line, so that the conversation
@@ -1312,7 +1635,7 @@
     }
     else if (ev.type === "delta") {
       var p = partEl({ partID: ev.partID, messageID: ev.messageID, role: ev.role, child: ev.child, kind: "text" });
-      p.textContent += ev.delta;
+      addText(p, ev.delta, ev.role);
       scrollChat();
     } else if (ev.type === "status") {
       chat.busy = ev.status !== "idle";
@@ -1341,18 +1664,25 @@
 
   // ---------- --chat-first: the knowledge base folded, a work folder, models, earlier conversations ----------
 
+  // Whether the knowledge base is unfolded: remembered by the browser, apart for --chat-first. It starts
+  // folded with --chat-first and unfolded otherwise.
+  function kbKey() { return state && state.chat_first ? "kb-client-kb-open" : "kb-client-kb-open-full"; }
+
   function kbOpen() {
-    try { return localStorage.getItem("kb-client-kb-open") === "open"; } catch (e) { return false; }
+    var v = null;
+    try { v = localStorage.getItem(kbKey()); } catch (e) { v = null; }
+    return v === null ? !(state && state.chat_first) : v === "open";
   }
 
-  // body.chat-first hides the knowledge-base parts of the page (style.css) until body.kb-open.
+  // Without body.kb-open the page shows the skills and the conversation only (style.css); a running step
+  // unfolds it.
   function applyKb() {
     var cf = !!(state && state.chat_first);
     document.body.classList.toggle("chat-first", cf);
-    document.body.classList.toggle("kb-open", cf && (kbOpen() || !!job));
-    show($("kb-toggle"), cf);
+    document.body.classList.toggle("kb-open", kbOpen() || !!job);
+    show($("kb-toggle"), !!state);
     show($("chat-bar"), cf);
-    $("kb-toggle").textContent = t(kbOpen() ? "kb_close" : "kb_open");
+    $("kb-toggle-text").textContent = t(kbOpen() ? "kb_close" : "kb_open");
     $("kb-toggle").setAttribute("aria-expanded", kbOpen() ? "true" : "false");
     var title = t(cf ? "title_chat" : "title");
     $("title").textContent = title;
@@ -1360,7 +1690,7 @@
   }
 
   function toggleKb() {
-    try { localStorage.setItem("kb-client-kb-open", kbOpen() ? "folded" : "open"); } catch (e) { /* this view only */ }
+    try { localStorage.setItem(kbKey(), kbOpen() ? "folded" : "open"); } catch (e) { /* this view only */ }
     applyKb();
     renderChecklist();
   }
@@ -2001,6 +2331,52 @@
     });
     show($("skills-empty"), skills.list.length === 0);
     setBusy(job !== null);
+    drawSkillRows();
+  }
+
+  function firstSentence(text) {
+    var end = /^[\s\S]*?[.。](?=\s|$)/.exec(text || "");
+    return end ? end[0] : text || "";
+  }
+
+  // The read-only list beside the conversation: one line per skill in use, opened for the whole description
+  // and the phrases that start it. A filter appears past eight skills.
+  function drawSkillRows() {
+    var used = skills.list.filter(function (x) { return x.used; });
+    var box = $("skills-filter");
+    box.placeholder = t("skills_filter");
+    box.setAttribute("aria-label", t("skills_filter"));
+    show(box, used.length > 8);
+    var q = used.length > 8 ? box.value.trim().toLowerCase() : "";
+    var shown = used.filter(function (sk) {
+      return !q || [sk.name, sk.description].concat(sk.triggers || []).join("\n").toLowerCase().indexOf(q) >= 0;
+    });
+    var ul = $("skill-rows");
+    ul.textContent = "";
+    [[t("skill_kb_group"), shown.filter(function (x) { return x.locked; })],
+     [t("skill_other_group"), shown.filter(function (x) { return !x.locked; })]].forEach(function (g) {
+      if (!g[1].length) return;
+      ul.appendChild(el("li", { "class": "skill-group" }, g[0]));
+      g[1].forEach(function (sk) {
+        var li = el("li", { "class": "skill-row" + (sk.locked ? " locked" : "") });
+        var d = el("details");
+        var sum = el("summary");
+        sum.appendChild(el("strong", { "class": "skill-name" }, sk.name));
+        sum.appendChild(el("span", { "class": "skill-line", title: sk.description || "" }, firstSentence(sk.description)));
+        d.appendChild(sum);
+        d.appendChild(el("p", { "class": "skill-full" }, sk.description || ""));
+        if (sk.triggers && sk.triggers.length) {
+          var tr = el("p", { "class": "skill-triggers" }, t("skill_triggers"));
+          sk.triggers.slice(0, 6).forEach(function (phrase) { tr.appendChild(el("span", { "class": "trigger" }, phrase)); });
+          d.appendChild(tr);
+        }
+        li.appendChild(d);
+        ul.appendChild(li);
+      });
+    });
+    var empty = $("skill-rows-empty");
+    empty.textContent = used.length ? t("skills_no_match") : t("skills_none_found");
+    show(empty, shown.length === 0);
   }
 
   function modifyCard(sk) {
@@ -2059,6 +2435,7 @@
   $("sessions").addEventListener("click", sessionsCard);
   $("skill-new").addEventListener("click", newSkill);
   $("skill-import").addEventListener("click", function () { startAction("skill_import"); });
+  $("skills-filter").addEventListener("input", drawSkillRows);
   $("step-toggle").addEventListener("click", function () { foldStep(!$("log").hidden); });
   $("forget").addEventListener("click", function () {
     if (!window.confirm(t("forget_confirm"))) return;
