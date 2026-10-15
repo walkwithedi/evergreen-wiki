@@ -1165,6 +1165,34 @@ class LockedTargetTest(unittest.TestCase):
         self.assertFalse(agent.locked_target("read", [os.path.join(kb, "SKILL.md")], places, tmp))
         self.assertFalse(agent.locked_target("edit", [os.path.join(kb, "SKILL.md")], {}, tmp))
 
+    def test_skill_command_on_several_lines(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        kb = os.path.join(tmp, "skills", "kb-incremental")
+        lib = os.path.join(tmp, "lib")
+        os.makedirs(os.path.join(kb, "scripts"))
+        os.makedirs(lib)
+        write(os.path.join(kb, "scripts", "batch_plan.py"), "")
+        scripts = os.path.join(kb, "scripts")
+        places = {"locked": [kb], "scripts": [scripts], "write": [lib], "read": []}
+        script = os.path.join(scripts, "batch_plan.py")
+        joined = (f'python3 {script} plan \\\n  "{tmp}/inbox/Project Atlas" \\\n  --plan {lib}/_intake-batches.json \\\n'
+                  f"  --library-root {lib} \\\n  --batch-files 5 2>&1")
+        for cmd in (joined, joined.replace("\n", "\r\n"), f"python3 {script} plan x 2>/dev/null",
+                    f"python3 {script} plan x 2> /dev/null 2>&1"):
+            self.assertTrue(agent.skill_command(cmd, [scripts], tmp), cmd)
+            self.assertFalse(agent.locked_target("bash", [cmd], places, tmp), cmd)
+            self.assertTrue(agent.decide("bash", [cmd], places, tmp), cmd)
+        for cmd in (f"python3 {script} plan x 2>&1; rm -rf {kb}", f"python3 {script} plan x > {kb}/x",
+                    f"python3 {script} plan x 2>{kb}/err", f"python3 {script} plan x 2>&1 | tee {kb}/x",
+                    f"python3 {script} plan $(rm -rf {kb})"):
+            self.assertFalse(agent.skill_command(cmd, [scripts], tmp), cmd)
+            self.assertTrue(agent.locked_target("bash", [cmd], places, tmp), cmd)
+        # inside quotes nothing is joined or dropped
+        self.assertEqual(agent.plain_command("echo 'a \\\nb' '2>&1'"), "echo 'a \\\nb' '2>&1'")
+        self.assertFalse(agent.skill_command(f"python3 {script} 'a \\\nb'", [scripts], tmp))
+        self.assertEqual(agent.plain_command("a \\\nb 2>&1"), "a  b")
+
 
 if __name__ == "__main__":
     unittest.main()

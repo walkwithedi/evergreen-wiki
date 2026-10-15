@@ -142,10 +142,57 @@ def unquoted(cmd):
     return None if quote else "".join(out)
 
 
+STDERR_RE = re.compile(r"(?<!\S)2>(?:&1|\s*/dev/null)(?!\S)")
+
+
+def unquoted_mask(cmd):
+    """For each character of cmd, True when it lies outside quotes (a quote character itself counts as
+    quoted). A backslash in double quotes escapes the next character."""
+    mask, quote, escaped = [], None, False
+    for ch in cmd:
+        if quote is None:
+            if ch in "'\"":
+                quote = ch
+                mask.append(False)
+            else:
+                mask.append(True)
+        else:
+            mask.append(False)
+            if escaped:
+                escaped = False
+            elif quote == '"' and ch == "\\":
+                escaped = True
+            elif ch == quote:
+                quote = None
+    return mask
+
+
+def plain_command(cmd):
+    """cmd as one line: a backslash-newline outside quotes joins lines as the shell does, and a separate
+    2>&1 or 2>/dev/null outside quotes is dropped (it only says where error output goes)."""
+    cmd = str(cmd)
+    mask = unquoted_mask(cmd)
+    out, i = [], 0
+    while i < len(cmd):
+        if cmd[i] == "\\" and mask[i] and cmd[i + 1:i + 2] in ("\n", "\r"):
+            i += 3 if cmd[i + 1:i + 3] == "\r\n" else 2
+            out.append(" ")
+            continue
+        out.append(cmd[i])
+        i += 1
+    cmd = "".join(out)
+    mask = unquoted_mask(cmd)
+    drops = [m.span() for m in STDERR_RE.finditer(cmd) if all(mask[m.start():m.end()])]
+    for start, end in reversed(drops):
+        cmd = cmd[:start] + " " + cmd[end:]
+    return cmd.strip()
+
+
 def skill_command(command, script_dirs, cwd):
     """True for `python3 [-I|-B|-u] <script>.py args` (optionally after one `cd <folder> &&`) whose script
-    lies in one of script_dirs, with no other shell syntax outside quoted words."""
-    cmd = str(command).strip()
+    lies in one of script_dirs, with no other shell syntax outside quoted words. Lines joined with a
+    backslash and a separate 2>&1 or 2>/dev/null are accepted (plain_command)."""
+    cmd = plain_command(command)
     m = re.fullmatch(r"cd\s+(\"[^\"]*\"|'[^']*'|[^\s;&|]+)\s*&&\s*(.*)", cmd, re.S)
     where = cwd
     if m:
