@@ -2,6 +2,11 @@
 
 All three skills share one version number. To release, update this file, the "Version:" line of every SKILL.md and the plugin manifests together and merge to main; the release workflow then publishes v<version>.
 
+## Unreleased
+
+Repository checks only; the skills and the browser client are unchanged.
+- tests/test_sensitive_scan.py: the temporary repositories leave out the git variables that point at another repository (GIT_INDEX_FILE, GIT_DIR and the like). `git commit -a` passes its own index to the pre-commit hook, and the tests wrote into it, so the commit failed with "invalid object".
+
 ## 1.22.0
 
 The browser client keeps several conversation windows, and the tasks that write the libraries run one at a time. The skills are unchanged.

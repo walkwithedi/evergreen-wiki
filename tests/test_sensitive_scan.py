@@ -16,8 +16,12 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
 import sensitive_scan as ss  # noqa: E402
 
-ENV = dict(os.environ, SENSITIVE_TERMS="", SENSITIVE_TERMS_FILE=os.devnull, GITHUB_ACTIONS="",
-           PYTHONIOENCODING="utf-8")
+# Variables that point git at another repository: a hook (git commit -a sets GIT_INDEX_FILE to its own
+# index) passes them on, and the temporary repositories below must use only their own.
+OUTER_GIT = ("GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+             "GIT_COMMON_DIR", "GIT_PREFIX")
+ENV = dict({k: v for k, v in os.environ.items() if k not in OUTER_GIT}, SENSITIVE_TERMS="",
+           SENSITIVE_TERMS_FILE=os.devnull, GITHUB_ACTIONS="", PYTHONIOENCODING="utf-8")
 
 
 def labels(line, terms=()):
@@ -217,6 +221,21 @@ class GitTest(unittest.TestCase):
         p = self.scan("--unpushed")  # no remote: every local commit counts
         self.assertEqual(p.returncode, 1)
         self.assertIn("mount path", p.stdout)
+
+
+class OuterGitTest(unittest.TestCase):
+    def test_temporary_repositories_ignore_the_outer_index(self):
+        # a hook run by `git commit -a` gets GIT_INDEX_FILE pointing at that commit's own index; the
+        # temporary repositories of these tests must never write into it
+        with tempfile.TemporaryDirectory() as d:
+            index = os.path.join(d, "outer-index")
+            p = subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "tests", "-p",
+                                "test_sensitive_scan.py", "-k", "GitTest.test_history_finds_removed_lines"],
+                               cwd=ROOT, env=dict(os.environ, GIT_INDEX_FILE=index), capture_output=True,
+                               text=True, encoding="utf-8")
+            self.assertEqual(p.returncode, 0, p.stderr)
+            self.assertIn("Ran 1 test", p.stderr)
+            self.assertFalse(os.path.exists(index))
 
 
 class PushHookTest(unittest.TestCase):
