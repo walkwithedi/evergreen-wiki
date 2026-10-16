@@ -553,3 +553,20 @@ body.kb-open .kb-toggle { background: var(--soft); color: var(--accent); }
 .win-tab .win-close:hover { color: var(--bad); }
 #win-add { margin-bottom: 2px; flex: none; }
 .lock-note { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; color: var(--warn); margin: 0; }
+
+/* the left column folded to a narrow strip on a wide screen (body.side-folded); narrow screens keep it below */
+.side-strip, .side-fold { display: none; }
+@media (min-width: 761px) {
+  .side { position: relative; }
+  .side-top { position: absolute; top: 10px; right: 10px; z-index: 1; }
+  .side-fold { display: inline-block; padding: 2px 9px; font-size: 15px; line-height: 1.2; }
+  .side-fold[hidden] { display: none; }
+  body.side-folded .layout { grid-template-columns: 40px minmax(0, 1fr); }
+  body.side-folded .side { display: none; }
+  body.side-folded .side-strip { display: flex; flex-direction: column; align-items: center; gap: 10px;
+    width: 40px; min-height: 160px; padding: 10px 0; background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); box-shadow: var(--shadow); color: var(--muted); cursor: pointer; }
+  body.side-folded .side-strip:hover { color: var(--accent); border-color: var(--accent); }
+  .side-strip-mark { font-size: 15px; line-height: 1.2; position: sticky; top: 10px; }
+  .side-strip-label { writing-mode: vertical-rl; font-size: 13px; letter-spacing: .08em; position: sticky; top: 36px; }
+}
