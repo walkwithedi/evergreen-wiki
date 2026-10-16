@@ -1,6 +1,6 @@
 {
   "name": "evergreen-wiki",
-  "version": "1.21.0",
+  "version": "1.22.0",
   "description": "Agent skills that keep a personal or team knowledge base of Markdown files fresh, source-grounded and easy to search: capture notes, file material, answer questions.",
   "author": {"name": "Edi Xie"},
   "license": "MIT",

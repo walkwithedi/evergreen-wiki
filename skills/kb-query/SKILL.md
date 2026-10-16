@@ -5,7 +5,7 @@ description: Answers questions from the user's own knowledge base of Markdown fi
 
 # Knowledge base questions
 
-Version: 1.21.0
+Version: 1.22.0
 
 Read-only: search, read and answer. Never create, change, move or delete anything in a library. Partitions, topics and terms are read from the library, never from this file.
 
