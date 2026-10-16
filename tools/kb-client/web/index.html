@@ -19,7 +19,11 @@
 <div class="skill-pop" id="skill-pop" role="region" hidden></div>
 
 <main class="layout">
-  <aside class="side">
+  <button type="button" class="side-strip" id="side-strip" aria-controls="side" aria-expanded="false">
+    <span class="side-strip-mark" aria-hidden="true">»</span><span class="side-strip-label" id="side-strip-label"></span></button>
+  <aside class="side" id="side">
+    <div class="side-top"><button type="button" class="quiet small side-fold" id="side-fold" aria-controls="side"
+      aria-expanded="true">«</button></div>
     <section class="kb-part">
       <h2 data-t="libraries">Libraries</h2>
       <ul class="libs" id="libs"></ul>

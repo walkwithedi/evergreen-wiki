@@ -165,7 +165,7 @@ class KbClientTest(unittest.TestCase):
         page = self.server.get("/", token=False)[1]
         self.assertLess(page.index('id="title"'), page.index('id="kb-toggle"'))
         self.assertLess(page.index('id="kb-toggle"'), page.index('id="status"'))
-        side = page[page.index('<aside class="side">'):page.index("</aside>")]
+        side = page[page.index('<aside class="side"'):page.index("</aside>")]
         for part in ('id="skills-panel"', 'id="skills-filter"', 'id="skill-rows"'):
             self.assertIn(part, side)
         # answers are built as DOM nodes: the page never writes HTML from text

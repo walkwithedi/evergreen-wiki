@@ -108,6 +108,8 @@
       picked: "{n} chosen",
       choose_picked: "Use the chosen items",
       chat_new: "New conversation",
+      side_fold: "Fold the left column", side_unfold: "Unfold the left column",
+      side_label_kb: "Knowledge base", side_label_skills: "Skills",
       win_add: "New window", win_n: "Conversation {n}", win_intake: "Intake", win_task: "{task} \u00b7 {lib}",
       win_close: "Close this window (the conversation stays in OpenCode)",
       win_close_confirm: "The assistant is still working in this window. Stop it and close the window?",
@@ -371,6 +373,8 @@
       picked: "已选 {n} 项",
       choose_picked: "用选中的这些",
       chat_new: "新对话",
+      side_fold: "收拢左栏", side_unfold: "展开左栏",
+      side_label_kb: "知识库", side_label_skills: "技能",
       win_add: "新窗口", win_n: "对话 {n}", win_intake: "入库", win_task: "{task}\u00b7{lib}",
       win_close: "关闭这个窗口（对话仍保存在 OpenCode 里）",
       win_close_confirm: "助手还在这个窗口里处理。停止并关闭这个窗口吗？",
@@ -1942,12 +1946,42 @@
     var title = t(cf ? "title_chat" : "title");
     $("title").textContent = title;
     document.title = title;
+    applySide();
   }
 
   function toggleKb() {
     try { localStorage.setItem(kbKey(), kbOpen() ? "folded" : "open"); } catch (e) { /* this view only */ }
+    if (kbOpen()) setSide(false);  // unfolding the knowledge base is asking to see it
     applyKb();
     renderChecklist();
+  }
+
+  // The left column folded to a narrow strip on a wide screen, so that the conversation is wider; remembered
+  // by the browser, apart for --chat-first. It starts unfolded. Narrow screens keep it below the conversation.
+  function sideKey() { return state && state.chat_first ? "kb-client-side-folded" : "kb-client-side-folded-full"; }
+
+  function sideFolded() {
+    try { return localStorage.getItem(sideKey()) === "1"; } catch (e) { return false; }
+  }
+
+  function setSide(folded) {
+    try {
+      if (folded) localStorage.setItem(sideKey(), "1"); else localStorage.removeItem(sideKey());
+    } catch (e) { /* this view only */ }
+    applySide();
+  }
+
+  function applySide() {
+    var folded = !!state && sideFolded();
+    document.body.classList.toggle("side-folded", folded);
+    $("side-strip-label").textContent = t(kbOpen() || job ? "side_label_kb" : "side_label_skills");
+    $("side-strip").title = t("side_unfold");
+    $("side-strip").setAttribute("aria-label", t("side_unfold"));
+    $("side-strip").setAttribute("aria-expanded", folded ? "false" : "true");
+    $("side-fold").title = t("side_fold");
+    $("side-fold").setAttribute("aria-label", t("side_fold"));
+    $("side-fold").setAttribute("aria-expanded", folded ? "false" : "true");
+    show($("side-fold"), !!state);
   }
 
   function chatBar(a) {
@@ -2909,6 +2943,8 @@
   loadProgress();  // what is already finished is known, so only new batches get a card
   $("check-toggle").addEventListener("click", foldChecklist);
   $("kb-toggle").addEventListener("click", toggleKb);
+  $("side-fold").addEventListener("click", function () { setSide(true); });
+  $("side-strip").addEventListener("click", function () { setSide(false); });
   $("workdir-change").addEventListener("click", function () {
     openBrowser(chat.workdir || (state && state.home) || "", setWorkdir);
   });
