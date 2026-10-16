@@ -180,7 +180,8 @@ def local_tz(name):
 def build_files(s):
     """Return [(relative path, text)] for a new library, and the folders to create."""
     kb = load_preset_kb(s["preset"])
-    kb.update({"label": s["label"], "preset": s["preset"], "language": s["language"], "timezone": s["timezone"]})
+    kb.update({"label": s["label"], "preset": s["preset"], "language": s["language"], "timezone": s["timezone"],
+               "id": s["id"], "scope": s["scope"]})
     kb["sensitivity"] = dict(kb["sensitivity"], enabled=bool(s["sensitivity"]))
     kb["convert"] = dict(kb.get("convert", {}), enabled=bool(s.get("convert", False)))
     kb["sources"] = dict(kb.get("sources", {}), keep=bool(s.get("sources", False)))

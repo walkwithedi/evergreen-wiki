@@ -21,8 +21,10 @@ search), and the client files what is put there without anybody on the page.
   - A run stopped by a person (Stop, or Allow everything switched off) pauses the library until a file
     that run did not have arrives, or the switch is turned off and on.
 
-The switches, the folders and each library's last run (counts, time, log) are kept in
-<state dir>/auto-intake.json, never in the library. Standard library only.
+Each library keeps its switch, its folders (relative to the library, so a library that moves keeps them) and
+its last run (counts, time, log) in <library>/_Runtime/auto-intake.json (kb_manage.runtime_dir): the state
+stays with the library when the home folder is reset. Settings written by earlier versions to
+<state dir>/auto-intake.json are moved there once by migrate(). Standard library only.
 """
 import json
 import logging
@@ -34,6 +36,7 @@ import threading
 import time
 
 import intake as intake_mod
+import kb_manage
 
 log = logging.getLogger("kb_client.auto")
 
@@ -42,44 +45,119 @@ POLL = max(1, int(os.environ.get("KB_CLIENT_AUTO_POLL") or 60))  # seconds betwe
 SETTLE = max(0, int(os.environ.get("KB_CLIENT_AUTO_SETTLE") or 120))  # seconds a file must stay unchanged
 TICK = min(5, POLL)  # how often the watcher wakes (also to see Allow everything switched off)
 SETTINGS = "auto-intake.json"
+PATH_KEYS = ("inbox", "not_filed", "filed")
 # drop folder, files that need a person, files written whose original the library does not keep
 FOLDERS = {"en": ("_Inbox", "Not-filed", "Filed"), "zh": ("_待入库", "未处理", "已入库")}
 
 
 class Settings:
-    """auto-intake.json: {"libraries": {id: {"on", "inbox", "not_filed", "filed", "last"}}}."""
+    """<library>/_Runtime/auto-intake.json, one per library: {"on", "inbox", "not_filed", "filed", "last"},
+    the folders relative to the library. get() and update() take the library ({id, root}) and give the
+    folders as full paths."""
 
-    def __init__(self, path):
-        self.path = path
+    def __init__(self):
         self.lock = threading.Lock()
-        try:
-            with open(path, encoding="utf-8") as f:
-                data = json.load(f)
-            libs = data.get("libraries") if isinstance(data, dict) else None
-        except (OSError, ValueError):
-            libs = None
-        self.libs = {str(k): v for k, v in libs.items() if isinstance(v, dict)} if isinstance(libs, dict) else {}
 
-    def save(self):
+    @staticmethod
+    def path(root):
+        return os.path.join(kb_manage.runtime_dir(root), SETTINGS)
+
+    def get(self, lib):
+        root = lib.get("root") or ""
+        if not root:
+            return {}
         with self.lock:
-            data = json.dumps({"libraries": self.libs}, ensure_ascii=False, indent=1)
+            data = read_entry(self.path(root))
+        return absolute(data, root)
+
+    def update(self, lib, **kw):
+        root = lib.get("root") or ""
+        if not root:
+            return
+        with self.lock:
+            entry = absolute(read_entry(self.path(root)), root)
+            entry.update(kw)
+            try:
+                write_entry(root, relative(entry, root))
+            except OSError as e:
+                log.warning("automatic intake settings of %s not saved: %s", lib.get("id"), e)
+
+
+def read_entry(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def write_entry(root, entry):
+    path = os.path.join(kb_manage.ensure_runtime(root), SETTINGS)
+    fd = os.open(path + ".tmp", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False, indent=1))
+    os.replace(path + ".tmp", path)
+
+
+def absolute(entry, root):
+    """The folders as full paths; one that is not a plain path inside the library is dropped."""
+    out = dict(entry)
+    for k in PATH_KEYS:
+        rel = out.get(k)
+        if not isinstance(rel, str) or not rel or os.path.isabs(rel) or ".." in rel.replace("\\", "/").split("/"):
+            out.pop(k, None)
+            continue
+        out[k] = os.path.join(root, *rel.split("/"))
+    return out
+
+
+def relative(entry, root):
+    """The folders relative to the library, "/" separated; one outside it is dropped."""
+    out = dict(entry)
+    real = os.path.realpath(root)
+    for k in PATH_KEYS:
+        p = out.get(k)
+        if not isinstance(p, str) or not p:
+            out.pop(k, None)
+            continue
+        rel = os.path.relpath(os.path.realpath(p), real)
+        if rel == "." or rel.startswith(".."):
+            out.pop(k, None)
+            continue
+        out[k] = rel.replace(os.sep, "/")
+    return out
+
+
+def migrate(state_dir, libs):
+    """Moves the settings of earlier versions (<state dir>/auto-intake.json, every library in one file, full
+    paths) into each library. The old file goes only when every entry found its library; otherwise it stays
+    for the next start (a library folder that is not there now, a write that failed). Returns the ids moved."""
+    old = os.path.join(state_dir, SETTINGS)
+    data = read_entry(old)
+    entries = data.get("libraries")
+    if not isinstance(entries, dict):
+        return []  # nothing there, or nothing readable: left alone
+    by_id = {lib["id"]: lib for lib in libs if lib.get("root") and lib.get("exists")}
+    moved, left = [], 0
+    for lib_id, entry in entries.items():
+        lib = by_id.get(str(lib_id))
+        if lib is None or not isinstance(entry, dict):
+            left += 1
+            continue
         try:
-            os.makedirs(os.path.dirname(self.path), mode=0o700, exist_ok=True)
-            fd = os.open(self.path + ".tmp", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                f.write(data)
-            os.replace(self.path + ".tmp", self.path)
+            if not os.path.exists(Settings.path(lib["root"])):  # one already in the library wins
+                write_entry(lib["root"], relative(entry, lib["root"]))
+            moved.append(lib["id"])
         except OSError as e:
-            log.warning("automatic intake settings not saved: %s", e)
-
-    def get(self, lib_id):
-        with self.lock:
-            return dict(self.libs.get(lib_id) or {})
-
-    def update(self, lib_id, **kw):
-        with self.lock:
-            self.libs.setdefault(lib_id, {}).update(kw)
-        self.save()
+            log.warning("automatic intake settings of %s not moved: %s", lib_id, e)
+            left += 1
+    if left:
+        log.info("automatic intake settings: %d of %d left in %s for the next start", left, len(entries), old)
+    else:
+        os.remove(old)
+        log.info("automatic intake settings moved into the libraries: %s", ", ".join(moved))
+    return moved
 
 
 def folders_for(root, lang):
@@ -168,10 +246,10 @@ class Watcher:
     """The thread that looks at the drop folders and starts the runs. app is the kb_client.App: its
     libraries, its agent, its current intake run and start_intake."""
 
-    def __init__(self, app, state_dir, lang):
+    def __init__(self, app, lang):
         self.app = app
         self.lang = lang if lang in FOLDERS else "en"
-        self.settings = Settings(os.path.join(state_dir, SETTINGS))
+        self.settings = Settings()
         self.seen = {}  # path -> (size, mtime, unchanged since)
         self.paused = {}  # library id -> the files of a run a person stopped
         self.cons_done = set()  # libraries whose consolidation-only run ended without finishing
@@ -185,7 +263,7 @@ class Watcher:
 
     def on_libraries(self, libs):
         """The local libraries (kb_client.libraries()) switched on that exist on this computer."""
-        return [lib for lib in libs if lib["root"] and lib["exists"] and self.settings.get(lib["id"]).get("on")]
+        return [lib for lib in libs if lib["root"] and lib["exists"] and self.settings.get(lib).get("on")]
 
     def any_on(self, libs):
         return bool(self.on_libraries(libs))
@@ -193,7 +271,7 @@ class Watcher:
     def switch(self, lib, on):
         """Turns automatic intake on or off for a local library; making its drop folders when it is turned
         on (an earlier library's folders are kept). Returns its state for the page."""
-        entry = self.settings.get(lib["id"])
+        entry = self.settings.get(lib)
         if on:
             if not entry.get("inbox") or not os.path.realpath(entry["inbox"]).startswith(os.path.realpath(lib["root"]) + os.sep):
                 entry.update(folders_for(lib["root"], self.lang))
@@ -201,7 +279,7 @@ class Watcher:
                 os.makedirs(entry[key], exist_ok=True)
         self.paused.pop(lib["id"], None)
         self.cons_done.discard(lib["id"])
-        self.settings.update(lib["id"], on=bool(on), inbox=entry.get("inbox", ""), not_filed=entry.get("not_filed", ""),
+        self.settings.update(lib, on=bool(on), inbox=entry.get("inbox", ""), not_filed=entry.get("not_filed", ""),
                              filed=entry.get("filed", ""))
         log.info("automatic intake %s for %s (%s)", "on" if on else "off", lib["id"], entry.get("inbox", ""))
         return self.lib_state(lib)
@@ -209,7 +287,7 @@ class Watcher:
     def lib_state(self, lib):
         """What a library card shows: {on, inbox, not_filed, waiting (files in the drop folder), manual
         (files in Not-filed), last}."""
-        e = self.settings.get(lib["id"])
+        e = self.settings.get(lib)
         if not e:
             return {"on": False}
         waiting = len(inbox_files(e)) if e.get("on") and os.path.isdir(e.get("inbox", "")) else 0
@@ -246,7 +324,7 @@ class Watcher:
         ready = {}
         current = set()
         for lib in libs:
-            entry = self.settings.get(lib["id"])
+            entry = self.settings.get(lib)
             if not os.path.isdir(entry.get("inbox", "")):
                 continue
             files = inbox_files(entry)
@@ -303,7 +381,7 @@ class Watcher:
             self.restore_allow_all(ag, win)
             return
         self.run = run
-        run.note(f"automatic intake from {self.settings.get(lib['id']).get('inbox')}: {len(files)} files")
+        run.note(f"automatic intake from {self.settings.get(lib).get('inbox')}: {len(files)} files")
         log.info("automatic intake %s: %d files into %s", run.id, len(files), lib["id"])
 
     def restore_allow_all(self, ag, win):
@@ -315,7 +393,7 @@ class Watcher:
     # ----- what a run reports -----
 
     def item_done(self, run, item):
-        entry = self.settings.get(run.lib["id"])
+        entry = self.settings.get(run.lib)
         try:
             what, dest = clear_item(item, entry)
         except OSError as e:
@@ -335,7 +413,7 @@ class Watcher:
                 "duplicate": c.get("duplicate", 0), "not_filed": c.get("manual", 0) + c.get("failed", 0),
                 "waiting": c.get("waiting", 0), "consolidation": cons.get("state", ""),
                 "consolidated": cons.get("files", 0), "reason": cons.get("reason", ""), "log": snap["log"]}
-        self.settings.update(run.lib["id"], last=last)
+        self.settings.update(run.lib, last=last)
         if snap["state"] == "stopped":
             self.paused[run.lib["id"]] = {it["source"] for it in snap["items"]}
         if cons.get("state") != "done":

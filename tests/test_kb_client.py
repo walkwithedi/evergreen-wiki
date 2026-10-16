@@ -639,8 +639,10 @@ class ChatTest(unittest.TestCase):
         self.server.post("/api/intake", {"library": "work", "paths": [material]})
         run = self.intake_until_done()
         self.assertEqual(self.server.get("/api/chat/state")[1]["agent"]["session"], before)  # never left
-        work = self.p("home", ".config", "evergreen-wiki", "intake", run["id"])
+        work = self.p("home", "kb", "work", "_Runtime", "intake", run["id"])  # in the library, not the home folder
         self.assertEqual(run["log"], os.path.join(work, "intake.log"))
+        self.assertFalse(os.path.exists(self.p("home", ".config", "evergreen-wiki", "intake")))
+        self.assertEqual(read(self.p("home", "kb", "work", "_Runtime", ".gitignore")), "*\n")
         text = read(run["log"])
         self.assertEqual(os.stat(run["log"]).st_mode & 0o777, 0o600)
         for part in ("run: prep.py scan", "exit 0", "decision: {", "written ->", "duplicate", "run " + run["id"] + " done"):
@@ -798,8 +800,10 @@ class ChatTest(unittest.TestCase):
         self.assertEqual((auto["last"]["written"], auto["last"]["duplicate"], auto["last"]["not_filed"]), (2, 1, 1))
         self.assertTrue(os.path.isfile(auto["last"]["log"]))
         self.assertIn("automatic intake from", read(auto["last"]["log"]))
-        saved = json.loads(read(self.p("home", ".config", "evergreen-wiki", "auto-intake.json")))
-        self.assertTrue(saved["libraries"]["work"]["on"])
+        saved = json.loads(read(os.path.join(lib, "_Runtime", "auto-intake.json")))  # in the library, paths relative
+        self.assertTrue(saved["on"])
+        self.assertEqual((saved["inbox"], saved["not_filed"], saved["filed"]), ("_Inbox", "_Inbox/Not-filed", "_Inbox/Filed"))
+        self.assertFalse(os.path.exists(self.p("home", ".config", "evergreen-wiki", "auto-intake.json")))
         # the drop folder is not part of the graph
         g = self.server.get("/api/graph?lib=work")[1]
         self.assertFalse([n for n in g["nodes"] if n["path"].startswith("_Inbox")], g)
@@ -884,12 +888,78 @@ class ChatTest(unittest.TestCase):
         time.sleep(0.2)
         self.assertEqual(stopped, [1])
 
+    def local_library(self, *extra):
+        """A registered local work library made by hand (no skills, no OpenCode setup); extra: (id, root)
+        pairs registered as well."""
+        lib = self.p("home", "kb", "work")
+        write(os.path.join(lib, "_kb.json"), json.dumps({"schema": 1, "label": "Work", "language": "en"}, indent=2) + "\n")
+        write(os.path.join(lib, "00_Spec.md"), "# Spec\n")
+        libs = [{"id": "work", "label": "Work", "scope": "team projects", "backend": {"type": "local", "root": lib}}]
+        libs += [{"id": i, "label": i, "scope": "s", "backend": {"type": "local", "root": r}} for i, r in extra]
+        write(self.p("home", ".config", "kb", "kb-libraries.json"), json.dumps({"schema": 1, "libraries": libs}))
+        return lib
+
+    def test_state_moves_into_the_libraries(self):
+        gone = self.p("elsewhere", "gone")  # registered, but its folder is not here yet
+        lib = self.local_library(("gone", gone))
+        state = self.p("home", ".config", "evergreen-wiki")
+        old_settings = os.path.join(state, "auto-intake.json")
+        write(old_settings, json.dumps({"libraries": {
+            "work": {"on": True, "inbox": os.path.join(lib, "_Inbox"), "not_filed": os.path.join(lib, "_Inbox", "Not-filed"),
+                     "filed": os.path.join(lib, "_Inbox", "Filed"), "last": {"written": 2}},
+            "gone": {"on": True, "inbox": os.path.join(gone, "_Inbox")}}}))
+        for name, lib_id in (("run-work", "work"), ("run-gone", "gone")):
+            write(os.path.join(state, "intake", name, "intake-run.json"),
+                  json.dumps({"lib": {"id": lib_id, "label": lib_id, "root": lib if lib_id == "work" else gone},
+                              "scripts": "", "lang": "en", "run": {"id": name, "state": "stopped", "items": []}}))
+            write(os.path.join(state, "intake", name, "intake.log"), "a line\n")
+        self.start().close()
+        self.server.stop()
+        rt = os.path.join(lib, "_Runtime")
+        moved = json.loads(read(os.path.join(rt, "auto-intake.json")))
+        self.assertEqual(moved, {"on": True, "inbox": "_Inbox", "not_filed": "_Inbox/Not-filed", "filed": "_Inbox/Filed",
+                                 "last": {"written": 2}})
+        self.assertEqual(read(os.path.join(rt, "intake", "run-work", "intake.log")), "a line\n")
+        self.assertFalse(os.path.exists(os.path.join(state, "intake", "run-work")))
+        # what has no library here yet stays where it was, the settings file whole
+        self.assertTrue(os.path.isfile(os.path.join(state, "intake", "run-gone", "intake-run.json")))
+        self.assertIn("gone", json.loads(read(old_settings))["libraries"])
+        kb = json.loads(read(os.path.join(lib, "_kb.json")))
+        self.assertEqual((kb["id"], kb["scope"], kb["label"]), ("work", "team projects", "Work"))
+        # the library arrives: the next start moves the rest and removes the old places
+        write(os.path.join(gone, "_kb.json"), json.dumps({"schema": 1}))
+        write(os.path.join(gone, "00_Spec.md"), "# Spec\n")
+        self.start().close()
+        self.assertFalse(os.path.exists(old_settings))
+        self.assertFalse(os.path.exists(os.path.join(state, "intake")))
+        self.assertTrue(os.path.isfile(os.path.join(gone, "_Runtime", "intake", "run-gone", "intake-run.json")))
+        self.assertEqual(json.loads(read(os.path.join(gone, "_Runtime", "auto-intake.json"))), {"on": True, "inbox": "_Inbox"})
+        # the moved run is the one shown, to be continued
+        self.assertIn(self.server.get("/api/intake")[1]["run"]["id"], ("run-work", "run-gone"))
+
+    def test_moved_library_keeps_automatic_intake(self):
+        lib = self.local_library()
+        write(os.path.join(lib, "_Runtime", "auto-intake.json"),
+              json.dumps({"on": True, "inbox": "_Inbox", "not_filed": "_Inbox/Not-filed", "filed": "_Inbox/Filed"}))
+        os.makedirs(os.path.join(lib, "_Inbox", "Not-filed"))
+        moved = self.p("other", "work")
+        shutil.move(lib, moved)
+        reg_path = self.p("home", ".config", "kb", "kb-libraries.json")
+        reg = json.loads(read(reg_path))
+        reg["libraries"][0]["backend"]["root"] = moved
+        write(reg_path, json.dumps(reg))
+        self.start().close()
+        auto = next(x for x in self.server.get("/api/state")[1]["libraries"] if x["id"] == "work")["auto"]
+        self.assertEqual((auto["on"], auto["inbox"], auto["not_filed"]),
+                         (True, os.path.join(moved, "_Inbox"), os.path.join(moved, "_Inbox", "Not-filed")))
+
     def test_old_logs_and_runs_are_removed(self):
         logs = self.p("home", ".config", "evergreen-wiki", "logs")
         old = os.path.join(logs, "kb-client-20000101.log")
         write(old, "x\n")
         os.utime(old, (time.time() - 8 * 86400,) * 2)
-        runs = self.p("home", ".config", "evergreen-wiki", "intake")
+        self.local_library()
+        runs = self.p("home", "kb", "work", "_Runtime", "intake")
         for name, state in (("done-old", "done"), ("stopped-old", "stopped")):
             path = os.path.join(runs, name, "intake-run.json")
             write(path, json.dumps({"run": {"state": state}}))

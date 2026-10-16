@@ -90,6 +90,9 @@ MSG = {
         "un_lib_q": "Delete {label} at {root} ({n} files)?",
         "un_lib_skip": "  not offered: {label} at {root} ({why})",
         "un_lib_will": "  library folder  {path}",
+        "un_runtime_q": "Also delete the client's working state kept inside the libraries that stay "
+                        "(the _Runtime folder: automatic intake switch, intake runs; the knowledge files stay)?",
+        "un_runtime": "  working state   {path}",
         "un_ok": "Uninstall?",
         "line_removed": "removed the knowledge-base line from {path}",
         "file_removed": "deleted {path} (it held only the knowledge-base line)",
@@ -154,6 +157,8 @@ MSG = {
         "un_lib_q": "删除「{label}」{root}（{n} 个文件）？",
         "un_lib_skip": "  不可删除：「{label}」{root}（{why}）",
         "un_lib_will": "  知识库文件夹  {path}",
+        "un_runtime_q": "同时删除保留下来的库里的运行状态吗？（_Runtime 文件夹：自动入库开关、入库进度；知识文件不动）",
+        "un_runtime": "  运行状态      {path}",
         "un_ok": "确认卸载？",
         "line_removed": "已从 {path} 删去知识库说明行",
         "file_removed": "已删除 {path}（其中只有知识库说明行）",
@@ -404,6 +409,92 @@ def registered_libs():
         backend = lib.get("backend") or {}
         root = backend.get("root", "") if backend.get("type", "local") == "local" else ""
         out.append((lib.get("id", ""), lib.get("label") or lib.get("id", ""), norm(root) if root else ""))
+    return out
+
+
+# ---------- a library's runtime folder and its own description ----------
+
+RUNTIME_IGNORE = "*\n"  # the runtime folder's .gitignore: never committed with a library kept in git
+
+
+def library_names(root):
+    """The library's names (its _kb.json names over the defaults); the defaults when it cannot be read."""
+    kbconf = init_library().kbconf
+    raw = read_json(os.path.join(root, kbconf.KB_JSON), {})
+    names = raw.get("names") if isinstance(raw, dict) else None
+    return kbconf.resolve_names(names if isinstance(names, dict) else None)
+
+
+def runtime_dir(root):
+    """<library>/_Runtime (names.runtime_dir): the client's working state for the library (automatic intake,
+    intake runs). Never knowledge: every search skips it, and deleting it loses only that state."""
+    return os.path.join(root, library_names(root)["runtime_dir"])
+
+
+def ensure_runtime(root):
+    """Creates the runtime folder with its .gitignore when missing; returns its path."""
+    path = runtime_dir(root)
+    os.makedirs(path, exist_ok=True)
+    ignore = os.path.join(path, ".gitignore")
+    if not os.path.exists(ignore):
+        with open(ignore, "w", encoding="utf-8", newline="\n") as f:
+            f.write(RUNTIME_IGNORE)
+    return path
+
+
+def describe_library(root, lib_id, scope):
+    """Writes the registry's id and scope into the library's _kb.json, so that the folder alone says which
+    library it is. Returns "same" (nothing to do), "written", or why it was left alone: "no_settings" (no
+    _kb.json), "unreadable", "invalid" (the registry entry has no usable id or scope). The old file is kept
+    as <runtime folder>/kb.json.bak; only these two keys change, the others keep their order."""
+    kbconf = init_library().kbconf
+    path = os.path.join(root, kbconf.KB_JSON)
+    try:
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+        data = json.loads(text)
+    except FileNotFoundError:
+        return "no_settings"
+    except (OSError, ValueError) as e:
+        log.warning("cannot read %s: %s", path, e)
+        return "unreadable"
+    if not isinstance(data, dict):
+        return "unreadable"
+    if data.get("id") == lib_id and data.get("scope") == scope:
+        return "same"
+    if not (isinstance(lib_id, str) and re.fullmatch(kbconf.ID_RE, lib_id) and isinstance(scope, str) and scope.strip()):
+        return "invalid"
+    new = {}
+    for k, v in data.items():
+        if k not in ("id", "scope"):
+            new[k] = v
+        if k == "schema":
+            new["id"], new["scope"] = lib_id, scope
+    new.setdefault("id", lib_id)
+    new.setdefault("scope", scope)
+    backup = os.path.join(ensure_runtime(root), "kb.json.bak")
+    with open(backup, "w", encoding="utf-8", newline="") as f:
+        f.write(text)
+    write_json(path, new)
+    log.info("described %s as %s", root, lib_id)
+    return "written"
+
+
+def describe_libraries():
+    """describe_library for every registered local library whose folder exists: {id: result}."""
+    reg = read_json(registry_path(), {})
+    out = {}
+    for lib in reg.get("libraries", []) if isinstance(reg, dict) else []:
+        backend = (lib.get("backend") or {}) if isinstance(lib, dict) else {}
+        if not isinstance(backend, dict) or backend.get("type", "local") != "local" or not backend.get("root"):
+            continue
+        root = norm(backend["root"])
+        if os.path.isdir(root):
+            try:
+                out[lib.get("id", "")] = describe_library(root, lib.get("id"), lib.get("scope"))
+            except OSError as e:
+                log.warning("cannot describe %s: %s", root, e)
+                out[lib.get("id", "")] = "failed"
     return out
 
 
@@ -667,6 +758,11 @@ def cmd_uninstall(a, q, m, defaults):
         for label, root, _ in deletable:
             if q.yes(m["un_lib_q"].format(label=label, root=root, n=count_files(root)), False):
                 picked.append(root)
+    # the runtime folders of the libraries that stay: only where the library itself could have been offered
+    runtimes = [runtime_dir(root) for _, root, _ in deletable if root not in picked]
+    runtimes = list(dict.fromkeys(p for p in runtimes if os.path.isdir(p) and not os.path.islink(p)))
+    if runtimes and not q.yes(m["un_runtime_q"], True):
+        runtimes = []
     print(m["un_items"])
     for p in skills:
         print(m["un_skill"].format(path=p))
@@ -678,6 +774,8 @@ def cmd_uninstall(a, q, m, defaults):
         print(m["un_state"].format(path=state))
     for p in picked:
         print(m["un_lib_will"].format(path=p))
+    for p in runtimes:
+        print(m["un_runtime"].format(path=p))
     for label, root, why in skipped:
         print(m["un_lib_skip"].format(label=label, root=root or "-", why=why))
     print(m["un_keep"])
@@ -701,7 +799,7 @@ def cmd_uninstall(a, q, m, defaults):
             print(m["failed"].format(path=path, err=e))
 
     # Library folders first: once the registry is gone nothing says where they are.
-    for p in picked:
+    for p in picked + runtimes:
         drop(p)
     for f in lines:
         try:

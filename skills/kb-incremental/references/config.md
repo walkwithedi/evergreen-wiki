@@ -57,7 +57,9 @@ The spec is the source of every rule about partitions, topics, terms and thresho
 ```json
 {
   "schema": 1,
+  "id": "life",
   "label": "Life",
+  "scope": "Me and my family: IDs, health, insurance, money, housing",
   "preset": "life",
   "language": "en",
   "timezone": "Europe/London",
@@ -71,6 +73,7 @@ The spec is the source of every rule about partitions, topics, terms and thresho
 }
 ```
 
+- id and scope: the same as the library's registry entry, so the library describes itself; the browser client writes them into libraries made before they existed. The registry stays the one that counts; never change them by hand.
 - language: language of replies, readme files and new files for this library.
 - timezone: IANA name or a fixed offset such as +08:00. Use it for every time stamp (note times, archive suffixes, log names). The scripts resolve IANA names only on Python 3.9+ with a timezone database (Windows usually has none); there, use the fixed offset.
 - metadata: yaml (front matter and entity links, see entity-yaml.md) or text (plain header from _kb-params.md).
@@ -103,6 +106,7 @@ The spec is the source of every rule about partitions, topics, terms and thresho
 | run_log_prefix | _run-log_ | run log file name prefix (archive mode and direct delivery) |
 | batch_plan | _intake-batches.json | progress file of a batch intake run, in the library root until the run is finished |
 | consolidation_queue | _Consolidation-Queue.md | files filed by fast intake whose consolidation is still due, in the library root |
+| runtime_dir | _Runtime | the browser client's working state for this library (automatic intake switch, intake runs); safe to delete, never knowledge |
 | note_marker | Quick note: | first line of each quick note inside a filed batch |
 | assistant_label, user_label | Assistant, User | speaker labels in quick notes |
 
@@ -112,7 +116,7 @@ In kb-incremental, scripts/kbconf.py prints the resolved configuration: python3 
 
 ### Ignored files
 
-Every search and every read of knowledge files skips: the archive folder; the sources folder (names.sources_dir, copies of originals: opened only through a topic file's original link, see kb-query); names that start with an underscore (run logs, _kb.json, _kb-params.md, an inbox configuration file, the batch progress file, the consolidation queue); names that start with snapshot_prefix; names that contain old_suffix followed by a time stamp.
+Every search and every read of knowledge files skips: the archive folder; the runtime folder (names.runtime_dir) and everything in it; the sources folder (names.sources_dir, copies of originals: opened only through a topic file's original link, see kb-query); names that start with an underscore (run logs, _kb.json, _kb-params.md, an inbox configuration file, the batch progress file, the consolidation queue); names that start with snapshot_prefix; names that contain old_suffix followed by a time stamp.
 
 ## 3. Library folder and material: words to use with the user
 

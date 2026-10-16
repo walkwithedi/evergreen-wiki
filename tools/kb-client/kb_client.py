@@ -281,10 +281,13 @@ class App:
         self.last_seen = time.time()
         self.output = None
         self.server = None
+        # State kept by earlier versions in the home folder moves into the libraries first.
+        libs = libraries()
+        move_state_into_libraries(libs)
         # The last intake run (intake.Run): one saved by an earlier client shows as stopped and can go on.
-        intake_mod.clean(intake_root())
-        self.intake = intake_mod.latest(intake_root())
-        self.auto = auto_mod.Watcher(self, kb_manage.state_dir(), lang)
+        intake_mod.clean(intake_roots(libs))
+        self.intake = intake_mod.latest(intake_roots(libs))
+        self.auto = auto_mod.Watcher(self, lang)
 
     # ---------- steps ----------
 
@@ -488,7 +491,9 @@ class App:
                 if not sources:
                     return None, "intake_empty"
             run_id = time.strftime("%Y%m%d-%H%M%S-") + secrets.token_hex(2)
-            work = os.path.join(intake_root(), run_id)
+            kb_manage.ensure_runtime(lib["root"])
+            os.makedirs(intake_dir(lib["root"]), mode=0o700, exist_ok=True)
+            work = os.path.join(intake_dir(lib["root"]), run_id)
             os.makedirs(work, mode=0o700, exist_ok=True)
             iw = ag.intake_window()
             if auto is None:
@@ -502,7 +507,7 @@ class App:
 
     def places(self):
         pl = agent_places()
-        pl["write"] = pl["write"] + [d for d in (self.work, intake_root()) if os.path.isdir(d)]
+        pl["write"] = pl["write"] + [d for d in (self.work,) if os.path.isdir(d)]  # the libraries hold the intake runs
         return pl
 
     def idle_watch(self):
@@ -1432,9 +1437,29 @@ def log_folder():
     return os.path.join(kb_manage.state_dir(), "logs")
 
 
-def intake_root():
-    """Where the client's intake runs keep their work folders, logs and saved state (intake.py)."""
-    return os.path.join(kb_manage.state_dir(), "intake")
+def intake_dir(root):
+    """Where a library's intake runs keep their work folders, logs and saved state (intake.py)."""
+    return os.path.join(kb_manage.runtime_dir(root), "intake")
+
+
+def intake_roots(libs):
+    return [intake_dir(lib["root"]) for lib in libs if lib["root"] and lib["exists"]]
+
+
+def move_state_into_libraries(libs):
+    """Once, at start, before any write task: each local library gets its id and scope in its _kb.json, and
+    what earlier versions kept in the home folder for it (automatic intake settings, intake runs) moves into
+    its runtime folder. What cannot move yet (its library is not here) stays for the next start."""
+    by_id = {lib["id"]: lib for lib in libs if lib["root"] and lib["exists"]}
+    steps = (("describe", kb_manage.describe_libraries),
+             ("automatic intake", lambda: auto_mod.migrate(kb_manage.state_dir(), libs)),
+             ("intake runs", lambda: intake_mod.migrate(os.path.join(kb_manage.state_dir(), "intake"),
+                                                        lambda i: intake_dir(by_id[i]["root"]) if i in by_id else None)))
+    for name, step in steps:
+        try:
+            step()
+        except Exception:  # noqa: BLE001 - the client starts anyway; the log says what happened
+            log.exception("moving state into the libraries: %s", name)
 
 
 def open_log_file(level):

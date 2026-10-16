@@ -26,11 +26,12 @@ answered with its recommended option (permissions are allowed by the agent alrea
 waits for a person on the page, and the time it waits does not count against the turn's time limit.
 
 Events go to the conversation feed as type "intake" with the run's snapshot. Each run has its own work
-folder under <state dir>/intake/<id>/ (outside the system temporary folder, which the client empties when
-it stops): intake-run.json holds the run (saved at every change, so that a client started again shows an
+folder in its library, <library>/_Runtime/intake/<id>/ (outside the system temporary folder, which the
+client empties when it stops, and outside the home folder, so a run survives either): intake-run.json holds the run (saved at every change, so that a client started again shows an
 interrupted run as stopped and can continue it) and intake.log what happened to each file (scripts and
 their exit codes, the assistant's turns, the decisions and why one was not accepted; never a file's text).
-A finished run's folder is removed after KEEP_DAYS days. The run talks to the assistant in its own window
+A finished run's folder is removed after KEEP_DAYS days. Runs that earlier versions kept under
+<state dir>/intake/ are moved into their libraries once by migrate(). The run talks to the assistant in its own window
 (the client's intake window, win), so the page's other conversations go on meanwhile. Standard library only.
 """
 import json
@@ -41,6 +42,8 @@ import subprocess
 import sys
 import threading
 import time
+
+import kb_manage
 
 log = logging.getLogger("kb_client.intake")
 
@@ -663,13 +666,21 @@ def read_result(path):
     return {k: v for k, v in data.items() if k in ("files", "changes") and isinstance(v, int) and 0 <= v < 100000}
 
 
-def latest(root):
-    """The most recent run saved under root (Run.restore), or None."""
-    try:
-        dirs = [os.path.join(root, d) for d in os.listdir(root)]
-    except OSError:
-        return None
-    dirs = [d for d in dirs if os.path.isfile(os.path.join(d, STATE))]
+def run_dirs(roots):
+    """The run folders (with a saved run) under each of roots."""
+    out = []
+    for root in roots:
+        try:
+            names = os.listdir(root)
+        except OSError:
+            continue
+        out += [os.path.join(root, d) for d in names if os.path.isfile(os.path.join(root, d, STATE))]
+    return out
+
+
+def latest(roots):
+    """The most recent run saved under any of roots (Run.restore), or None."""
+    dirs = run_dirs(roots)
     for d in sorted(dirs, key=lambda d: os.path.getmtime(os.path.join(d, STATE)), reverse=True):
         run = Run.restore(d)
         if run is not None:
@@ -677,14 +688,9 @@ def latest(root):
     return None
 
 
-def clean(root, keep_days=KEEP_DAYS):
+def clean(roots, keep_days=KEEP_DAYS):
     """Removes the work folders of finished runs older than keep_days days; stopped ones stay to be continued."""
-    try:
-        names = os.listdir(root)
-    except OSError:
-        return
-    for d in names:
-        path = os.path.join(root, d)
+    for path in run_dirs(roots):
         state = os.path.join(path, STATE)
         try:
             old = time.time() - os.path.getmtime(state) > keep_days * 86400
@@ -694,6 +700,51 @@ def clean(root, keep_days=KEEP_DAYS):
             continue
         if old and done:
             shutil.rmtree(path, ignore_errors=True)
+
+
+def migrate(old_root, dest_of):
+    """Moves the run folders of earlier versions (<state dir>/intake/<id>/) into their libraries:
+    dest_of(library id) is that library's intake folder, or None while the library is not here. A folder is
+    copied, compared and only then removed; one that cannot go yet stays for the next start. Returns the
+    number moved."""
+    try:
+        names = sorted(os.listdir(old_root))
+    except OSError:
+        return 0
+    moved = left = 0
+    for name in names:
+        src = os.path.join(old_root, name)
+        try:
+            with open(os.path.join(src, STATE), encoding="utf-8") as f:
+                lib_id = json.load(f)["lib"]["id"]
+            dest_root = dest_of(str(lib_id))
+            if not dest_root:
+                left += 1
+                continue
+            dest = os.path.join(dest_root, name)
+            if not os.path.exists(dest):
+                os.makedirs(dest_root, mode=0o700, exist_ok=True)
+                tmp = dest + ".moving"
+                shutil.rmtree(tmp, ignore_errors=True)
+                shutil.copytree(src, tmp, symlinks=True)
+                os.rename(tmp, dest)
+            if kb_manage.diff_trees(src, dest):
+                log.warning("intake run %s: the copy in %s differs; the old folder stays", name, dest_root)
+                left += 1
+                continue
+            shutil.rmtree(src)
+            moved += 1
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            log.warning("intake run %s not moved: %s", name, e)
+            left += 1
+    if not left:
+        try:
+            os.rmdir(old_root)
+        except OSError:
+            pass
+    if moved or left:
+        log.info("intake runs moved into the libraries: %d, left for the next start: %d", moved, left)
+    return moved
 
 
 def tail(text, lines=4):

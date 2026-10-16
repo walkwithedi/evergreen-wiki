@@ -175,6 +175,39 @@ class ManageTest(unittest.TestCase):
         p = self.manage(["uninstall"])
         self.assertIn("Nothing to uninstall", p.stdout)
 
+    def test_uninstall_removes_the_runtime_folder_of_kept_libraries(self):
+        write(os.path.join(self.lib, "_Runtime", "auto-intake.json"), "{}\n")
+        # keep the libraries, delete their working state (the default), confirm
+        p = self.manage(["uninstall"], ["", "", "y"])
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertIn("working state   " + os.path.join(self.lib, "_Runtime"), p.stdout)
+        self.assertFalse(os.path.exists(os.path.join(self.lib, "_Runtime")))
+        self.assertTrue(os.path.isfile(os.path.join(self.lib, "_kb.json")))
+
+    def test_uninstall_can_keep_the_runtime_folder(self):
+        write(os.path.join(self.lib, "_Runtime", "auto-intake.json"), "{}\n")
+        p = self.manage(["uninstall"], ["", "n", "y"])
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertNotIn("working state   ", p.stdout)  # not in the list of what goes
+        self.assertTrue(os.path.isfile(os.path.join(self.lib, "_Runtime", "auto-intake.json")))
+        self.assertFalse(os.path.exists(self.registry))
+
+    def test_describe_library(self):
+        kb = os.path.join(self.lib, "_kb.json")
+        made = json.loads(read(kb))
+        self.assertEqual((made["id"], made["scope"]), ("work", "team projects"))  # written when the library is made
+        old = {k: v for k, v in made.items() if k not in ("id", "scope")}
+        write(kb, json.dumps(old, indent=2) + "\n")
+        with mock.patch.dict(os.environ, self.env, clear=True):
+            self.assertEqual(kb_manage.describe_libraries(), {"work": "written"})
+            self.assertEqual(kb_manage.describe_libraries(), {"work": "same"})
+            self.assertEqual(kb_manage.describe_library(self.lib, "Not An Id", "x"), "invalid")
+        now = json.loads(read(kb))
+        self.assertEqual(list(now)[:3], ["schema", "id", "scope"])
+        self.assertEqual({k: v for k, v in now.items() if k not in ("id", "scope")}, old)  # the rest unchanged
+        self.assertEqual(json.loads(read(os.path.join(self.lib, "_Runtime", "kb.json.bak"))), old)
+        self.assertEqual(read(os.path.join(self.lib, "_Runtime", ".gitignore")), "*\n")
+
     def test_uninstall_picked_library_needs_word(self):
         write(self.lib + "-inbox/a.txt", "x\n")
         p = self.manage(["uninstall"], ["y", "y", "no"])

@@ -2,6 +2,16 @@
 
 All three skills share one version number. To release, update this file, the "Version:" line of every SKILL.md and the plugin manifests together and merge to main; the release workflow then publishes v<version>.
 
+## Unreleased
+
+A library keeps the browser client's working state in a folder of its own and says in its settings which library it is, so the state no longer depends on the home folder.
+- Library runtime folder: names.runtime_dir (default `_Runtime`) at the top of a local library holds the client's working state for it, with a `.gitignore` of `*`. Every search and read of knowledge files skips it (shared references/config.md); deleting it loses only that state.
+- tools/kb-client automatic intake: each library's switch, folders and last run are kept in `<library>/_Runtime/auto-intake.json` instead of `<state dir>/auto-intake.json`, the folders relative to the library, so a moved library keeps them.
+- tools/kb-client intake: each run's work folder, state and log are in `<library>/_Runtime/intake/<run>/` instead of `<state dir>/intake/<run>/`; the latest run and the seven-day cleanup look in every local library.
+- tools/kb-client start: before anything writes the libraries, the settings and runs that earlier versions kept in the state folder move into their libraries (a run folder is copied, compared, then removed; the old settings file goes once every entry has moved); what belongs to a library that is not here stays for the next start.
+- `_kb.json` takes id and scope, the same as the registry entry (kbconf accepts and checks them): a new library gets them from init_library.py, and the client writes them into the registered local libraries at start (kb_manage.describe_library: only these two keys change, the old file is kept as `_Runtime/kb.json.bak`).
+- install.py uninstall: in the libraries that stay, the `_Runtime` folders are deleted too unless the new question is answered no; the knowledge files are never touched.
+
 ## 1.22.1
 
 Upgrading the knowledge-base skills from the browser client is a step of its own and asks no setup questions, and a repository check is fixed. The skills are unchanged.

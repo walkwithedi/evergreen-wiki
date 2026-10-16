@@ -54,6 +54,7 @@ DEFAULT_NAMES = {
     "readme": "README.txt",
     "run_log_prefix": "_run-log_",
     "batch_plan": "_intake-batches.json",
+    "runtime_dir": "_Runtime",
     "consolidation_queue": "_Consolidation-Queue.md",
     "note_marker": "Quick note:",
     "assistant_label": "Assistant",
@@ -102,7 +103,10 @@ DEFAULTS = {
     "sources": SOURCES_DEFAULTS,
     "names": {},
 }
-KNOWN_KEYS = set(DEFAULTS) | {"backend", "inbox", "notes"}
+# id and scope repeat the library's registry entry, so the library describes itself and can be registered
+# again from its folder alone.
+KNOWN_KEYS = set(DEFAULTS) | {"backend", "inbox", "notes", "id", "scope"}
+ID_RE = r"[a-z0-9][a-z0-9-]*"
 
 
 def utf8_stdio():
@@ -187,7 +191,7 @@ def check_registry(reg):
             problems.append(f"{where} must be an object")
             continue
         lid = lib.get("id")
-        if not lid or not re.fullmatch(r"[a-z0-9][a-z0-9-]*", str(lid)):
+        if not lid or not re.fullmatch(ID_RE, str(lid)):
             problems.append(f"{where}.id must be lowercase letters, digits and hyphens")
         if lid in seen:
             problems.append(f"{where}.id {lid!r} is used twice")
@@ -264,6 +268,10 @@ def validate(raw):
             problems.append(f"unknown key {k!r}")
     if raw.get("metadata", "yaml") not in ("yaml", "text"):
         problems.append("metadata must be yaml or text")
+    if "id" in raw and not re.fullmatch(ID_RE, str(raw["id"])):
+        problems.append("id must be lowercase letters, digits and hyphens")
+    if "scope" in raw and not isinstance(raw["scope"], str):
+        problems.append("scope must be text")
     if raw.get("delivery", "") not in ("", "zip", "direct"):
         problems.append("delivery must be zip or direct")
     problems += check_convert(raw.get("convert", {}))
