@@ -42,7 +42,7 @@
       ideas_label: "Ideas behind the knowledge base",
       idea_prev: "Previous", idea_next: "Next", idea_more: "More", idea_less: "Less", idea_pause: "Pause", idea_play: "Play",
       skills_title: "Skills",
-      skills_intro: "What the assistant can do. Every other skill can be changed (backed up first) and restored; knowledge-base skills are only upgraded, by Set up, when this client has a newer version.",
+      skills_intro: "What the assistant can do. Every other skill can be changed (backed up first) and restored; knowledge-base skills are only upgraded, when this client has a newer version.",
       skill_new: "New skill", skill_import: "Import", skills_none_found: "No skills found where OpenCode reads them.",
       skill_kb_group: "Knowledge base", skill_other_group: "Other skills",
       skill_try: "Try it", skill_upgrade: "Upgrade", skill_modify: "Change", skill_restore_btn: "Restore",
@@ -51,6 +51,8 @@
       skill_backup: "Back up a skill", skill_restore: "Restore a skill",
       skill_upgrade_hint: "Upgrading replaces the skill's folder with the new release; a change made here stays only in its backup.",
       skill_latest: "Up to date: this client comes with {v}.",
+      skill_wait: "{what}; upgrade when it is done.",
+      skill_wait_intake: "Intake is running; upgrade when this round is done, or switch automatic intake off first.",
       try_req: "{phrase}",
       modify_title: "Change {name}",
       modify_how: "What should change?",
@@ -307,7 +309,7 @@
       ideas_label: "知识库背后的思路",
       idea_prev: "上一张", idea_next: "下一张", idea_more: "详情", idea_less: "收起", idea_pause: "暂停", idea_play: "播放",
       skills_title: "技能",
-      skills_intro: "助手能做的事。其他技能都可以修改（先自动备份）和回滚；知识库技能只在这个客户端带有新版本时用「安装与建库」升级。",
+      skills_intro: "助手能做的事。其他技能都可以修改（先自动备份）和回滚；知识库技能只在这个客户端带有新版本时升级。",
       skill_new: "新建技能", skill_import: "导入", skills_none_found: "OpenCode 能读到的位置没有找到技能。",
       skill_kb_group: "知识库", skill_other_group: "其他技能",
       skill_try: "试一试", skill_upgrade: "升级", skill_modify: "修改", skill_restore_btn: "回滚",
@@ -316,6 +318,8 @@
       skill_backup: "备份技能", skill_restore: "回滚技能",
       skill_upgrade_hint: "升级会用新版本替换整个技能文件夹；在这里做的修改只保留在备份里。",
       skill_latest: "已是最新：这个客户端带的是 {v}。",
+      skill_wait: "{what}，等它结束再升级。",
+      skill_wait_intake: "正在入库，等这一轮结束再升级；开着自动入库的，也可以先把它关掉。",
       try_req: "{phrase}",
       modify_title: "修改 {name}",
       modify_how: "要改哪方面？",
@@ -658,6 +662,7 @@
   var lang = (navigator.language || "en").toLowerCase().indexOf("zh") === 0 ? "zh" : "en";
   var state = null;
   var job = null;   // {id, action, source, asking}
+  var refused = false;  // a step was refused: the knowledge base stays unfolded to show why
   var browse = null; // {path, done}
 
   function $(id) { return document.getElementById(id); }
@@ -928,6 +933,18 @@
       b.disabled = on || b.classList.contains("latest");
     });
     show($("cancel"), on);
+    lockUpgrade();
+  }
+
+  // Upgrade waits while a task, an intake run or a step holds the write lock (the server refuses it then).
+  function lockUpgrade() {
+    var lock = chat.lock;
+    Array.prototype.forEach.call(document.querySelectorAll(".skills-box button.upgrade"), function (b) {
+      if (b.classList.contains("latest")) return;  // its title says it is up to date
+      if (lock) b.disabled = true;
+      else if (!job) b.disabled = false;
+      b.title = !lock ? "" : lock.holder === "intake" ? t("skill_wait_intake") : t("skill_wait", { what: lockWhat(lock) });
+    });
   }
 
   function lost(err) {
@@ -946,11 +963,17 @@
     var body = { action: action };
     if (arg) body[action.indexOf("skill_") === 0 ? "skill" : "library"] = arg;
     api("POST", "/api/action", body).then(function (r) { afterJob = after || null; follow(r.job, action); })
-      .catch(function (e) { result("error", e.status === 409 ? t("busy") : String(e.message)); });
+      .catch(function (e) {
+        result("error", e.status === 409 ? (e.message || t("busy")) : String(e.message));
+        refused = true;  // the message is in the step panel, folded away with --chat-first
+        applyKb();
+        $("result").scrollIntoView({ block: "nearest" });
+      });
   }
 
   function follow(id, action) {
     job = { id: id, action: action, asking: null };
+    refused = false;
     $("step-title").textContent = t(action);
     show($("welcome"), false);
     show($("ideas"), false);
@@ -1874,6 +1897,7 @@
     if (ev.type === "windows") {
       chat.windows = ev.windows || [];
       chat.lock = ev.lock || null;
+      lockUpgrade();
       if (!chat.windows.some(function (w) { return w.id === chat.win; }) && chat.windows.length) chatLoad(ev.current);
       chatEnable();
       return;
@@ -1938,7 +1962,7 @@
   function applyKb() {
     var cf = !!(state && state.chat_first);
     document.body.classList.toggle("chat-first", cf);
-    document.body.classList.toggle("kb-open", kbOpen() || !!job);
+    document.body.classList.toggle("kb-open", kbOpen() || !!job || refused);
     show($("kb-toggle"), !!state);
     show($("chat-bar"), cf);
     $("kb-toggle-text").textContent = t(kbOpen() ? "kb_close" : "kb_open");
@@ -1951,6 +1975,7 @@
 
   function toggleKb() {
     try { localStorage.setItem(kbKey(), kbOpen() ? "folded" : "open"); } catch (e) { /* this view only */ }
+    refused = false;
     if (kbOpen()) setSide(false);  // unfolding the knowledge base is asking to see it
     applyKb();
     renderChecklist();
@@ -2464,6 +2489,7 @@
       chat.win = st.agent.win || "";
       chat.windows = st.agent.windows || [];
       chat.lock = st.agent.lock || null;
+      lockUpgrade();
       delete chat.unread[chat.win];
       st.history.forEach(showPart);
       chatAgent(st.agent);
@@ -2726,7 +2752,7 @@
   // ---------- skills ----------
   // The skills OpenCode reads (GET /api/skills). Every skill can be changed (backed up first, then a
   // request is put in the box for the assistant) and restored from a backup; the knowledge-base skills
-  // are also upgraded by Set up. Skills can be imported or created. The request is never sent by itself.
+  // are only upgraded (install.upgrade). Skills can be imported or created. The request is never sent by itself.
 
   var skills = { list: [], folder: "" };
 
@@ -2777,9 +2803,9 @@
       if (sk.backups) btn(t("skill_restore_btn"), "quiet", function () { startAction("skill_restore", sk.dir); });
     }
     if (sk.kb) {
-      btn(t("skill_upgrade"), "quiet", function () {
+      btn(t("skill_upgrade"), "quiet upgrade", function () {
         if (!window.confirm(t("skill_upgrade_hint"))) return;
-        startAction("setup");
+        startAction("skill_upgrade");
       });
       if (sk.version && sk.release && compareVersions(sk.version, sk.release) >= 0) {
         var up = row.lastChild;

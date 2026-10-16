@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -147,6 +148,39 @@ class AgentDefaultTest(unittest.TestCase):
         plain, _ = self.choose()
         self.assertEqual(self.choose(agent_default="no-such-agent")[0], plain)
         self.assertEqual(self.choose(agent="codex", agent_default="opencode"), ("codex", []))
+
+
+class InstallOneTest(unittest.TestCase):
+    """install.install_one: the new copy is complete before the old folder goes."""
+
+    def setUp(self):
+        sys.path.insert(0, ROOT)
+        self.addCleanup(sys.path.remove, ROOT)
+        import install
+        self.install = install
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.old = os.path.join(self.tmp, "kb-note", "SKILL.md")
+        write(self.old, "Version: 0.1.0\n")
+        self.opts = install.argparse.Namespace(force=True, dry_run=False, link=False)
+
+    def test_replaces_the_folder(self):
+        self.assertTrue(self.install.install_one("kb-note", self.tmp, self.opts, None))
+        self.assertEqual(read(self.old), read(os.path.join(ROOT, "skills", "kb-note", "SKILL.md")))
+        self.assertEqual(os.listdir(self.tmp), ["kb-note"])  # no temporary folder left
+
+    def test_a_failed_copy_keeps_the_old_folder(self):
+        real = shutil.copytree
+
+        def broken(src, dest, **kw):  # copies everything, then fails
+            with unittest.mock.patch.object(shutil, "copytree", real):  # it calls itself for subfolders
+                real(src, dest, **kw)
+            raise OSError("disk full")
+        with unittest.mock.patch.object(shutil, "copytree", broken):
+            with self.assertRaises(OSError):
+                self.install.install_one("kb-note", self.tmp, self.opts, None)
+        self.assertEqual(read(self.old), "Version: 0.1.0\n")
+        self.assertEqual(os.listdir(self.tmp), ["kb-note"])
 
 
 if __name__ == "__main__":

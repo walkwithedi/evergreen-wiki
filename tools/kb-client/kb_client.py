@@ -18,7 +18,7 @@ the answer, and what it prints is streamed to the page. The conversation on the 
 server this client starts on 127.0.0.1 (agent.py); the page never talks to OpenCode itself. The folder
 browser only lists folders. The Skills section lists the skills OpenCode reads and manages them
 (skills_admin.py: backup before an edit, restore, import, a new skill from a template); the
-knowledge-base skills are upgraded by Set up. A local library can be switched to automatic intake
+knowledge-base skills are upgraded by their own step (install.upgrade). A local library can be switched to automatic intake
 (auto.py): the client files what is put in its drop folder without anybody on the page, and does not
 stop for being idle while a library is switched on. Otherwise this file writes nothing but the current
 conversation's id. Python 3 standard library only.
@@ -57,7 +57,7 @@ log = logging.getLogger("kb_client")
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s.%(funcName)s:%(lineno)d - %(message)s"
 WEB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 ACTIONS = ("setup", "backup", "rollback", "move", "uninstall",
-           "skill_backup", "skill_restore", "skill_import", "skill_new")
+           "skill_backup", "skill_restore", "skill_import", "skill_new", "skill_upgrade")
 LANGS = ("en", "zh")
 MAX_BODY = 64 * 1024
 # Steps and chat requests a client started with --simple refuses (and its page hides): the ones that move,
@@ -70,7 +70,9 @@ CHAT_FIRST_ACTIONS = ("workdir", "sessions")  # only with --chat-first
 # The write tasks the page starts from a button, each in a task window; with an intake run and the steps
 # below they hold the write lock one at a time.
 TASKS = ("lint", "archive", "notes", "resume")
-WRITE_STEPS = ("setup", "rollback", "move", "uninstall")  # steps that change libraries
+# steps that change libraries; an upgrade can set one up and writes the knowledge-base line
+WRITE_STEPS = ("setup", "rollback", "move", "uninstall", "skill_upgrade")
+RESTART_STEPS = ("setup", "skill_upgrade")  # OpenCode is restarted after these, to read the skills again
 MAX_TEXT = 20000  # characters of one message from the page
 MAX_PATHS = 200  # material paths sent with one message
 MAX_ENTRIES = 2000  # entries listed per folder; the page says when a folder holds more
@@ -328,7 +330,7 @@ class App:
                 job.cond.notify_all()
             log.info("step %s ended: %s", job.action, result)
         self.windows_changed()
-        if job.action == "setup" and result == "ok" and self.agent is not None:
+        if job.action in RESTART_STEPS and result == "ok" and self.agent is not None:
             self.agent.restart()  # so that the conversation uses the skills and the instructions line just written
 
     # ---------- state ----------
@@ -517,9 +519,16 @@ class App:
 
 
 def run_action(action, asker, lang, options, lib_id=None):
-    """Runs one step; returns the exit code of kb_manage (0 when it went through), None for set up.
+    """Runs one step; returns the exit code of kb_manage (0 when it went through), None for set up and
+    the upgrade.
     For the skill steps lib_id is the skill's folder name."""
     m = MSG[lang]
+    if action == "skill_upgrade":
+        # each skill where OpenCode reads it now; a missing one goes to OpenCode's own folder
+        places = {x["name"]: os.path.dirname(x["folder"]) for x in kb_skills()["found"]}
+        install.upgrade(asker, lang, places, skills_admin.own_folder(), instructions_file(),
+                        options.get("descriptions"), preset_default="work")
+        return None
     if action.startswith("skill_"):
         try:
             return skill_action(action, asker(lang), lang, lib_id)
@@ -821,6 +830,16 @@ def kb_skills():
 def opencode_skills():
     """True when the folders OpenCode reads hold every knowledge-base skill."""
     return kb_skills()["ok"]
+
+
+def instructions_file():
+    """The instructions file an upgrade refreshes the knowledge-base line in: OpenCode's AGENTS.md, or
+    Claude Code's CLAUDE.md while OpenCode has no AGENTS.md and reads that one with the line in it."""
+    own = install.INSTRUCTION_FILES["opencode"][0]
+    claude = install.INSTRUCTION_FILES["claude-code"][0]
+    if not os.path.isfile(own) and kb_manage.has_our_line(claude):
+        return claude
+    return own
 
 
 def instructions_line():
