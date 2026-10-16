@@ -4,7 +4,8 @@ them.
 
 The three knowledge-base skills (kb_manage.SKILLS) are listed first, with their version; besides the
 steps below they are upgraded by Set up with a newer release, which replaces their folders (a local
-change then survives only in its backup). Every skill can be backed up before the assistant edits it,
+change then survives only in its backup); the page offers Upgrade only while the release this client
+came with is newer, and does not offer Change or Restore for them. Every skill can be backed up before the assistant edits it,
 restored from such a backup, imported from a folder or a zip file, or started from a template. Nothing
 in a skill is ever run here.
 
@@ -152,9 +153,17 @@ def backups(name):
     return sorted((b for b in os.listdir(d) if re.fullmatch(r"\d{8}-\d{6}", b)), reverse=True)
 
 
+def release_version(name):
+    """The Version: of a knowledge-base skill in the release this client came with (what Set up installs),
+    or "" when it cannot be read."""
+    info = read_skill(os.path.join(ROOT, "skills", name))
+    return info["version"] if info else ""
+
+
 def list_skills():
     """Every skill in the folders OpenCode reads: [{name, description, version, triggers, folder, agent,
-    kb, used, backups}] (kb: one of the knowledge-base skills), knowledge-base skills first, then by name."""
+    kb, used, backups, release}] (kb: one of the knowledge-base skills; release: the version Set up would
+    install, for those only), knowledge-base skills first, then by name."""
     out, seen = [], set()
     for agent, root in folders():
         if not os.path.isdir(root):
@@ -167,7 +176,8 @@ def list_skills():
             if info is None:
                 continue
             info.update(folder=path, agent=agent, kb=entry in kb_manage.SKILLS,
-                        used=entry not in seen, backups=len(backups(entry)), dir=entry)
+                        used=entry not in seen, backups=len(backups(entry)), dir=entry,
+                        release=release_version(entry) if entry in kb_manage.SKILLS else "")
             seen.add(entry)
             out.append(info)
     out.sort(key=lambda s: (not s["kb"], s["dir"], OPENCODE_ORDER.index(s["agent"])))

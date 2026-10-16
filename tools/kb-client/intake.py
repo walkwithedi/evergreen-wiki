@@ -208,8 +208,11 @@ class Run:
     """One intake run in a thread. items: [{n, source, file, status, name, reason}] with status waiting,
     working, written, duplicate, manual, failed."""
 
-    def __init__(self, agent, lib, sources, scripts, work, lang, run_id, back_to=""):
+    def __init__(self, agent, lib, sources, scripts, work, lang, run_id, back_to="", hooks=None):
         self.agent = agent
+        # an automatic run's (auto.Watcher): item_done(run, item) once a file is done, ended(run) at the end
+        self.hooks = hooks or {}
+        self.auto = bool(hooks)
         self.back_to = back_to  # the conversation open before the run, opened again when it ends
         self.lib = lib  # {"id", "label", "root"}
         self.scripts = scripts  # the installed kb-incremental's scripts folder
@@ -240,6 +243,7 @@ class Run:
             run = cls(None, data["lib"], [], data["scripts"], work, data["lang"], snap["id"], data.get("back_to", ""))
             run.items = [dict(it) for it in snap["items"]]
             run.started = data.get("started", 0)
+            run.auto = bool(data.get("auto"))
             run.cons.update(snap.get("consolidation") or {})
         except (OSError, ValueError, KeyError, TypeError):
             return None
@@ -264,7 +268,7 @@ class Run:
             for it in self.items:
                 counts[it["status"]] = counts.get(it["status"], 0) + 1
             return {"id": self.id, "library": self.lib["id"], "label": self.lib["label"], "root": self.lib["root"],
-                    "state": self.state, "step": self.step, "total": len(self.items), "counts": counts,
+                    "auto": self.auto, "state": self.state, "step": self.step, "total": len(self.items), "counts": counts,
                     "items": [dict(it) for it in self.items], "consolidation": dict(self.cons),
                     "log": os.path.join(self.work, LOG)}
 
@@ -276,7 +280,7 @@ class Run:
 
     def save(self, snap):
         data = {"run": snap, "lib": self.lib, "scripts": self.scripts, "lang": self.lang, "back_to": self.back_to,
-                "started": self.started}
+                "started": self.started, "auto": self.auto}
         path = os.path.join(self.work, STATE)
         try:
             fd = os.open(path + ".tmp", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
@@ -338,6 +342,8 @@ class Run:
                 if self.stop_flag.is_set():
                     break
                 self.one(item)
+                if "item_done" in self.hooks and item["status"] != "waiting":
+                    self.hooks["item_done"](self, item)
             if not self.stop_flag.is_set():
                 self.consolidate()
         except Exception as e:  # shown on the page as a failed item; the client keeps running
@@ -355,6 +361,8 @@ class Run:
             self.note(f"run {self.id} {self.state}: " + ", ".join(f"{k} {v}" for k, v in sorted(self.snapshot()["counts"].items())))
             self.emit()
             self.go_back()
+            if "ended" in self.hooks:
+                self.hooks["ended"](self)
 
     def go_back(self):
         """Opens the conversation that was open before the run, so that no file's conversation is the one
@@ -496,7 +504,14 @@ class Run:
         names = self.library_names()
         skip = {names.get("index"), names.get("consolidation_queue"), names.get("readme")}
         written = sorted(f for f in os.listdir(out_dir) if f.endswith(".md") and f not in skip)
-        self.set(item, status="written", name=written[0] if written else "")
+        # kept: the original's copy is in the library's sources folder (a library that keeps originals)
+        sources = names.get("sources_dir") or "Sources"
+        try:
+            copies = os.listdir(os.path.join(out_dir, sources))
+        except OSError:
+            copies = []
+        kept = bool(copies) and all(os.path.isfile(os.path.join(self.lib["root"], sources, f)) for f in copies)
+        self.set(item, status="written", name=written[0] if written else "", kept=kept)
 
     def queue_length(self):
         """Files in the library's consolidation queue (consolidate.py list); 0 when there is no queue."""

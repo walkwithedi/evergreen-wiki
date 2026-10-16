@@ -2,6 +2,13 @@
 
 All three skills share one version number. To release, update this file, the "Version:" line of every SKILL.md and the plugin manifests together and merge to main; the release workflow then publishes v<version>.
 
+## Unreleased
+
+The browser client files a library's material by itself, unattended, and offers an upgrade of the knowledge-base skills only when it has a newer version. The skills are unchanged.
+- tools/kb-client automatic intake (new auto.py, local libraries): a switch under each library (POST /api/auto) makes a drop folder at the library's top (_Inbox, or _待入库 in Chinese) with a Not-filed subfolder. The client looks every minute, takes a file once it has not changed for two minutes, and starts an intake run (the files, then the consolidation queue) when OpenCode is idle with no card waiting and nothing else runs, starting OpenCode when needed. Allow everything is on for the run's length only; switching it off stops the run. Each finished file leaves the drop folder: removed when its original was copied into the library's sources folder or it was already in the library, moved to Filed/ when written without such a copy, moved to Not-filed/ when it needs a person or failed. A stopped run pauses the library until a new file comes; with nothing new, a non-empty consolidation queue gets a consolidation-only run until one ends without emptying it. The library card shows the drop folder, waiting files, the last run and the files in Not-filed; switches and last runs are kept in <state dir>/auto-intake.json. The client does not stop for being idle while a library has automatic intake on. intake.Run takes hooks (item_done, ended), reports auto in its snapshot and kept (the original's copy is in the library) for written items.
+- tools/kb-client Skills: the knowledge-base skills no longer offer Change and Restore; Upgrade is greyed out while the installed version is the same as or newer than the one this client comes with (/api/skills reports it as release).
+- tools/kb-client graph: folders whose names start with an underscore are left out, as the skills leave them out of searches.
+
 ## 1.20.2
 
 The browser client files material without masking it and, with Allow everything on, goes on from the files to the end of consolidation without anybody answering.

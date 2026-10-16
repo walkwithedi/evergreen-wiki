@@ -394,6 +394,19 @@ class KbClientTest(unittest.TestCase):
         self.assertTrue(all(n["new"] for n in g["nodes"] if n["kind"] == "summary"))  # written after the start
         self.assertEqual(self.server.get("/api/graph?lib=../etc")[0], 404)
 
+    def test_skills_report_the_release_version(self):
+        self.assertEqual(self.setup_library()[0], "ok")
+        skills = self.server.get("/api/skills")[1]["skills"]
+        kb = [x for x in skills if x["kb"]]
+        self.assertEqual(len(kb), 3, skills)
+        for x in kb:
+            self.assertTrue(x["release"], x)
+            self.assertEqual(x["version"], x["release"], x)  # just installed: up to date
+        path = os.path.join(kb[0]["folder"], "SKILL.md")
+        write(path, re.sub(r"(?m)^Version: .*$", "Version: 0.1.0", read(path)))
+        x = next(y for y in self.server.get("/api/skills")[1]["skills"] if y["dir"] == kb[0]["dir"])
+        self.assertEqual((x["version"], x["release"]), ("0.1.0", kb[0]["release"]))
+
     def test_quit(self):
         work = self.server.get("/api/state")[1]["work"]
         self.assertTrue(os.path.isdir(work))
@@ -667,6 +680,113 @@ class ChatTest(unittest.TestCase):
         self.assertEqual((run["state"], run["consolidation"]["state"], run["consolidation"]["queue"]), ("done", "done", 0), run)
         self.assertEqual(self.server.post("/api/intake", {"resume": True})[0], 409)  # nothing is left
 
+    def auto_library(self, mode=""):
+        """A work library switched to automatic intake, with short times; returns (events, material, drop
+        folder entry)."""
+        self.env.update(KB_CLIENT_AUTO_POLL="1", KB_CLIENT_AUTO_SETTLE="1")
+        if mode:
+            self.env["FAKE_OPENCODE_INTAKE"] = mode
+        ev, material = self.intake_library()
+        status, r = self.server.post("/api/auto", {"library": "work", "on": True})
+        self.assertEqual(status, 200, r)
+        a = r["auto"]
+        lib = self.p("home", "kb", "work")
+        self.assertEqual(a["inbox"], os.path.join(lib, "_Inbox"))
+        self.assertTrue(os.path.isdir(a["inbox"]) and os.path.isdir(a["not_filed"]))
+        return ev, material, a
+
+    def auto_until(self, test, what, timeout=90):
+        end = time.time() + timeout
+        run = None
+        while time.time() < end:
+            run = self.server.get("/api/intake")[1]["run"]
+            if run and run.get("auto") and test(run):
+                return run
+            time.sleep(0.3)
+        raise AssertionError(f"no automatic run {what}: {run}")
+
+    def keep_originals(self, on):
+        conf = self.p("home", "kb", "work", "_kb.json")
+        data = json.loads(read(conf))
+        data["sources"] = {"keep": on}
+        write(conf, json.dumps(data))
+
+    def test_automatic_intake(self):
+        ev, material, a = self.auto_library()
+        lib = self.p("home", "kb", "work")
+        self.keep_originals(False)
+        shutil.copy(os.path.join(material, "Atlas weekly 1.md"), a["inbox"])
+        os.makedirs(os.path.join(a["inbox"], "sub"))
+        shutil.copy(os.path.join(material, "sub", "Atlas weekly 2.txt"), os.path.join(a["inbox"], "sub"))
+        shutil.copy(os.path.join(material, "sub", "copy of week 1.md"), a["inbox"])
+        with open(os.path.join(a["inbox"], "scan.png"), "wb") as f:
+            f.write(b"\x89PNG\r\n\x1a\n" + b"\0" * 64)
+        run = self.auto_until(lambda r: r["state"] == "done", "done")
+        self.assertEqual(run["counts"], {"written": 2, "duplicate": 1, "manual": 1}, run)
+        # the library keeps no originals: written files move to Filed, the duplicate is removed, the
+        # picture waits in Not-filed; nothing is left at the top of the drop folder
+        self.assertEqual(sorted(os.listdir(os.path.join(a["inbox"], "Filed"))), ["Atlas weekly 1.md", "Atlas weekly 2.txt"])
+        self.assertEqual(os.listdir(a["not_filed"]), ["scan.png"])
+        run = self.server.get("/api/intake")[1]["run"]
+        manual = next(it for it in run["items"] if it["status"] == "manual")
+        self.assertEqual(manual["source"], os.path.join(a["not_filed"], "scan.png"))
+        self.assertEqual(sorted(os.listdir(a["inbox"])), ["Filed", "Not-filed", "sub"])
+        self.assertEqual(os.listdir(os.path.join(a["inbox"], "sub")), [])
+        for it in run["items"]:
+            if it["status"] == "written":
+                self.assertTrue(os.path.isfile(os.path.join(lib, it["name"])), it)
+        # Allow everything was on for the run only
+        self.assertTrue(any(e["type"] == "allow_all" and e["on"] for e in ev.seen) or
+                        ev.until(lambda e: e["type"] == "allow_all" and e["on"], "allow all on"))
+        ev.until(lambda e: e["type"] == "allow_all" and not e["on"], "allow all off again", timeout=30)
+        self.assertFalse(self.server.get("/api/chat/state")[1]["agent"]["allow_all"])
+        state = self.server.get("/api/state")[1]
+        auto = next(x for x in state["libraries"] if x["id"] == "work")["auto"]
+        self.assertEqual((auto["on"], auto["manual"], auto["waiting"]), (True, 1, 0), auto)
+        self.assertEqual((auto["last"]["written"], auto["last"]["duplicate"], auto["last"]["not_filed"]), (2, 1, 1))
+        self.assertTrue(os.path.isfile(auto["last"]["log"]))
+        self.assertIn("automatic intake from", read(auto["last"]["log"]))
+        saved = json.loads(read(self.p("home", ".config", "evergreen-wiki", "auto-intake.json")))
+        self.assertTrue(saved["libraries"]["work"]["on"])
+        # the drop folder is not part of the graph
+        g = self.server.get("/api/graph?lib=work")[1]
+        self.assertFalse([n for n in g["nodes"] if n["path"].startswith("_Inbox")], g)
+        # a file that is not new: nothing else runs; switched off, the folder stays and nothing is taken
+        self.assertEqual(self.server.post("/api/auto", {"library": "work", "on": False})[1]["auto"]["on"], False)
+        shutil.copy(os.path.join(material, "Atlas weekly 1.md"), os.path.join(a["inbox"], "again.md"))
+        time.sleep(4)
+        self.assertEqual(self.server.get("/api/intake")[1]["run"]["id"], run["id"])
+        self.assertTrue(os.path.isfile(os.path.join(a["inbox"], "again.md")))
+
+    def test_automatic_intake_removes_kept_originals(self):
+        ev, material, a = self.auto_library()
+        self.keep_originals(True)
+        shutil.copy(os.path.join(material, "sub", "Atlas weekly 2.txt"), a["inbox"])
+        run = self.auto_until(lambda r: r["state"] == "done", "done")
+        self.assertEqual(run["counts"], {"written": 1}, run)
+        self.assertEqual(sorted(os.listdir(a["inbox"])), ["Not-filed"])  # the copy is in Sources/
+        self.assertTrue(os.listdir(self.p("home", "kb", "work", "Sources")))
+
+    def test_automatic_intake_stops_when_allow_all_is_switched_off(self):
+        ev, material, a = self.auto_library("slow")
+        shutil.copy(os.path.join(material, "Atlas weekly 1.md"), a["inbox"])
+        self.auto_until(lambda r: r["state"] == "running" and r["step"] == "ask", "asking")
+        self.assertTrue(self.server.get("/api/chat/state")[1]["agent"]["allow_all"])
+        self.assertEqual(self.server.post("/api/chat/allow_all", {"on": False})[0], 200)
+        run = self.auto_until(lambda r: r["state"] == "stopped", "stopped")
+        self.assertEqual(run["counts"], {"waiting": 1}, run)
+        self.assertTrue(os.path.isfile(os.path.join(a["inbox"], "Atlas weekly 1.md")))  # left for later
+        self.assertIn("Allow everything was switched off", read(run["log"]))
+        # paused until a file that run did not have comes
+        time.sleep(4)
+        self.assertEqual(self.server.get("/api/intake")[1]["run"]["id"], run["id"])
+        last = next(x for x in self.server.get("/api/state")[1]["libraries"] if x["id"] == "work")["auto"]["last"]
+        self.assertEqual((last["state"], last["waiting"]), ("stopped", 1), last)
+
+    def test_automatic_intake_refusals(self):
+        self.ready()
+        self.assertEqual(self.server.post("/api/auto", {"library": "nowhere", "on": True})[0], 400)
+
     def test_intake_prompt_keeps_the_text(self):
         for lang, t in intake_mod.PROMPT.items():
             item = t["item"]
@@ -694,12 +814,18 @@ class ChatTest(unittest.TestCase):
         app.server = type("S", (), {"shutdown": lambda self: stopped.append(1)})()
         running = [True]
         app.intake = type("R", (), {"running": lambda self: running[0]})()
+        app.auto = type("W", (), {"any_on": lambda self, libs: False})()
         import threading
         t = threading.Thread(target=app.idle_watch, daemon=True)
         t.start()
         time.sleep(2.5)
         self.assertEqual(stopped, [])
         running[0] = False
+        auto_on = [True]  # a library switched to automatic intake keeps the client going too
+        app.auto = type("W", (), {"any_on": lambda self, libs: auto_on[0]})()
+        time.sleep(2.5)
+        self.assertEqual(stopped, [])
+        auto_on[0] = False
         t.join(10)
         time.sleep(0.2)
         self.assertEqual(stopped, [1])

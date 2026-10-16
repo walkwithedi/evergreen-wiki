@@ -120,6 +120,11 @@ input[type=text] {
 .scope { color: var(--muted); font-size: 13px; }
 .where { color: var(--muted); font-size: 13px; word-break: break-all; margin: 2px 0 6px; }
 .warn { color: var(--warn); font-size: 13px; }
+.auto { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--line); }
+.auto .hint, .auto .warn { margin: 4px 0 0; overflow-wrap: anywhere; }
+.auto code { font-size: 12.5px; }
+.auto.attn { border-left: 3px solid var(--warn); padding-left: 7px; }
+.auto-switch { font-size: 13px; display: inline-flex; gap: 4px; align-items: center; cursor: pointer; }
 .empty, .hint { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
 .actions { display: flex; flex-direction: column; gap: 8px; }
 .actions button { text-align: left; }
