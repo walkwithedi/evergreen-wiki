@@ -5,12 +5,12 @@ search), and the client files what is put there without anybody on the page.
   - The drop folders are looked at every POLL seconds. A file is taken once its size and time have not
     changed for SETTLE seconds, so that one still being copied waits. Hidden names and the folder's own
     two subfolders are left out.
-  - A run starts only when nothing else is going: no intake run, no step, OpenCode ready and idle with no
-    card waiting. OpenCode is started when it is not running yet. One library at a time, at most
-    intake.MAX_FILES files a run.
-  - The run is intake.Run with Allow everything switched on for its length: the files, then the
-    consolidation queue, unattended. Allow everything goes back to off at the end when the run switched it
-    on; switching it off during the run stops the run.
+  - A run starts only when no other write task holds the lock: no intake run, no step, no task window at
+    work, OpenCode ready. Conversations in the other windows do not hold it back. OpenCode is started when
+    it is not running yet. One library at a time, at most intake.MAX_FILES files a run.
+  - The run is intake.Run in the intake window, with Allow everything switched on there for its length:
+    the files, then the consolidation queue, unattended. Allow everything goes back to off at the end when
+    the run switched it on; switching it off in that window during the run stops the run.
   - Each file is cleared from the drop folder as soon as it is done: written with its original copied into
     the library's sources folder, or a duplicate upload: removed; written without a copy there (the library
     keeps no originals, or the file is larger than the limit): moved to the Filed subfolder; a file that
@@ -232,8 +232,7 @@ class Watcher:
     def tick(self):
         run = self.run
         if run is not None and run.running():
-            ag = run.agent
-            if run.state == "running" and ag is not None and not ag.allow_all:
+            if run.state == "running" and run.agent is not None and not run.window().allow_all:
                 run.note("Allow everything was switched off: the automatic run stops")
                 log.info("automatic intake %s: Allow everything switched off, stopping", run.id)
                 run.stop()
@@ -269,8 +268,8 @@ class Watcher:
                 log.info("automatic intake: starting OpenCode")
                 app.start_agent()
             return
-        if ag.state != "ready" or ag.status != "idle" or ag.questions or ag.permissions:
-            return
+        if ag.state != "ready" or app.write_lock() is not None:
+            return  # the other windows may go on talking: only another write task holds a run back
         for lib in libs:
             files = ready.get(lib["id"]) or []
             stopped = self.paused.get(lib["id"])
@@ -293,22 +292,24 @@ class Watcher:
 
     def begin(self, lib, files):
         ag = self.app.agent
-        self.turned_on = not ag.allow_all
+        win = ag.intake_window().id
+        self.turned_on = not ag.window(win).allow_all
         if self.turned_on:
-            ag.set_allow_all(True)
+            ag.set_allow_all(True, win)
         run, why = self.app.start_intake(lib["id"], [], auto={"sources": files[:intake_mod.MAX_FILES],
                                                               "item_done": self.item_done, "ended": self.ended})
         if run is None:
             log.info("automatic intake for %s not started: %s", lib["id"], why)
-            self.restore_allow_all(ag)
+            self.restore_allow_all(ag, win)
             return
         self.run = run
         run.note(f"automatic intake from {self.settings.get(lib['id']).get('inbox')}: {len(files)} files")
         log.info("automatic intake %s: %d files into %s", run.id, len(files), lib["id"])
 
-    def restore_allow_all(self, ag):
-        if self.turned_on and ag is not None and ag.allow_all:
-            ag.set_allow_all(False)
+    def restore_allow_all(self, ag, win):
+        """Allow everything off again in the intake window, when this watcher switched it on."""
+        if self.turned_on and ag is not None and win in ag.windows and ag.windows[win].allow_all:
+            ag.set_allow_all(False, win)
         self.turned_on = False
 
     # ----- what a run reports -----
@@ -327,7 +328,7 @@ class Watcher:
             run.set(item, source=dest)  # the panel hands a file that needs a person over from where it is now
 
     def ended(self, run):
-        self.restore_allow_all(run.agent)
+        self.restore_allow_all(run.agent, run.win)
         snap = run.snapshot()
         c, cons = snap["counts"], snap["consolidation"]
         last = {"at": time.strftime("%Y-%m-%d %H:%M"), "state": snap["state"], "written": c.get("written", 0),

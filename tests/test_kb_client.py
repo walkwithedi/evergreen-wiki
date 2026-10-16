@@ -518,8 +518,8 @@ class ChatTest(unittest.TestCase):
         status, r = self.server.post("/api/intake", {"library": "work", "paths": [material]})
         self.assertEqual(status, 200, r)
         self.assertEqual(r["run"]["total"], 3)  # hidden files are left out
-        # the conversation is the intake's while it runs
-        self.assertEqual(self.server.post("/api/chat/send", {"text": "hello"})[0], 409)
+        # the intake's window takes no messages while it runs
+        self.assertEqual(self.server.post("/api/chat/send", {"text": "hello", "win": r["run"]["win"]})[0], 409)
         run = self.intake_until_done()
         by_file = {it["file"]: it for it in run["items"]}
         self.assertEqual(by_file["Atlas weekly 1.md"]["status"], "written", run)
@@ -585,8 +585,7 @@ class ChatTest(unittest.TestCase):
         before = self.server.get("/api/chat/state")[1]["agent"]["session"]
         self.server.post("/api/intake", {"library": "work", "paths": [material]})
         run = self.intake_until_done()
-        ev.until(lambda e: e["type"] == "reset" and e.get("session") == before, "back to the earlier conversation")
-        self.assertEqual(self.server.get("/api/chat/state")[1]["agent"]["session"], before)
+        self.assertEqual(self.server.get("/api/chat/state")[1]["agent"]["session"], before)  # never left
         work = self.p("home", ".config", "evergreen-wiki", "intake", run["id"])
         self.assertEqual(run["log"], os.path.join(work, "intake.log"))
         text = read(run["log"])
@@ -739,7 +738,7 @@ class ChatTest(unittest.TestCase):
         self.assertTrue(any(e["type"] == "allow_all" and e["on"] for e in ev.seen) or
                         ev.until(lambda e: e["type"] == "allow_all" and e["on"], "allow all on"))
         ev.until(lambda e: e["type"] == "allow_all" and not e["on"], "allow all off again", timeout=30)
-        self.assertFalse(self.server.get("/api/chat/state")[1]["agent"]["allow_all"])
+        self.assertFalse(self.server.get("/api/chat/state?win=" + run["win"])[1]["agent"]["allow_all"])
         state = self.server.get("/api/state")[1]
         auto = next(x for x in state["libraries"] if x["id"] == "work")["auto"]
         self.assertEqual((auto["on"], auto["manual"], auto["waiting"]), (True, 1, 0), auto)
@@ -770,9 +769,9 @@ class ChatTest(unittest.TestCase):
     def test_automatic_intake_stops_when_allow_all_is_switched_off(self):
         ev, material, a = self.auto_library("slow")
         shutil.copy(os.path.join(material, "Atlas weekly 1.md"), a["inbox"])
-        self.auto_until(lambda r: r["state"] == "running" and r["step"] == "ask", "asking")
-        self.assertTrue(self.server.get("/api/chat/state")[1]["agent"]["allow_all"])
-        self.assertEqual(self.server.post("/api/chat/allow_all", {"on": False})[0], 200)
+        going = self.auto_until(lambda r: r["state"] == "running" and r["step"] == "ask", "asking")
+        self.assertTrue(self.server.get("/api/chat/state?win=" + going["win"])[1]["agent"]["allow_all"])
+        self.assertEqual(self.server.post("/api/chat/allow_all", {"on": False, "win": going["win"]})[0], 200)
         run = self.auto_until(lambda r: r["state"] == "stopped", "stopped")
         self.assertEqual(run["counts"], {"waiting": 1}, run)
         self.assertTrue(os.path.isfile(os.path.join(a["inbox"], "Atlas weekly 1.md")))  # left for later
@@ -798,7 +797,9 @@ class ChatTest(unittest.TestCase):
         ag = agent.Agent.__new__(agent.Agent)
         sent = []
         ag.reply_question = lambda rid, answers: sent.append(answers) or True
-        ag.questions = {"q1": {"id": "q1", "questions": [
+        w = agent.Window("w1")
+        ag.windows = {"w1": w}
+        w.questions = {"q1": {"id": "q1", "questions": [
             {"options": [{"label": "Leave some out", "description": ""}, {"label": "全部采用（推荐）", "description": ""}],
              "custom": True},
             {"options": [{"label": "A", "description": ""}, {"label": "B", "description": "recommended"}], "custom": True},
@@ -920,7 +921,9 @@ class ChatTest(unittest.TestCase):
         self.assertNotEqual(new, session)
         self.assertEqual(self.server.get("/api/chat/state")[1]["history"], [])
         saved = json.loads(read(self.p("home", ".config", "evergreen-wiki", "kb-client.json")))
-        self.assertEqual(saved, {"session": new, "always": {}})
+        win = self.server.get("/api/chat/state")[1]["agent"]["current"]
+        self.assertEqual(saved, {"session": new, "always": {}, "current": win,
+                                 "windows": [{"id": win, "session": new, "kind": "chat", "task": None, "title": ""}]})
 
     def test_setup_restarts_opencode(self):
         ev = self.ready()
@@ -996,20 +999,23 @@ class ChatTest(unittest.TestCase):
         ev.until(lambda e: e["type"] == "reset", "reset")
         listed = s.post("/api/chat/sessions", {})[1]
         self.assertIn(first, [x["id"] for x in listed["sessions"]])
-        self.assertEqual(s.post("/api/chat/switch", {"session": "nope"})[0], 404)
-        self.assertEqual(s.post("/api/chat/switch", {"session": first})[0], 200)
-        st = s.get("/api/chat/state")[1]
+        self.assertEqual(s.post("/api/chat/open", {"session": "nope"})[0], 404)
+        status, r = s.post("/api/chat/open", {"session": first})
+        self.assertEqual(status, 200, r)
+        st = s.get("/api/chat/state?win=" + r["win"])[1]
         self.assertEqual(st["agent"]["session"], first)
         self.assertIn("hello", [h.get("text") for h in st["history"]])
         saved = json.loads(read(self.p("home", ".config", "evergreen-wiki", "kb-client.json")))
-        self.assertEqual((saved["workdir"], saved["recent"], saved["sessions"][saved["workdir"]]),
-                         (os.path.realpath(work), [os.path.realpath(work)], first))
+        here = saved["windows_by_dir"][saved["workdir"]]
+        self.assertEqual((saved["workdir"], saved["recent"], here["current"]),
+                         (os.path.realpath(work), [os.path.realpath(work)], r["win"]))
+        self.assertIn(first, [w["session"] for w in here["windows"]])
 
     def test_chat_first_requests_need_the_option(self):
         self.ready()
         s = self.server
         self.assertFalse(s.get("/api/state")[1]["chat_first"])
-        for what in ("workdir", "sessions", "switch"):
+        for what in ("workdir", "sessions"):
             self.assertEqual(s.post("/api/chat/" + what, {})[0], 404, what)
         self.assertEqual(s.post("/api/chat/send", {"text": "x", "model": "example/model-1"})[0], 400)
 
@@ -1099,15 +1105,17 @@ class ChatTest(unittest.TestCase):
         os.makedirs(kb)
         a = agent.Agent.__new__(agent.Agent)
         sent, emitted = [], []
-        a.allow_all, a.always, a.cwd, a.permissions = False, {}, tmp, {}
-        a.allowed_places = lambda: {"scripts": [], "write": [], "read": [kb]}
+        w = agent.Window("w1")
+        a.always, a.cwd, a.guard_fn, a.lock_fn = {}, tmp, lambda win: None, lambda: None
+        a.windows, a.current = {"w1": w}, "w1"
+        a.allowed_places = lambda win: {"scripts": [], "write": [], "read": [kb]}
         a.call = lambda method, path, body=None: sent.append(body["reply"]) or (200, None)
-        a.feed = type("F", (), {"emit": lambda self, t, **d: emitted.append(t)})()
-        a._permission({"id": "1", "permission": "bash", "patterns": [f"ls {kb}"]})
-        a._permission({"id": "2", "permission": "edit", "patterns": [os.path.join(kb, "SKILL.md")]})
+        a.feed = type("F", (), {"emit": lambda self, t, **d: t == "windows" or emitted.append(t)})()
+        a._permission({"id": "1", "permission": "bash", "patterns": [f"ls {kb}"]}, w)
+        a._permission({"id": "2", "permission": "edit", "patterns": [os.path.join(kb, "SKILL.md")]}, w)
         self.assertEqual((sent, emitted), (["once"], ["auto", "permission"]))
-        a.allow_all = True
-        a._permission({"id": "3", "permission": "edit", "patterns": [os.path.join(kb, "SKILL.md")]})
+        w.allow_all = True
+        a._permission({"id": "3", "permission": "edit", "patterns": [os.path.join(kb, "SKILL.md")]}, w)
         self.assertEqual((sent, emitted[-1]), (["once", "once"], "auto"))
 
     def test_paths_written_in_the_message_are_material(self):
@@ -1212,6 +1220,13 @@ class ChatTest(unittest.TestCase):
                 self.send("hello")
                 out = ev.until(lambda e: e["type"] == "part" and e["role"] == "assistant", "output")
                 self.assertEqual(out["text"].strip(), "run: hello")
+                # opencode run keeps no conversation: one window only, write tasks go to it
+                status, r = self.server.post("/api/chat/open", {})
+                self.assertEqual((status, r.get("reason")), (409, "simple"), r)
+                ev.until(lambda e: e["type"] == "status" and e["status"] == "idle", "idle")
+                status, r = self.server.post("/api/chat/task", {"task": "lint", "text": "lint"})
+                self.assertEqual((status, r["win"]), (200, out["win"]), r)
+                self.assertEqual(len(self.chat()["agent"]["windows"]), 1)
 
     def test_subagent_permission_answered_by_the_client(self):
         material = self.p("home", "Documents", "minutes")
@@ -1276,6 +1291,284 @@ class ChatTest(unittest.TestCase):
         self.assertIn("refreshing", line["line"])
         st = ev.until(lambda e: e["type"] == "agent" and e["state"] != "starting", "state")
         self.assertEqual(st["state"], "simple")
+
+    # ----- several conversation windows -----
+
+    def chat(self, win=None):
+        return self.server.get("/api/chat/state" + (f"?win={win}" if win else ""))[1]
+
+    def texts(self, win):
+        return [h.get("text") for h in self.chat(win)["history"]]
+
+    def open_window(self, **body):
+        status, r = self.server.post("/api/chat/open", body)
+        self.assertEqual(status, 200, r)
+        return r["win"]
+
+    def busy(self, ev, win):
+        ev.until(lambda e: e["type"] == "status" and e.get("win") == win and e["status"] != "idle", f"{win} busy")
+
+    def idle(self, ev, win):
+        ev.until(lambda e: e["type"] == "status" and e.get("win") == win and e["status"] == "idle", f"{win} idle")
+
+    def test_windows_keep_conversations_apart(self):
+        ev = self.ready()
+        st = self.chat()["agent"]
+        self.assertEqual(len(st["windows"]), 1)
+        w1 = st["current"]
+        w2 = self.open_window()
+        self.assertNotEqual(w1, w2)
+        self.assertEqual([w["id"] for w in self.chat()["agent"]["windows"]], [w1, w2])
+        # the second window works while the first one is answered
+        self.send("SLOW", win=w2)
+        self.busy(ev, w2)
+        self.send("hello", win=w1)
+        answer = ev.until(lambda e: e["type"] == "part" and e.get("text") == "echo: hello", "answer")
+        self.assertEqual(answer["win"], w1)
+        self.idle(ev, w1)
+        self.assertEqual(self.texts(w1), ["hello", "echo: hello"])
+        self.assertEqual(self.texts(w2), ["SLOW"])
+        by_id = {w["id"]: w for w in self.chat()["agent"]["windows"]}
+        self.assertEqual((by_id[w1]["status"], by_id[w2]["status"]), ("idle", "busy"))
+        self.assertEqual(by_id[w1]["title"], "t-" + by_id[w1]["session"])  # the title OpenCode gave it
+        self.assertNotEqual(by_id[w1]["session"], by_id[w2]["session"])
+        # Stop and New conversation act on the window they name only
+        self.assertEqual(self.server.post("/api/chat/stop", {"win": w2})[0], 200)
+        done = ev.until(lambda e: e["type"] == "part" and e.get("text") == "aborted", "aborted")
+        self.assertEqual(done["win"], w2)
+        self.assertEqual(self.server.post("/api/chat/new", {"win": w2})[0], 200)
+        reset = ev.until(lambda e: e["type"] == "reset", "reset")
+        self.assertEqual(reset["win"], w2)
+        self.assertEqual(self.texts(w1), ["hello", "echo: hello"])
+        self.assertEqual(self.texts(w2), [])
+        self.assertEqual(self.server.post("/api/chat/send", {"text": "x", "win": "nowhere"})[0], 404)
+
+    def test_window_limit_and_closing(self):
+        ev = self.ready()
+        first = self.chat()["agent"]["current"]
+        wins = [first] + [self.open_window() for _ in range(7)]
+        status, r = self.server.post("/api/chat/open", {})
+        self.assertEqual((status, r.get("reason")), (409, "too_many"), r)
+        # a window at work closes only when asked to stop it
+        self.send("SLOW", win=wins[1])
+        self.busy(ev, wins[1])
+        status, r = self.server.post("/api/chat/close", {"win": wins[1]})
+        self.assertEqual((status, r.get("reason")), (409, "busy"), r)
+        sid = next(w["session"] for w in self.chat()["agent"]["windows"] if w["id"] == wins[1])
+        self.assertEqual(self.server.post("/api/chat/close", {"win": wins[1], "stop": True})[0], 200)
+        self.assertIn(f"/session/{sid}/abort", [c.get("path") for c in self.calls()])
+        self.assertNotIn(wins[1], [w["id"] for w in self.chat()["agent"]["windows"]])
+        self.assertEqual(self.server.post("/api/chat/close", {"win": wins[1]})[0], 404)
+        # closing the last window leaves a new one
+        for w in wins[2:]:
+            self.assertEqual(self.server.post("/api/chat/close", {"win": w})[0], 200)
+        self.assertEqual(self.server.post("/api/chat/close", {"win": first})[0], 200)
+        left = self.chat()["agent"]["windows"]
+        self.assertEqual(len(left), 1)
+        self.assertNotEqual(left[0]["id"], first)
+
+    def test_windows_come_back(self):
+        self.env["FAKE_OPENCODE_STORE"] = self.p("conversations.json")
+        ev = self.ready()
+        w1 = self.chat()["agent"]["current"]
+        self.send("hello", win=w1)
+        self.idle(ev, w1)
+        w2 = self.open_window()
+        self.send("there", win=w2)
+        self.idle(ev, w2)
+        self.assertEqual(self.server.post("/api/chat/focus", {"win": w2})[0], 200)
+        before = [(w["id"], w["session"]) for w in self.chat()["agent"]["windows"]]
+        self.server.stop()
+        ev = self.ready()
+        st = self.chat()["agent"]
+        self.assertEqual([(w["id"], w["session"]) for w in st["windows"]], before)
+        self.assertEqual([w["title"] for w in st["windows"]], ["t-" + sid for _, sid in before])  # kept too
+        self.assertEqual(st["current"], w2)
+        self.assertEqual(self.texts(None), ["there", "echo: there"])  # the current window by default
+        self.assertEqual(self.texts(w1), ["hello", "echo: hello"])
+
+    def test_allow_all_is_per_window(self):
+        ev = self.ready()
+        w1 = self.chat()["agent"]["current"]
+        w2 = self.open_window()
+        self.assertEqual(self.server.post("/api/chat/allow_all", {"on": True, "win": w1}),
+                         (200, {"ok": True, "allow_all": True}))
+        self.assertEqual(ev.until(lambda e: e["type"] == "allow_all")["win"], w1)
+        self.send("PERM edit " + self.p("elsewhere", "a.md"), win=w2)
+        card = ev.until(lambda e: e["type"] in ("auto", "permission"))
+        self.assertEqual((card["type"], card["win"]), ("permission", w2))
+        self.assertFalse(self.chat(w2)["agent"]["allow_all"])
+        self.assertEqual([c["id"] for c in self.chat(w2)["agent"]["permissions"]], [card["id"]])
+        self.assertEqual(self.chat(w1)["agent"]["permissions"], [])
+        self.server.post("/api/chat/permission", {"id": card["id"], "reply": "reject"})
+        self.idle(ev, w2)
+        self.send("PERM edit " + self.p("elsewhere", "b.md"), win=w1)
+        self.assertEqual(ev.until(lambda e: e["type"] in ("auto", "permission"))["type"], "auto")
+
+    def test_write_tasks_run_one_at_a_time(self):
+        ev, _ = self.intake_library()
+        s = self.server
+        w1 = self.chat()["agent"]["current"]
+        status, r = s.post("/api/chat/task", {"task": "lint", "library": "work", "text": "SLOW lint"})
+        self.assertEqual(status, 200, r)
+        tw = r["win"]
+        self.assertNotEqual(tw, w1)
+        self.busy(ev, tw)
+        st = self.chat()["agent"]
+        task_win = next(w for w in st["windows"] if w["id"] == tw)
+        self.assertEqual((task_win["kind"], task_win["task"]), ("task", {"name": "lint", "library": "work"}))
+        self.assertEqual(st["lock"], {"holder": "task", "win": tw, "task": "lint", "library": "work"})
+        # no other write task, no intake and no step that changes libraries meanwhile
+        status, r = s.post("/api/chat/task", {"task": "archive", "library": "work", "text": "archive"})
+        self.assertEqual((status, r.get("reason")), (409, "locked"), r)
+        status, r = s.post("/api/intake", {"library": "work", "paths": [self.p("material")]})
+        self.assertEqual((status, r.get("reason")), (409, "locked"), r)
+        self.assertEqual(s.post("/api/action", {"action": "rollback"})[0], 409)
+        status, r = s.post("/api/action", {"action": "backup"})
+        self.assertEqual(status, 200, r)  # backing up only reads the libraries
+        s.post("/api/answer", {"job": r["job"], "cancel": True})
+        self.assertEqual(s.post("/api/chat/task", {"task": "other", "text": "x"})[0], 400)
+        # the other windows go on
+        self.send("hello", win=w1)
+        ev.until(lambda e: e["type"] == "part" and e.get("text") == "echo: hello", "answer")
+        # the lock goes once the task window is idle with no card waiting
+        s.post("/api/chat/stop", {"win": tw})
+        self.idle(ev, tw)
+        self.assertIsNone(self.chat()["agent"]["lock"])
+        status, r = s.post("/api/chat/task", {"task": "archive", "library": "work", "text": "SLOW archive"})
+        self.assertEqual(status, 200, r)
+        tw2 = r["win"]
+        self.busy(ev, tw2)
+        # a message in a task window goes on with its task: refused while another one holds the lock
+        status, r = s.post("/api/chat/send", {"text": "yes, go on", "win": tw})
+        self.assertEqual((status, r.get("reason")), (409, "locked"), r)
+        s.post("/api/chat/stop", {"win": tw2})
+        self.idle(ev, tw2)
+        self.send("SLOW go on", win=tw)
+        self.busy(ev, tw)
+        self.assertEqual(self.chat()["agent"]["lock"]["win"], tw)
+        s.post("/api/chat/stop", {"win": tw})
+
+    def test_library_writes_from_other_windows_ask_during_a_task(self):
+        ev, _ = self.intake_library()
+        s = self.server
+        lib = self.p("home", "kb", "work")
+        prep = self.p("home", ".config", "opencode", "skills", "kb-incremental", "scripts", "prep.py")
+        find = self.p("home", ".config", "opencode", "skills", "kb-query", "scripts", "kbfind.py")
+        w1 = self.chat()["agent"]["current"]
+        s.post("/api/chat/allow_all", {"on": True, "win": w1})
+        status, r = s.post("/api/chat/task", {"task": "lint", "library": "work", "text": "SLOW lint"})
+        tw = r["win"]
+        self.busy(ev, tw)
+
+        def answer(text):
+            self.send(text, win=w1)
+            got = ev.until(lambda e: e["type"] in ("auto", "permission") and e.get("win") == w1, text)
+            if got["type"] == "permission":
+                s.post("/api/chat/permission", {"id": got["id"], "reply": "reject"})
+            self.idle(ev, w1)
+            return got["type"]
+
+        # writing the library or running the intake skill's scripts asks, even with Allow everything on
+        self.assertEqual(answer("PERM edit " + os.path.join(lib, "x.md")), "permission")
+        self.assertEqual(answer(f"PERM bash python3 {prep} scan {lib}"), "permission")
+        # reading it, looking things up and everything else does not
+        self.assertEqual(answer("PERM read " + os.path.join(lib, "00_Spec.md")), "auto")
+        self.assertEqual(answer(f"PERM bash python3 {find} Atlas"), "auto")
+        self.assertEqual(answer("PERM edit " + self.p("elsewhere", "a.md")), "auto")
+        # the task window itself writes as before
+        self.send("PERM edit " + os.path.join(lib, "y.md"), win=tw)
+        # once the task is done, the library is written without a card again
+        s.post("/api/chat/stop", {"win": tw})
+        self.idle(ev, tw)
+        self.assertEqual(answer("PERM edit " + os.path.join(lib, "x.md")), "auto")
+
+    def test_intake_runs_in_its_own_window(self):
+        self.env["FAKE_OPENCODE_INTAKE"] = "slow"
+        ev, material = self.intake_library()
+        s = self.server
+        w1 = self.chat()["agent"]["current"]
+        self.send("hello", win=w1)
+        self.idle(ev, w1)
+        before = self.chat(w1)["agent"]["windows"][0]["session"]
+        s.post("/api/chat/allow_all", {"on": True, "win": w1})
+        status, r = s.post("/api/intake", {"library": "work", "paths": [material], "win": w1})
+        self.assertEqual(status, 200, r)
+        iw = r["run"]["win"]
+        self.assertNotEqual(iw, w1)
+        st = self.chat()["agent"]
+        self.assertEqual(next(w for w in st["windows"] if w["id"] == iw)["kind"], "intake")
+        self.assertEqual(st["lock"], {"holder": "intake", "win": iw})
+        self.assertTrue(self.chat(iw)["agent"]["allow_all"])  # taken from the window it was started from
+        self.busy(ev, iw)
+        # the conversation of the other windows goes on; the intake window takes no messages
+        self.send("during the intake", win=w1)
+        ev.until(lambda e: e["type"] == "part" and e.get("text") == "echo: during the intake", "answer")
+        status, r = s.post("/api/chat/send", {"text": "x", "win": iw})
+        self.assertEqual((status, r.get("reason")), (409, "intake_running"), r)
+        status, r = s.post("/api/chat/close", {"win": iw, "stop": True})
+        self.assertEqual((status, r.get("reason")), (409, "intake_running"), r)
+        status, r = s.post("/api/chat/task", {"task": "lint", "library": "work", "text": "lint"})
+        self.assertEqual((status, r.get("reason")), (409, "locked"), r)
+        s.post("/api/intake/stop", {})
+        self.intake_until_done()
+        self.assertEqual(next(w for w in self.chat()["agent"]["windows"] if w["id"] == w1)["session"], before)
+        self.assertEqual(self.texts(w1)[:2], ["hello", "echo: hello"])
+        # the intake window comes back after a restart only while its run can be continued
+        self.server.stop()
+        ev = self.ready()
+        self.assertIn("intake", [w["kind"] for w in self.chat()["agent"]["windows"]])
+
+    def test_automatic_intake_does_not_wait_for_other_windows(self):
+        ev, material, a = self.auto_library()
+        w1 = self.chat()["agent"]["current"]
+        self.send("SLOW", win=w1)
+        self.busy(ev, w1)
+        shutil.copy(os.path.join(material, "Atlas weekly 1.md"), a["inbox"])
+        run = self.auto_until(lambda r: r["state"] == "done", "done")
+        self.assertEqual(run["counts"], {"written": 1}, run)
+        self.assertNotEqual(run["win"], w1)
+        self.assertFalse(self.chat(w1)["agent"]["allow_all"])  # switched on for the intake window only
+        self.server.post("/api/chat/stop", {"win": w1})
+
+    def test_chat_first_windows_per_folder(self):
+        a, b = self.p("home", "projects", "a"), self.p("home", "projects", "b")
+        os.makedirs(a)
+        os.makedirs(b)
+        a, b = os.path.realpath(a), os.path.realpath(b)
+        self.env["FAKE_OPENCODE_STORE"] = self.p("conversations.json")
+        ev = self.start("", "--chat-first")
+        ev.until(lambda e: e["type"] == "agent" and e["state"] == "ready", "ready")
+        s = self.server
+        s.post("/api/chat/workdir", {"path": a})
+        ev.until(lambda e: e["type"] == "agent" and e["state"] == "ready", "ready in a")
+        w1 = self.chat()["agent"]["current"]
+        self.send("one", win=w1)
+        self.idle(ev, w1)
+        w2 = self.open_window()
+        self.send("SLOW", win=w2)
+        self.busy(ev, w2)
+        # every window must be idle to change folders
+        self.assertEqual(s.post("/api/chat/workdir", {"path": b})[0], 409)
+        s.post("/api/chat/stop", {"win": w2})
+        self.idle(ev, w2)
+        in_a = [(w["id"], w["session"]) for w in self.chat()["agent"]["windows"]]
+        self.assertEqual(s.post("/api/chat/workdir", {"path": b})[0], 200)
+        ev.until(lambda e: e["type"] == "agent" and e["state"] == "ready", "ready in b")
+        self.assertEqual(len(self.chat()["agent"]["windows"]), 1)
+        self.assertEqual(s.post("/api/chat/workdir", {"path": a})[0], 200)
+        ev.until(lambda e: e["type"] == "agent" and e["state"] == "ready", "ready in a again")
+        self.assertEqual([(w["id"], w["session"]) for w in self.chat()["agent"]["windows"]], in_a)
+        # an earlier conversation opens in a new window, or in the one that already has it
+        sid1 = in_a[0][1]
+        self.assertEqual(self.open_window(session=sid1), w1)
+        s.post("/api/chat/new", {"win": w1})
+        ev.until(lambda e: e["type"] == "reset" and e.get("win") == w1, "reset")
+        w3 = self.open_window(session=sid1)
+        self.assertNotIn(w3, (w1, w2))
+        self.assertEqual(next(w for w in self.chat()["agent"]["windows"] if w["id"] == w3)["title"], "t-" + sid1)
+        self.assertEqual(self.texts(w3), ["one", "echo: one"])
+        self.assertEqual(s.post("/api/chat/open", {"session": "nope"})[0], 404)
 
 
 @unittest.skipUnless(sys.platform.startswith("linux") and shutil.which("bash"), "Linux desktops with bash")

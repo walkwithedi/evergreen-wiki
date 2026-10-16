@@ -65,8 +65,12 @@ MAX_BODY = 64 * 1024
 SIMPLE_REFUSED = {"rollback", "move", "uninstall", "skill_backup", "skill_restore", "skill_import", "skill_new",
                   "forget"}
 CHAT_ACTIONS = {name: name for name in ("start", "recheck", "send", "new", "stop", "permission", "question", "terminal", "forget",
-                                         "allow_all", "workdir", "sessions", "switch")}
-CHAT_FIRST_ACTIONS = ("workdir", "sessions", "switch")  # only with --chat-first
+                                         "allow_all", "workdir", "sessions", "open", "close", "focus", "task")}
+CHAT_FIRST_ACTIONS = ("workdir", "sessions")  # only with --chat-first
+# The write tasks the page starts from a button, each in a task window; with an intake run and the steps
+# below they hold the write lock one at a time.
+TASKS = ("lint", "archive", "notes", "resume")
+WRITE_STEPS = ("setup", "rollback", "move", "uninstall")  # steps that change libraries
 MAX_TEXT = 20000  # characters of one message from the page
 MAX_PATHS = 200  # material paths sent with one message
 MAX_ENTRIES = 2000  # entries listed per folder; the page says when a folder holds more
@@ -92,6 +96,11 @@ MSG = {
         "intake_library": "Choose a library on this computer.",
         "intake_empty": "No files found in what was chosen.",
         "intake_nothing": "Nothing is left to continue.",
+        "intake_window": "This window shows the client's intake only; talk in another window.",
+        "locked": "Another task that writes the libraries is running; wait until it is done.",
+        "too_many": "Eight windows are open; close one first.",
+        "window_busy": "The assistant is still working in this window.",
+        "no_window": "That window is closed.",
         "confirm": "Write the library as previewed above?",
         "write": "Write",
         "change": "Change an item first",
@@ -118,6 +127,11 @@ MSG = {
         "intake_library": "请选择本机上的知识库。",
         "intake_empty": "所选的内容里没有找到文件。",
         "intake_nothing": "没有可以继续的文件。",
+        "intake_window": "这个窗口只显示客户端执行的入库，请在其他窗口对话。",
+        "locked": "另一个写知识库的任务正在运行，等它结束再试。",
+        "too_many": "已经开了 8 个窗口，先关掉一个。",
+        "window_busy": "助手还在这个窗口里处理。",
+        "no_window": "这个窗口已经关闭。",
         "confirm": "按上面的预览写入知识库吗？",
         "write": "写入",
         "change": "先修改某一项",
@@ -273,14 +287,19 @@ class App:
     # ---------- steps ----------
 
     def start(self, action, lib_id=None):
+        """(the step's Job, None), or (None, why): "busy" while another step runs, "locked" for a step that
+        changes libraries while a write task holds the lock."""
         with self.lock:
             if self.job and not self.job.done:
-                return None
+                return None, "busy"
+            if action in WRITE_STEPS and self.write_lock() is not None:
+                return None, "locked"
             job = Job(action)
             self.job = job
         job.thread = threading.Thread(target=self.run, args=(job, lib_id), daemon=True)
         job.thread.start()
-        return job
+        self.windows_changed()
+        return job, None
 
     def run(self, job, lib_id):
         log.info("step %s started", job.action)
@@ -308,6 +327,7 @@ class App:
                 job.events.append({"type": "end", "result": result, "seq": len(job.events) + 1})
                 job.cond.notify_all()
             log.info("step %s ended: %s", job.action, result)
+        self.windows_changed()
         if job.action == "setup" and result == "ok" and self.agent is not None:
             self.agent.restart()  # so that the conversation uses the skills and the instructions line just written
 
@@ -348,11 +368,12 @@ class App:
                 self.agent = agent_mod.Agent(OPENCODE["program"], os.path.expanduser("~"), self.places,
                                              os.path.join(kb_manage.state_dir(), "kb-client.json"),
                                              self.start_timeout, chat_first=bool(self.options.get("chat_first")))
+                self.agent.lock_fn = self.write_lock
+                self.agent.guard_fn = self.guard
                 run = self.intake
-                if run is not None and run.interrupted:
-                    # the saved conversation may be one of that run's files: open the one from before it
-                    self.agent.resume_with = run.back_to or None
-                    log.info("intake %s was interrupted; picking up conversation %s", run.id, run.back_to or "(new)")
+                sources, cons_left = run.left() if run is not None else ([], False)
+                if not (sources or cons_left):
+                    self.agent.close_intake()  # its window comes back only while the run can be continued
         self.agent.start()
         return self.agent, None
 
@@ -383,6 +404,39 @@ class App:
                 lib["auto"] = self.auto.lib_state(lib) if lib["root"] and lib["exists"] else {"on": False}
         return libs
 
+    # ---------- the write lock ----------
+
+    def write_lock(self):
+        """Who holds the write lock, or None: {"holder": "intake", "win"} for an intake run, {"holder":
+        "step", "action"} for a step that changes libraries, {"holder": "task", "win", "task", "library"}
+        for a task window while the assistant works there or a card waits in it."""
+        run = self.intake
+        if run is not None and run.running():
+            return {"holder": "intake", "win": run.win}
+        job = self.job
+        if job is not None and not job.done and job.action in WRITE_STEPS:
+            return {"holder": "step", "action": job.action}
+        ag = self.agent
+        for w in list(ag.windows.values()) if ag is not None else []:
+            if w.kind == "task" and w.busy():
+                return {"holder": "task", "win": w.id, "task": (w.task or {}).get("name", ""),
+                        "library": (w.task or {}).get("library", "")}
+        return None
+
+    def guard(self, win):
+        """For agent.touches: the libraries and the intake skill's folders, while a window other than win
+        holds the write lock; None otherwise."""
+        lock = self.write_lock()
+        if lock is None or lock.get("win") == win:
+            return None
+        roots = [lib["root"] for lib in libraries() if lib["root"] and lib["exists"]]
+        scripts = [f["folder"] for f in kb_skills()["found"] if f["name"] in ("kb-incremental", "kb-note")]
+        return {"roots": roots, "scripts": scripts}
+
+    def windows_changed(self):
+        if self.agent is not None:
+            self.agent.emit_windows()
+
     def idle_for_intake(self):
         """True when an automatic run may start: no intake run and no step going."""
         busy = self.intake is not None and self.intake.running()
@@ -397,15 +451,18 @@ class App:
     def queue_name(self, root):
         return library_names(root).get("consolidation_queue") or "_Consolidation-Queue.md"
 
-    def start_intake(self, lib_id, paths, resume=False, auto=None):
+    def start_intake(self, lib_id, paths, resume=False, auto=None, win=None):
         """Starts an intake run of paths into the local library lib_id, or of the files a stopped run did
         not reach. auto: an automatic run's {"sources", "item_done", "ended"} (auto.Watcher), its files
         taken as they are (the drop folder is inside the library), possibly none (consolidation only).
-        (run, None), or (None, the reason as a MSG key)."""
+        The run talks in the intake window; a run started from the page takes Allow everything from the
+        window win it was started in. (run, None), or (None, the reason as a MSG key)."""
         with self.lock:
             last = self.intake
             if last is not None and last.running():
                 return None, "intake_running"
+            if self.write_lock() is not None:
+                return None, "locked"
             ag = self.agent
             if ag is None or ag.state != "ready":
                 return None, "intake_agent"
@@ -431,9 +488,11 @@ class App:
             run_id = time.strftime("%Y%m%d-%H%M%S-") + secrets.token_hex(2)
             work = os.path.join(intake_root(), run_id)
             os.makedirs(work, mode=0o700, exist_ok=True)
-            back = last.back_to if resume and last is not None else (ag.session or "")
+            iw = ag.intake_window()
+            if auto is None:
+                ag.set_allow_all(ag.window(win if win in ag.windows else None).allow_all, iw.id)
             hooks = {"item_done": auto["item_done"], "ended": auto["ended"]} if auto is not None else None
-            self.intake = intake_mod.Run(ag, lib, sources, scripts, work, self.lang, run_id, back, hooks)
+            self.intake = intake_mod.Run(ag, lib, sources, scripts, work, self.lang, run_id, iw.id, hooks)
         log.info("intake %s: %d files into %s%s", run_id, len(sources), lib["id"],
                  " (continued)" if resume else " (automatic)" if auto is not None else "")
         self.intake.start()
@@ -1029,7 +1088,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/events":
             return self.events(query)
         if path == "/api/chat/state":
-            return self.chat_state()
+            return self.chat_state((query.get("win") or [""])[0])
         if path == "/api/chat/events":
             return self.chat_events(query)
         return self.static(path)
@@ -1057,9 +1116,9 @@ class Handler(BaseHTTPRequestHandler):
             if action in SIMPLE_REFUSED and self.app.options.get("simple"):
                 return self.send(403, {"error": MSG[self.app.lang]["simple"]})
             arg = body.get("skill") if action.startswith("skill_") else body.get("library")
-            job = self.app.start(action, arg if isinstance(arg, str) else None)
+            job, why = self.app.start(action, arg if isinstance(arg, str) else None)
             if job is None:
-                return self.send(409, {"error": MSG[self.app.lang]["busy"]})
+                return self.send(409, {"error": MSG[self.app.lang][why], "reason": why})
             return self.send(200, {"job": job.id})
         if path == "/api/answer":
             job = self.app.job
@@ -1081,7 +1140,8 @@ class Handler(BaseHTTPRequestHandler):
             resume = body.get("resume") is True
             if not resume and (not isinstance(lib_id, str) or not paths):
                 return self.send(400, {"error": "library"})
-            run, why = self.app.start_intake(lib_id, paths, resume)
+            win = body.get("win")
+            run, why = self.app.start_intake(lib_id, paths, resume, win=win if isinstance(win, str) else None)
             if run is None:
                 return self.send(409, {"error": MSG[self.app.lang][why], "reason": why})
             return self.send(200, {"run": run.snapshot()})
@@ -1142,17 +1202,20 @@ class Handler(BaseHTTPRequestHandler):
 
     # ----- the conversation -----
 
-    def chat_state(self):
+    def chat_state(self, win=""):
+        """The agent as the page shows the window win (the current one when not given), with its history."""
         ag = self.app.agent
         if ag is None:
             return self.send(200, {"agent": {"state": "off"}, "seq": 0, "history": []})
+        if win and win not in ag.windows:
+            return self.send(404, {"error": MSG[self.app.lang]["no_window"], "reason": "no_window"})
         seq = ag.feed.last()  # before the history, so nothing falls between the two
         try:
-            history = ag.history()
+            history = ag.history(win or None)
         except OSError as e:
             log.warning("history: %s", e)
             history = []
-        return self.send(200, {"agent": ag.snapshot(), "seq": seq, "history": history})
+        return self.send(200, {"agent": ag.snapshot(win or None), "seq": seq, "history": history})
 
     def chat_events(self, query):
         ag = self.app.agent
@@ -1200,9 +1263,17 @@ class Handler(BaseHTTPRequestHandler):
         ag = self.app.agent
         if ag is None or ag.state not in ("ready", "simple"):
             return self.send(409, {"error": m["not_ready"]})
+        wid = body.get("win") or None
+        if wid is not None and (not isinstance(wid, str) or wid not in ag.windows):
+            return self.send(404, {"error": m["no_window"], "reason": "no_window"})
+        w = ag.window(wid) if what not in ("permission", "question", "open", "workdir", "sessions", "forget") else None
+        running = self.app.intake is not None and self.app.intake.running()
         try:
-            if what in ("send", "new", "switch", "workdir", "terminal") and self.app.intake is not None and self.app.intake.running():
-                return self.send(409, {"error": m["intake_running"]})
+            if w is not None and w.kind == "intake" and what in ("send", "new", "terminal"):
+                why = "intake_running" if running else "intake_window"
+                return self.send(409, {"error": m[why], "reason": why})
+            if what == "task":
+                return self.chat_task(ag, body, wid)
             if what == "send":
                 text, material = body.get("text"), body.get("material") or []
                 if not isinstance(text, str) or not text.strip() or len(text) > MAX_TEXT:
@@ -1213,12 +1284,18 @@ class Handler(BaseHTTPRequestHandler):
                 model = body.get("model") or ""
                 if not isinstance(model, str) or (model and not self.app.options.get("chat_first")):
                     return self.send(400, {"error": "model"})
-                try:
-                    ag.send(text.strip(), material + text_paths(text), model)
-                except ValueError:
-                    return self.send(400, {"error": "model"})
+                with self.app.lock:  # a message in a task window goes on with its task: it takes the lock again
+                    lock = self.app.write_lock()
+                    if w.kind == "task" and lock is not None and lock.get("win") != w.id:
+                        return self.send(409, {"error": m["locked"], "reason": "locked"})
+                    try:
+                        ag.send(text.strip(), material + text_paths(text), model, win=w.id)
+                    except ValueError:
+                        return self.send(400, {"error": "model"})
                 return self.send(200, {"ok": True})
             if what == "workdir":
+                if running:
+                    return self.send(409, {"error": m["intake_running"], "reason": "intake_running"})
                 try:
                     return self.send(200, {"ok": True, "workdir": ag.set_workdir(body.get("path"))})
                 except ValueError as e:
@@ -1226,30 +1303,46 @@ class Handler(BaseHTTPRequestHandler):
                 except RuntimeError:
                     return self.send(409, {"error": m["chat_busy"]})
             if what == "sessions":
-                return self.send(200, {"sessions": ag.sessions(), "current": ag.session})
-            if what == "switch":
+                return self.send(200, {"sessions": ag.sessions(), "current": ag.session,
+                                       "open": {x.session: x.id for x in ag.windows.values() if x.session and x.kind != "intake"}})
+            if what == "open":
+                session = body.get("session")
+                if session is not None and not self.app.options.get("chat_first"):
+                    return self.send(400, {"error": "session"})
                 try:
-                    ok = ag.switch(body.get("session"))
-                except RuntimeError:
-                    return self.send(409, {"error": m["chat_busy"]})
-                return self.send(200 if ok else 404, {"ok": ok})
+                    return self.send(200, {"ok": True, "win": ag.open(session)})
+                except LookupError:
+                    return self.send(404, {"error": "no such conversation"})
+                except agent_mod.Refused as e:
+                    return self.send(409, {"error": m.get(e.reason, m["not_ready"]), "reason": e.reason})
+            if what == "close":
+                if w.kind == "intake" and running:
+                    return self.send(409, {"error": m["intake_running"], "reason": "intake_running"})
+                try:
+                    ag.close(w.id, body.get("stop") is True)
+                except agent_mod.Refused:
+                    return self.send(409, {"error": m["window_busy"], "reason": "busy"})
+                return self.send(200, {"ok": True, "current": ag.current})
+            if what == "focus":
+                ag.focus(w.id)
+                return self.send(200, {"ok": True})
             if what == "new":
-                ag.new()
-                return self.send(200, {"ok": True, "session": ag.session})
+                ag.new(w.id)
+                return self.send(200, {"ok": True, "session": w.session})
             if what == "forget":
                 ag.forget()
                 return self.send(200, {"ok": True})
             if what == "allow_all":
                 if not isinstance(body.get("on"), bool):
                     return self.send(400, {"error": "on"})
-                ag.set_allow_all(body["on"])
-                return self.send(200, {"ok": True, "allow_all": ag.allow_all})
+                ag.set_allow_all(body["on"], w.id)
+                return self.send(200, {"ok": True, "allow_all": w.allow_all})
             if what == "stop":
-                ag.stop()
+                ag.stop(w.id)
                 return self.send(200, {"ok": True})
             if what == "terminal":
                 try:
-                    return self.send(200, {"ok": True, "terminal": ag.open_terminal()})
+                    return self.send(200, {"ok": True, "terminal": ag.open_terminal(w.id)})
                 except RuntimeError as e:
                     return self.send(409, {"error": str(e), "reason": "no_terminal" if "terminal" in str(e) else "no_session"})
             if what == "permission":
@@ -1273,6 +1366,26 @@ class Handler(BaseHTTPRequestHandler):
             log.warning("chat %s failed: %s", what, type(e).__name__)
             return self.send(502, {"error": " ".join(str(e).split())[:300]})
         return self.send(404, {"error": "not found"})
+
+    def chat_task(self, ag, body, wid):
+        """POST /api/chat/task: a write task's text (built by the page) sent in a task window, wid when it
+        names an idle one, else a new window; refused while another write task holds the lock."""
+        m = MSG[self.app.lang]
+        name, lib, text = body.get("task"), body.get("library") or "", body.get("text")
+        if name not in TASKS or not isinstance(lib, str) or not isinstance(text, str) or not text.strip() \
+                or len(text) > MAX_TEXT:
+            return self.send(400, {"error": "task"})
+        with self.app.lock:
+            lock = self.app.write_lock()
+            if lock is not None and (wid is None or lock.get("win") != wid):
+                return self.send(409, {"error": m["locked"], "reason": "locked"})
+            try:
+                win = ag.task(name, lib, text.strip(), wid)
+            except agent_mod.Refused as e:
+                why = "too_many" if e.reason == "too_many" else "window_busy"
+                return self.send(409, {"error": m[why], "reason": e.reason})
+        log.info("write task %s started in %s", name, win)
+        return self.send(200, {"ok": True, "win": win})
 
     def static(self, path):
         """Only the page's own files, by fixed name and type."""

@@ -2,11 +2,13 @@
 """A stand-in for `opencode` in the kb-client tests: `serve` answers the parts of the OpenCode 1.19 HTTP
 interface the client uses and sends their events; `run <message>` prints an answer.
 
-FAKE_OPENCODE_LOG: file that gets one JSON line per call (the arguments, OPENCODE_CONFIG_CONTENT, and
+FAKE_OPENCODE_STORE: file that keeps the conversations, so that a serve started again still has them, as
+OpenCode does. FAKE_OPENCODE_LOG: file that gets one JSON line per call (the arguments, OPENCODE_CONFIG_CONTENT, and
 every request). FAKE_OPENCODE_MODE: "noserve" (serve exits at once), "noserve1" (only the first serve
 exits at once; needs FAKE_OPENCODE_LOG), "noapi" (GET /permission is 404), "slow" (serve never says it
 listens). Messages starting with PERM <permission> <pattern>, QUESTION or SLOW
-make the session ask for a permission, ask a question or wait to be aborted; SUBAGENT <permission>
+make the session ask for a permission, ask a question or wait to be aborted (so does the page's Health check
+request); SUBAGENT <permission>
 <pattern> starts a subagent session that asks for that permission; THINK sends reasoning first; RUN <command>
 shows a finished bash step running that command; STEPS <n> gives one answer with n tool steps (the third
 one failed); EDIT shows a finished edit step with a diff. A message naming a decision_<n>.json file is a
@@ -14,7 +16,8 @@ client intake turn: the head and decision files are written (FAKE_OPENCODE_INTAK
 A message naming a consolidate_<r>.json file is a client consolidation round: one row leaves the library's
 queue and the result file is written (FAKE_OPENCODE_CONSOLIDATE: "ask" asks the step-5 question first and
 consolidates only when it is answered with Accept all, "stuck" changes nothing). GET /session lists the sessions with this
-server's folder, their time and parent; GET /config/providers offers example/model-1 and example/model-2.
+server's folder, their time and parent (a conversation's title is
+t-<id>, sent as session.updated after its first message); GET /config/providers offers example/model-1 and example/model-2.
 """
 import json
 import os
@@ -27,6 +30,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 LOG = os.environ.get("FAKE_OPENCODE_LOG", "")
+STORE = os.environ.get("FAKE_OPENCODE_STORE", "")  # file keeping the conversations from one serve to the next
 INTAKE_RE = re.compile(r"/[^\s，。）]+decision_\d+\.json")
 CONSOLIDATE_RE = re.compile(r"/[^\s，。）]+consolidate_\d+\.json")
 MODE = os.environ.get("FAKE_OPENCODE_MODE", "")
@@ -48,6 +52,16 @@ class World:
         self.waits = {}  # permission or question id -> (threading.Event, [reply])
         self.aborts = {}
         self.n = 0
+        if STORE and os.path.isfile(STORE):
+            with open(STORE, encoding="utf-8") as f:
+                data = json.load(f)
+            self.sessions, self.meta, self.n = data["sessions"], data["meta"], data["n"]
+
+    def save(self):
+        if STORE:
+            with self.lock:
+                with open(STORE, "w", encoding="utf-8") as f:
+                    json.dump({"sessions": self.sessions, "meta": self.meta, "n": self.n}, f)
 
     def next(self, prefix):
         with self.lock:
@@ -64,6 +78,7 @@ class World:
         info = {"id": mid, "sessionID": sid, "role": role}
         part = {"id": self.next("p"), "sessionID": sid, "messageID": mid, "type": "text", "text": text}
         self.sessions[sid].append({"info": info, "parts": [part]})
+        self.save()
         self.emit("message.updated", sessionID=sid, info=info)
         if role == "assistant" and len(text) > 3:
             self.emit("message.part.updated", sessionID=sid, part=dict(part, text=""), time=0)
@@ -77,7 +92,10 @@ class World:
         return box[0] if box else None
 
     def turn(self, sid, text):
+        first = not self.sessions[sid]
         self.message(sid, "user", text)
+        if first:  # OpenCode names a conversation after its first message
+            self.emit("session.updated", info=dict({"id": sid, "title": "t-" + sid}, **self.meta.get(sid, {})))
         self.emit("session.status", sessionID=sid, status={"type": "busy"})
         words = text.split()
         if words[0] == "PERM":
@@ -160,7 +178,7 @@ class World:
             self.sessions[sid].append({"info": info, "parts": [part]})
             self.emit("message.updated", sessionID=sid, info=info)
             self.emit("message.part.updated", sessionID=sid, part=part, time=0)
-        elif words[0] == "SLOW":
+        elif words[0] == "SLOW" or text.startswith(("health check the ", "检查知识库")):  # also the page's Health check
             ev = self.aborts.setdefault(sid, threading.Event())
             ev.clear()
             self.message(sid, "assistant", "aborted" if ev.wait(20) else "slow done")
@@ -318,6 +336,7 @@ class Handler(BaseHTTPRequestHandler):
             sid = WORLD.next("ses")
             WORLD.sessions[sid] = []
             WORLD.meta[sid] = {"time": {"created": time.time(), "updated": time.time()}}
+            WORLD.save()
             return self.reply(200, {"id": sid})
         if len(parts) == 3 and parts[0] == "session" and parts[2] == "prompt_async":
             text = body["parts"][0]["text"]
