@@ -30,8 +30,8 @@ folder under <state dir>/intake/<id>/ (outside the system temporary folder, whic
 it stops): intake-run.json holds the run (saved at every change, so that a client started again shows an
 interrupted run as stopped and can continue it) and intake.log what happened to each file (scripts and
 their exit codes, the assistant's turns, the decisions and why one was not accepted; never a file's text).
-A finished run's folder is removed after KEEP_DAYS days. When the run ends, the conversation goes back to
-the one that was open before it. Standard library only.
+A finished run's folder is removed after KEEP_DAYS days. The run talks to the assistant in its own window
+(the client's intake window, win), so the page's other conversations go on meanwhile. Standard library only.
 """
 import json
 import logging
@@ -204,16 +204,23 @@ def read_decision(path, head, body, lang):
     return out, ""
 
 
+class _Closed:
+    allow_all, questions, permissions, session = False, {}, {}, None
+
+
+_NO_WINDOW = _Closed()
+
+
 class Run:
     """One intake run in a thread. items: [{n, source, file, status, name, reason}] with status waiting,
     working, written, duplicate, manual, failed."""
 
-    def __init__(self, agent, lib, sources, scripts, work, lang, run_id, back_to="", hooks=None):
+    def __init__(self, agent, lib, sources, scripts, work, lang, run_id, win="", hooks=None):
         self.agent = agent
         # an automatic run's (auto.Watcher): item_done(run, item) once a file is done, ended(run) at the end
         self.hooks = hooks or {}
         self.auto = bool(hooks)
-        self.back_to = back_to  # the conversation open before the run, opened again when it ends
+        self.win = win  # the agent's window this run talks in
         self.lib = lib  # {"id", "label", "root"}
         self.scripts = scripts  # the installed kb-incremental's scripts folder
         self.work = work
@@ -240,7 +247,7 @@ class Run:
             with open(os.path.join(work, STATE), encoding="utf-8") as f:
                 data = json.load(f)
             snap = data["run"]
-            run = cls(None, data["lib"], [], data["scripts"], work, data["lang"], snap["id"], data.get("back_to", ""))
+            run = cls(None, data["lib"], [], data["scripts"], work, data["lang"], snap["id"], data.get("win", ""))
             run.items = [dict(it) for it in snap["items"]]
             run.started = data.get("started", 0)
             run.auto = bool(data.get("auto"))
@@ -268,7 +275,7 @@ class Run:
             for it in self.items:
                 counts[it["status"]] = counts.get(it["status"], 0) + 1
             return {"id": self.id, "library": self.lib["id"], "label": self.lib["label"], "root": self.lib["root"],
-                    "auto": self.auto, "state": self.state, "step": self.step, "total": len(self.items), "counts": counts,
+                    "auto": self.auto, "win": self.win, "state": self.state, "step": self.step, "total": len(self.items), "counts": counts,
                     "items": [dict(it) for it in self.items], "consolidation": dict(self.cons),
                     "log": os.path.join(self.work, LOG)}
 
@@ -277,9 +284,10 @@ class Run:
         self.save(snap)
         if self.agent is not None:
             self.agent.feed.emit("intake", run=snap)
+            self.agent.emit_windows()  # the write lock follows the run
 
     def save(self, snap):
-        data = {"run": snap, "lib": self.lib, "scripts": self.scripts, "lang": self.lang, "back_to": self.back_to,
+        data = {"run": snap, "lib": self.lib, "scripts": self.scripts, "lang": self.lang, "win": self.win,
                 "started": self.started, "auto": self.auto}
         path = os.path.join(self.work, STATE)
         try:
@@ -320,8 +328,8 @@ class Run:
             if self.state == "running":
                 self.state = "stopping"
         try:
-            self.agent.stop()
-        except (OSError, RuntimeError):
+            self.agent.stop(self.win)
+        except (OSError, RuntimeError, KeyError):
             log.debug("nothing to stop")
         self.emit()
 
@@ -360,26 +368,8 @@ class Run:
                         it["status"], it["reason"] = "waiting", WHY[self.lang]["stopped"]
             self.note(f"run {self.id} {self.state}: " + ", ".join(f"{k} {v}" for k, v in sorted(self.snapshot()["counts"].items())))
             self.emit()
-            self.go_back()
             if "ended" in self.hooks:
                 self.hooks["ended"](self)
-
-    def go_back(self):
-        """Opens the conversation that was open before the run, so that no file's conversation is the one
-        picked up later."""
-        ag = self.agent
-        if ag is None or ag.state != "ready":
-            return
-        for _ in range(30):  # the last turn may still be ending
-            try:
-                ag.use_session(self.back_to)
-                self.note(f"conversation back to {self.back_to or 'a new one'}")
-                return
-            except RuntimeError:
-                time.sleep(1)
-            except OSError as e:
-                self.note(f"conversation not changed back: {e}")
-                return
 
     def script(self, *args):
         cmd = [sys.executable, os.path.join(self.scripts, args[0])] + [str(x) for x in args[1:]]
@@ -557,7 +547,7 @@ class Run:
             if r > most:
                 self.cset(state="failed", reason=w["rounds"])
                 return
-            unattended = bool(getattr(self.agent, "allow_all", False))
+            unattended = self.window().allow_all
             work = os.path.join(self.work, f"consolidate_{r}")
             result = os.path.join(self.work, f"consolidate_{r}.json")
             os.makedirs(work, mode=0o700, exist_ok=True)
@@ -591,16 +581,21 @@ class Run:
                 return
         self.cset(state="done")
 
+    def window(self):
+        """The agent's window this run talks in (a stand-in when it was closed meanwhile)."""
+        w = self.agent.windows.get(self.win) if self.agent is not None else None
+        return w if w is not None else _NO_WINDOW
+
     def waiting_cards(self):
         """Answers the question cards waiting (Allow everything on); True while a card waits for a person."""
-        ag = self.agent
-        questions = list(ag.questions.values())
-        if getattr(ag, "allow_all", False):
+        ag, w = self.agent, self.window()
+        questions = list(w.questions.values())
+        if w.allow_all:
             for q in questions:
                 answers = ag.answer_recommended(q["id"], PROMPT[self.lang]["fallback"])
                 self.note(f"  question answered as recommended: {json.dumps(answers, ensure_ascii=False)[:300]}")
             return False
-        return bool(questions or ag.permissions)
+        return bool(questions or w.permissions)
 
     def ask(self, text, material, new, timeout=ASK_TIMEOUT):
         """One turn of the assistant: text in a new conversation (or the item's own), until it is idle. The
@@ -614,9 +609,9 @@ class Run:
         seq = ag.feed.last()
         try:
             if new:
-                ag.new()
-            ag.send(text, material)
-        except (OSError, RuntimeError, ValueError) as e:
+                ag.new(self.win)
+            ag.send(text, material, win=self.win)
+        except (OSError, RuntimeError, ValueError, KeyError) as e:
             log.warning("intake message not sent: %s", type(e).__name__)
             raise Stopped(WHY[self.lang]["agent"])
         busy, deadline, waited = False, time.time() + timeout, None
@@ -632,11 +627,13 @@ class Run:
                 waited = None
             for ev in ag.feed.since(seq, 2):
                 seq = ev["seq"]
+                if ev.get("win") not in (None, self.win):
+                    continue  # another window's conversation
                 if ev["type"] == "status":
                     if ev["status"] != "idle":
                         busy = True
                     elif busy:
-                        self.note(f"  assistant done in {time.time() - began:.0f} s (conversation {ag.session})")
+                        self.note(f"  assistant done in {time.time() - began:.0f} s (conversation {self.window().session})")
                         return
                 elif ev["type"] == "agent" and ev.get("state") in ("failed", "simple"):
                     self.note(f"  assistant {ev.get('state')}: {ev.get('reason', '')}")
@@ -648,8 +645,8 @@ class Run:
                     self.note(f"  {'allowed' if ev['type'] == 'auto' else 'card'}: {ev.get('permission')} {what}")
         self.note(f"  no answer in {timeout} s")
         try:
-            ag.stop()
-        except (OSError, RuntimeError):
+            ag.stop(self.win)
+        except (OSError, RuntimeError, KeyError):
             log.debug("nothing to stop")
         raise Stopped(WHY[self.lang]["timeout"])
 

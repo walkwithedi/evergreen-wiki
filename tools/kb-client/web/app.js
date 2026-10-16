@@ -108,6 +108,15 @@
       picked: "{n} chosen",
       choose_picked: "Use the chosen items",
       chat_new: "New conversation",
+      win_add: "New window", win_n: "Conversation {n}", win_intake: "Intake", win_task: "{task} \u00b7 {lib}",
+      win_close: "Close this window (the conversation stays in OpenCode)",
+      win_close_confirm: "The assistant is still working in this window. Stop it and close the window?",
+      win_busy: "working", win_cards: "waiting for you", win_unread: "new reply",
+      win_full: "Eight windows are open; close one first.",
+      intake_window_hint: "This window shows the client's intake. Talk or use other skills in another window meanwhile.",
+      lock_task: "{what} is running", lock_intake: "Intake is running", lock_step: "A management step is running",
+      lock_note: "{what}: the tasks that write the libraries wait until it is done.", lock_view: "Show",
+      session_open: "(open)",
       task_intake: "File material",
       task_note: "Quick note",
       task_notes: "File quick notes",
@@ -131,7 +140,7 @@
       intake_step_consolidate: "Consolidating, round {round}/{rounds}: {files} files done, {changes} summary changes, {queue} left in the queue",
       intake_cons_done: "Consolidated: {files} files, {changes} changes to the status card and other summary files.",
       intake_cons_failed: "Consolidation not finished: {reason}",
-      intake_long: "Filing and consolidating take a long time (hours for many files). You can leave this page as it is; the result shows here when it is done. To use OpenCode for something else meanwhile, open another terminal and run opencode there, but do not change this library from it, so that only one of them writes to it.",
+      intake_long: "Filing and consolidating take a long time (hours for many files). You can leave this page as it is; the result shows in this window when it is done. Meanwhile talk or use other skills in another window; writing a library from there asks first, so that only the intake changes it.",
       intake_cli: "How to open it from a terminal", intake_cli_copy: "Copy",
       intake_cli_hint: "In a terminal, go to your own work folder and run:",
       intake_terminal_off: "Not while filing: it would join the conversation the run is using.",
@@ -362,6 +371,15 @@
       picked: "已选 {n} 项",
       choose_picked: "用选中的这些",
       chat_new: "新对话",
+      win_add: "新窗口", win_n: "对话 {n}", win_intake: "入库", win_task: "{task}\u00b7{lib}",
+      win_close: "关闭这个窗口（对话仍保存在 OpenCode 里）",
+      win_close_confirm: "助手还在这个窗口里处理。停止并关闭这个窗口吗？",
+      win_busy: "处理中", win_cards: "等你处理", win_unread: "有新回复",
+      win_full: "已经开了 8 个窗口，先关掉一个。",
+      intake_window_hint: "这个窗口显示客户端执行的入库。入库期间可以在其他窗口对话或使用别的技能。",
+      lock_task: "「{what}」正在运行", lock_intake: "正在入库", lock_step: "管理步骤正在运行",
+      lock_note: "{what}：写知识库的任务要等它结束。", lock_view: "查看",
+      session_open: "（已打开）",
       task_intake: "入库",
       task_note: "随手记",
       task_notes: "整理随手记",
@@ -385,7 +403,7 @@
       intake_step_consolidate: "整合第 {round}/{rounds} 轮：已整合 {files} 个，状态卡等改动 {changes} 条，队列还剩 {queue} 个",
       intake_cons_done: "整合完成：{files} 个文件，状态卡等汇总文件改动 {changes} 条。",
       intake_cons_failed: "整合没有做完：{reason}",
-      intake_long: "入库和整合会运行较长时间（文件多时可能要几个小时），可以把页面留在这里不用管，做完会在这里显示结果。需要用 OpenCode 做别的事，可以另开一个终端运行 opencode 继续使用；那边请不要改这个知识库，以免两边同时写。",
+      intake_long: "入库和整合会运行较长时间（文件多时可能要几个小时），可以把页面留在这里不用管，做完会在这个窗口里显示结果。期间可以在其他窗口对话或使用别的技能；那边要写知识库时会先弹卡片询问，以免和入库同时改。",
       intake_cli: "如何在命令行打开", intake_cli_copy: "复制",
       intake_cli_hint: "在终端里进入自己的工作文件夹，运行：",
       intake_terminal_off: "入库期间不能用：它会接到入库正在用的对话上。",
@@ -1161,7 +1179,89 @@
   // ---------- conversation ----------
 
   var chat = { source: null, phase: "", ready: false, busy: false, restarting: false, simple: false, allowAll: false, msgs: {}, parts: {}, cards: {},
-               model: "", workdir: "", recent: [], models: [] };
+               model: "", workdir: "", recent: [], models: [],
+               win: "", windows: [], lock: null, unread: {} };  // the window shown, all windows, the write lock
+
+  var MAX_WINDOWS = 8;  // as agent.MAX_WINDOWS; the intake window is not counted
+
+  function shown() {
+    return chat.windows.filter(function (w) { return w.id === chat.win; })[0] || { id: chat.win, kind: "chat", status: "idle", cards: 0 };
+  }
+
+  function libLabel(id) {
+    var l = ((state && state.libraries) || []).filter(function (x) { return x.id === id; })[0];
+    return l ? l.label : id;
+  }
+
+  function winLabel(w, i) {
+    if (w.kind === "intake") return t("win_intake");
+    if (w.kind === "task" && w.task) {
+      var task = t("task_" + w.task.name);
+      return w.task.library ? t("win_task", { task: task, lib: libLabel(w.task.library) }) : task;
+    }
+    return w.title || t("win_n", { n: i + 1 });
+  }
+
+  // What holds the write lock, as a short phrase; "" when nothing does.
+  function lockWhat(lock) {
+    if (!lock) return "";
+    if (lock.holder === "intake") return t("lock_intake");
+    if (lock.holder === "step") return t("lock_step");
+    var task = t("task_" + lock.task);
+    return t("lock_task", { what: lock.library ? t("win_task", { task: task, lib: libLabel(lock.library) }) : task });
+  }
+
+  function drawTabs() {
+    var box = $("win-tabs");
+    box.textContent = "";
+    var n = 0;
+    chat.windows.forEach(function (w) {
+      var i = w.kind === "chat" ? n++ : n;
+      var tab = el("div", { "class": "win-tab", role: "tab" });
+      tab.classList.toggle("active", w.id === chat.win);
+      tab.setAttribute("aria-selected", w.id === chat.win ? "true" : "false");
+      var busy = w.status && w.status !== "idle";
+      tab.classList.toggle("busy", !!busy);
+      tab.classList.toggle("cards", w.cards > 0);
+      tab.classList.toggle("unread", !!chat.unread[w.id] && w.id !== chat.win);
+      var name = el("button", { type: "button", "class": "win-name" }, winLabel(w, i));
+      var marks = [busy ? t("win_busy") : "", w.cards > 0 ? t("win_cards") : "", chat.unread[w.id] ? t("win_unread") : ""].filter(Boolean);
+      name.title = marks.join(" \u00b7 ");
+      name.addEventListener("click", function () { showWindow(w.id); });
+      tab.appendChild(name);
+      if (!(w.kind === "intake" && intakeRunning())) {
+        var x = el("button", { type: "button", "class": "win-close", "aria-label": t("win_close"), title: t("win_close") }, "\u00d7");
+        x.addEventListener("click", function () { closeWindow(w); });
+        tab.appendChild(x);
+      }
+      box.appendChild(tab);
+    });
+    var add = el("button", { type: "button", "class": "quiet small", id: "win-add", title: t("win_add") }, "+");
+    add.disabled = !chat.ready || chat.simple ||
+      chat.windows.filter(function (w) { return w.kind !== "intake"; }).length >= MAX_WINDOWS;
+    if (add.disabled && chat.ready && !chat.simple) add.title = t("win_full");
+    add.addEventListener("click", function () {
+      api("POST", "/api/chat/open", {}).then(function (r) { chatLoad(r.win); })
+        .catch(function (e) { note(String(e.message), "error"); });
+    });
+    box.appendChild(add);
+    show(box, chat.ready && !chat.simple);
+  }
+
+  function showWindow(win) {
+    if (win === chat.win) return;
+    api("POST", "/api/chat/focus", { win: win }).catch(function () {});
+    chatLoad(win);
+  }
+
+  function closeWindow(w) {
+    var busy = (w.status && w.status !== "idle") || w.cards > 0;
+    if (busy && !window.confirm(t("win_close_confirm"))) return;
+    api("POST", "/api/chat/close", { win: w.id, stop: busy }).then(function (r) {
+      delete chat.unread[w.id];
+      if (w.id === chat.win) chatLoad(r.current);
+    }).catch(function (e) { note(String(e.message), "error"); });
+  }
 
   function chatInfo(text, output) {
     $("chat-info").textContent = text || "";
@@ -1171,24 +1271,39 @@
   }
 
   function chatEnable() {
-    var on = chat.ready && !chat.busy;
-    $("chat-terminal").disabled = !chat.ready || intakeRunning();
-    $("chat-terminal").title = intakeRunning() ? t("intake_terminal_off") : "";
+    var w = shown();
+    var inIntake = w.kind === "intake";
+    var lock = chat.lock;
+    var mine = !!(lock && lock.win === chat.win);
+    $("chat-terminal").disabled = !chat.ready || inIntake;
+    $("chat-terminal").title = inIntake && intakeRunning() ? t("intake_terminal_off") : "";
     $("chat-allow-all").disabled = !chat.ready || chat.simple;
     $("chat-allow-all").setAttribute("data-t", chat.allowAll ? "allow_all_on" : "allow_all");
     $("chat-allow-all").textContent = t(chat.allowAll ? "allow_all_on" : "allow_all");
     $("chat-allow-all").classList.toggle("on", chat.allowAll);
     var noLib = state !== null && !localLibs().length;
-    var filing = intakeRunning();
-    $("chat-send").disabled = !chat.ready || filing;  // while the assistant works, a message waits its turn
+    var anyBusy = chat.windows.some(function (x) { return (x.status && x.status !== "idle") || x.cards > 0; });
+    // while the assistant works, a message waits its turn; a task window waits for the lock
+    $("chat-send").disabled = !chat.ready || inIntake || (w.kind === "task" && !!lock && !mine);
+    $("input").disabled = inIntake;
+    $("input").placeholder = inIntake ? t("intake_window_hint") : "";
     Array.prototype.forEach.call(document.querySelectorAll("[data-task]"), function (b) {
-      var batch = b.getAttribute("data-task") === "intake" || b.getAttribute("data-task") === "resume";
-      b.disabled = !on || noLib || filing || (chat.simple && batch);
-      b.title = noLib ? t("chat_no_library") : (chat.simple && batch ? t("simple_no_intake") : "");
+      var name = b.getAttribute("data-task");
+      var batch = name === "intake" || name === "resume";
+      var writes = name !== "note";  // every task but a quick note writes the libraries: one at a time
+      b.disabled = !chat.ready || noLib || (writes && !!lock) || (chat.simple && batch) ||
+        (!writes && (chat.busy || inIntake));
+      b.title = noLib ? t("chat_no_library") : (chat.simple && batch ? t("simple_no_intake")
+        : writes && lock ? lockWhat(lock) : "");
     });
     showTasks();
-    $("chat-new").disabled = !chat.ready || chat.busy || filing;
-    ["workdir-change", "workdir-recent", "sessions"].forEach(function (id) { $(id).disabled = !chat.ready || chat.busy || filing; });
+    show($("lock-note"), !!lock && !mine && chat.ready);
+    $("lock-text").textContent = lock ? t("lock_note", { what: lockWhat(lock) }) : "";
+    show($("lock-view"), !!(lock && lock.win));
+    $("chat-new").disabled = !chat.ready || chat.busy || inIntake;
+    ["workdir-change", "workdir-recent"].forEach(function (id) { $(id).disabled = !chat.ready || anyBusy || !!lock; });
+    $("sessions").disabled = !chat.ready || chat.simple;
+    drawTabs();
     show($("chat-stop"), chat.ready && chat.busy);
     $("chat-state").textContent = !chat.ready ? "" : (chat.busy ? t("chat_busy") : t("chat_ready"));
     renderChecklist();
@@ -1752,9 +1867,23 @@
   }
 
   function chatEvent(ev) {
+    if (ev.type === "windows") {
+      chat.windows = ev.windows || [];
+      chat.lock = ev.lock || null;
+      if (!chat.windows.some(function (w) { return w.id === chat.win; }) && chat.windows.length) chatLoad(ev.current);
+      chatEnable();
+      return;
+    }
+    if (ev.win && ev.win !== chat.win) {  // another window: its tab says what happens there
+      if ((ev.type === "part" || ev.type === "delta") && ev.role === "assistant" && !chat.unread[ev.win]) {
+        chat.unread[ev.win] = true;
+        drawTabs();
+      }
+      return;
+    }
     if (ev.type === "agent") {
       chatAgent(ev);
-      if (ev.state === "ready") chatLoad();  // a conversation picked up again brings its history
+      if (ev.state === "ready") chatLoad(chat.win);  // a conversation picked up again brings its history
     }
     else if (ev.type === "part") {
       showPart(ev);
@@ -1852,14 +1981,17 @@
   function sessionsCard() {
     api("POST", "/api/chat/sessions", {}).then(function (r) {
       var c = card("sessions", t("sessions_title"));
-      var list = r.sessions.filter(function (x) { return x.id !== r.current; });
+      var current = shown().session;
+      var list = r.sessions.filter(function (x) { return x.id !== current; });
       if (!list.length) c.appendChild(el("p", { "class": "hint" }, t("sessions_none")));
       list.forEach(function (x) {
         var when = typeof x.updated === "number" && x.updated ? new Date(x.updated > 1e12 ? x.updated : x.updated * 1000).toLocaleString() : "";
-        var b = el("button", { type: "button", "class": "quiet session" }, (x.title || t("session_untitled")) + (when ? "  \u00b7  " + when : ""));
+        var b = el("button", { type: "button", "class": "quiet session" }, (x.title || t("session_untitled")) + (when ? "  \u00b7  " + when : "")
+          + (r.open && r.open[x.id] ? "  " + t("session_open") : ""));
         b.addEventListener("click", function () {
           dropCard("sessions");
-          api("POST", "/api/chat/switch", { session: x.id }).then(chatLoad).catch(function (e) { note(String(e.message), "error"); });
+          api("POST", "/api/chat/open", { session: x.id }).then(function (o) { chatLoad(o.win); })
+            .catch(function (e) { note(String(e.message), "error"); });
         });
         c.appendChild(b);
       });
@@ -1885,7 +2017,7 @@
   // the client quits. Switching it on also answers the waiting cards.
   function setAllowAll(on) {
     if (on && !window.confirm(t("allow_all_confirm"))) return;
-    api("POST", "/api/chat/allow_all", { on: on }).catch(function (e) { note(String(e.message), "error"); });
+    api("POST", "/api/chat/allow_all", { on: on, win: chat.win }).catch(function (e) { note(String(e.message), "error"); });
   }
 
   // ---------- graph ----------
@@ -2118,8 +2250,10 @@
     cancelContinue();
     runs.autoFrom = auto ? { id: p.id, done: p.done } : null;
     runs.lastPlan = ""; runs.errored = false; runs.stopped = false;
-    api("POST", "/api/chat/new", {}).then(function () {
-      say(withWork(t("say_resume", { lib: p.label })));
+    var w = shown();
+    var win = w.kind === "task" ? w.id : "";
+    api("POST", "/api/chat/new", { win: chat.win }).then(function () {
+      return writeTask("resume", w.task ? w.task.library : "", withWork(t("say_resume", { lib: p.label })), win);
     }).catch(function (e) { note(String(e.message), "error"); });
   }
 
@@ -2288,14 +2422,21 @@
     chatEnable();
   }
 
-  function chatLoad() {
-    return api("GET", "/api/chat/state").then(function (st) {
+  // Shows the window win (the current one when not given) from the server's state, and follows the stream.
+  function chatLoad(win) {
+    return api("GET", "/api/chat/state" + (win ? "?win=" + encodeURIComponent(win) : "")).then(function (st) {
       clearChat();
+      cancelContinue();
+      chat.win = st.agent.win || "";
+      chat.windows = st.agent.windows || [];
+      chat.lock = st.agent.lock || null;
+      delete chat.unread[chat.win];
       st.history.forEach(showPart);
       chatAgent(st.agent);
       chatBar(st.agent);
       chat.allowAll = !!st.agent.allow_all;
       chat.busy = st.agent.status && st.agent.status !== "idle";
+      drawIntake();
       (st.agent.permissions || []).forEach(permissionCard);
       (st.agent.questions || []).forEach(questionCard);
       compactTurns();
@@ -2303,6 +2444,9 @@
       if (chat.source) chat.source.close();
       chat.source = new EventSource("/api/chat/events?after=" + st.seq + "&t=" + encodeURIComponent(token));
       chat.source.onmessage = function (m) { chatEvent(JSON.parse(m.data)); };
+    }).catch(function (e) {
+      if (win && e.status === 404) return chatLoad();  // that window was closed meanwhile
+      throw e;
     });
   }
 
@@ -2314,7 +2458,7 @@
 
   function say(text, material) {
     if (!text.trim()) return;
-    var body = { text: text };
+    var body = { text: text, win: chat.win };
     if (material && material.length) body.material = material;
     if (chat.model) body.model = chat.model;
     if (chat.busy) {
@@ -2376,11 +2520,19 @@
     return state && state.work ? text + "\n" + t("say_work", { path: state.work }) : text;
   }
 
+  // A write task's request, sent in a task window: win when it is the task window to go on in, else a new one.
+  function writeTask(name, lib, text, win) {
+    var body = { task: name, library: lib, text: text };
+    if (win) body.win = win;
+    return api("POST", "/api/chat/task", body).then(function (r) { if (r.win !== chat.win) chatLoad(r.win); })
+      .catch(function (e) { note(String(e.message), "error"); });
+  }
+
   function task(name) {
     if (name === "note") { noteCard(); return; }
     if (name === "resume" && intakeLeft()) { startIntake({ resume: true }); return; }
     pickLibrary(function (lib) {
-      if (name !== "intake") { say(withWork(t("say_" + name, { lib: lib.label }))); return; }
+      if (name !== "intake") { writeTask(name, lib.id, withWork(t("say_" + name, { lib: lib.label }))); return; }
       openBrowser((state && state.home) || "", function (paths) {
         startIntake({ library: lib.id, paths: paths });
       }, true);
@@ -2417,10 +2569,13 @@
     return s !== "done" && s !== "failed";
   }
 
+  // The run takes Allow everything from the window it is started in, then shows in the intake window.
   function startIntake(body) {
+    body.win = chat.win;
     api("POST", "/api/intake", body).then(function (r) {
       intake.run = r.run;
       intake.closed = "";
+      if (r.run.win && r.run.win !== chat.win) { chatLoad(r.run.win); return; }
       drawIntake();
       chatEnable();
     }).catch(function (e) { note(String(e.message), "error"); });
@@ -2438,9 +2593,10 @@
 
   function drawIntake() {
     var r = intake.run, box = $("intake");
-    // while a run goes on: it takes long, the page can be left alone, OpenCode can be used from a terminal
-    show($("intake-long"), intakeRunning());
-    if (!r || intake.closed === r.id + r.state) { show(box, false); return; }
+    var here = shown().kind === "intake" || (r && r.win === chat.win);  // the run shows in its own window
+    // while a run goes on: it takes long, the page can be left alone, the other windows can be used
+    show($("intake-long"), intakeRunning() && here);
+    if (!r || !here || intake.closed === r.id + r.state) { show(box, false); return; }
     show(box, true);
     box.textContent = "";
     var c = r.counts || {};
@@ -2844,12 +3000,12 @@
   });
   $("chat-stop").addEventListener("click", function () {
     runs.stopped = true;
-    api("POST", "/api/chat/stop", {}).catch(function () {});
+    api("POST", "/api/chat/stop", { win: chat.win }).catch(function () {});
   });
   $("intake-cli-copy").addEventListener("click", function () { copyText("opencode", $("intake-cli-copy")); });
   $("chat-terminal").addEventListener("click", function () {
     if (!window.confirm(t("terminal_confirm"))) return;
-    api("POST", "/api/chat/terminal", {}).then(function (r) {
+    api("POST", "/api/chat/terminal", { win: chat.win }).then(function (r) {
       note(t("terminal_opened", { name: r.terminal }), "auto");
     }).catch(function (e) {
       note(e.status === 409 ? t(String(e.message).indexOf("terminal") >= 0 ? "terminal_none" : "terminal_no_session")
@@ -2858,8 +3014,9 @@
   });
   $("chat-allow-all").addEventListener("click", function () { setAllowAll(!chat.allowAll); });
   $("chat-new").addEventListener("click", function () {
-    api("POST", "/api/chat/new", {}).catch(function (e) { note(String(e.message), "error"); });
+    api("POST", "/api/chat/new", { win: chat.win }).catch(function (e) { note(String(e.message), "error"); });
   });
+  $("lock-view").addEventListener("click", function () { if (chat.lock && chat.lock.win) showWindow(chat.lock.win); });
   chatEnable();
   if (!token) { result("error", t("no_token")); return; }
   refresh().then(function () { if (state) { chatStart(); loadSkills(); loadIntake(); } });

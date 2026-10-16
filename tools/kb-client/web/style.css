@@ -534,3 +534,22 @@ body.kb-open .kb-toggle { background: var(--soft); color: var(--accent); }
 .log-where { overflow-wrap: anywhere; }
 .log-where code { font-size: 12.5px; }
 .log-where .log-note { display: block; font-size: 12px; }
+
+/* conversation windows: one tab each; a dot for working, a mark for a card waiting, bold for a new reply */
+.win-tabs { display: flex; align-items: flex-end; gap: 4px; border-bottom: 1px solid var(--line);
+  overflow-x: auto; scrollbar-width: thin; }
+.win-tab { display: flex; align-items: center; flex: 0 1 auto; min-width: 0; max-width: 220px;
+  border: 1px solid var(--line); border-bottom: none; border-radius: 6px 6px 0 0; background: var(--bg); }
+.win-tab.active { background: var(--panel); border-color: var(--accent); box-shadow: 0 1px 0 var(--panel); }
+.win-tab button { border: none; background: none; padding: 5px 8px; font-size: 13px; }
+.win-tab .win-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; color: var(--muted); }
+.win-tab.active .win-name { color: var(--ink); font-weight: 600; }
+.win-tab.unread .win-name { color: var(--ink); font-weight: 600; }
+.win-tab .win-name::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 6px;
+  border-radius: 50%; vertical-align: middle; background: transparent; }
+.win-tab.busy .win-name::before { background: var(--accent); }
+.win-tab.cards .win-name::before { background: var(--warn); }
+.win-tab .win-close { padding: 5px 7px 5px 2px; color: var(--muted); }
+.win-tab .win-close:hover { color: var(--bad); }
+#win-add { margin-bottom: 2px; flex: none; }
+.lock-note { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; color: var(--warn); margin: 0; }

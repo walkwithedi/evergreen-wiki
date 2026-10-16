@@ -2,6 +2,14 @@
 
 All three skills share one version number. To release, update this file, the "Version:" line of every SKILL.md and the plugin manifests together and merge to main; the release workflow then publishes v<version>.
 
+## Unreleased
+
+The browser client keeps several conversation windows, and the tasks that write the libraries run one at a time. The skills are unchanged.
+- tools/kb-client windows: a row of tabs above the conversation, one OpenCode conversation each (agent.Window), at most eight plus the intake's own window. POST /api/chat/open (a new window, or with --chat-first an earlier conversation, in the window that has it or a new one), /api/chat/close (a working window only with stop), /api/chat/focus; send, new, stop, allow_all and terminal take win, GET /api/chat/state?win= shows one window, and the conversation events carry win. A "windows" event lists the windows (kind chat, task or intake, title from OpenCode, status, cards waiting, Allow everything) and the write lock. The windows and the current one are kept in kb-client.json (windows, current; with --chat-first windows_by_dir per work folder, which takes over the earlier sessions entry) and come back after a restart; a background tab marks work, waiting cards and new replies. /api/chat/switch is replaced by open. Simple mode keeps one window.
+- tools/kb-client write lock: an intake run (manual or automatic), a task window while the assistant works there or a card waits, and Set up, Roll back, Move and Uninstall exclude one another (409 locked); Back up, the graph and the conversations in other windows do not. Health check, Archive old versions, File quick notes and the skill's batch continuation go through POST /api/chat/task (task, library, text, win), each in a task window; a later message in a task window takes the lock again. While one window holds the lock, requests from the others that edit files in a library, run kb-incremental's or kb-note's scripts or run a command naming those folders show a card, whatever Allow everything says (agent.touches); reading and read-only commands are answered as before.
+- tools/kb-client intake: a run talks in the intake window instead of the current conversation, so the other windows stay usable and the run no longer switches back at the end (intake.Run takes win instead of back_to). A run from the page takes Allow everything from the window it was started in; an automatic run switches it on in the intake window only and starts once no write task holds the lock, without waiting for the other windows.
+- Allow everything is per window.
+
 ## 1.21.0
 
 The browser client files a library's material by itself, unattended, and offers an upgrade of the knowledge-base skills only when it has a newer version. The skills are unchanged.
