@@ -55,34 +55,54 @@ TARGETS = {
 }
 
 
+def remove_any(path):
+    if os.path.islink(path) or os.path.isfile(path):
+        os.remove(path)
+    elif os.path.isdir(path):
+        shutil.rmtree(path)
+
+
 def install_one(name, dest_root, a, desc):
+    """The new copy is made complete next to the old folder first (.NAME.new), then swapped in, so a
+    failed copy leaves the installed skill as it was."""
     src = os.path.join(ROOT, "skills", name)
     dest = os.path.join(dest_root, name)
-    if os.path.lexists(dest):
-        if not a.force:
-            print(f"skip: {dest} exists (use --force to replace)")
-            return False
-        if not a.dry_run:
-            if os.path.islink(dest) or os.path.isfile(dest):
-                os.remove(dest)
-            else:
-                shutil.rmtree(dest)
+    exists = os.path.lexists(dest)
+    if exists and not a.force:
+        print(f"skip: {dest} exists (use --force to replace)")
+        return False
     action = "link" if a.link else "copy"
     print(f"{action}: skills/{name} -> {dest}")
     if a.dry_run:
         return True
     os.makedirs(dest_root, exist_ok=True)
-    if a.link:
-        os.symlink(src, dest, target_is_directory=True)
-        return True
-    shutil.copytree(src, dest, ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store"))
-    if desc:
-        p = os.path.join(dest, "SKILL.md")
-        with open(p, encoding="utf-8") as f:
-            text = f.read()
-        text = re.sub(r"^description: .*$", lambda m: "description: " + desc[name], text, count=1, flags=re.M)
-        with open(p, "w", encoding="utf-8", newline="\n") as f:
-            f.write(text)
+    new, old = os.path.join(dest_root, f".{name}.new"), os.path.join(dest_root, f".{name}.old")
+    remove_any(new)
+    remove_any(old)
+    try:
+        if a.link:
+            os.symlink(src, new, target_is_directory=True)
+        else:
+            shutil.copytree(src, new, ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store"))
+            if desc:
+                p = os.path.join(new, "SKILL.md")
+                with open(p, encoding="utf-8") as f:
+                    text = f.read()
+                text = re.sub(r"^description: .*$", lambda m: "description: " + desc[name], text, count=1, flags=re.M)
+                with open(p, "w", encoding="utf-8", newline="\n") as f:
+                    f.write(text)
+        if exists:
+            os.rename(dest, old)
+        try:
+            os.rename(new, dest)
+        except BaseException:
+            if exists:
+                os.rename(old, dest)
+            raise
+    except BaseException:
+        remove_any(new)
+        raise
+    remove_any(old)
     return True
 
 
@@ -152,6 +172,9 @@ MSG = {
         "existing_items": ["Folder", "Label", "Id", "Scope"],
         "existing_next": "After registering, tell your agent \"init {label}\" to complete its settings from its own spec.",
         "registered_only": "Library {root} registered in {path} as it is.",
+        "upgraded": "Skills upgraded: {skills}.",
+        "was": "{name} {new} (was {old})", "new_skill": "{name} {new} (new)",
+        "kept": "Libraries unchanged. Restart your agent to use the new skills.",
         "yes": "Y/n", "no": "y/N",
     },
     "zh": {
@@ -197,6 +220,9 @@ MSG = {
         "existing_items": ["文件夹", "名称", "id", "范围"],
         "existing_next": "登记后对助手说「初始化 {label}」，由助手按库内规范补齐配置。",
         "registered_only": "已把 {root} 按原样登记到 {path}。",
+        "upgraded": "技能已升级：{skills}。",
+        "was": "{name} {new}（原 {old}）", "new_skill": "{name} {new}（新装）",
+        "kept": "知识库不变。重启助手后用上新技能。",
         "yes": "Y/n", "no": "y/N",
     },
 }
@@ -268,6 +294,17 @@ def load_descriptions(path):
     return desc
 
 
+def skill_descriptions(lang, descriptions=None):
+    """The descriptions the wizard writes into SKILL.md: the file given, else the language's own (none
+    for English, whose descriptions are in the skills)."""
+    if descriptions:
+        return load_descriptions(descriptions)
+    if lang != "en":
+        with open(os.path.join(ROOT, "locales", lang, "descriptions.json"), encoding="utf-8") as f:
+            return json.load(f)
+    return None
+
+
 def install_skills(q, m, target, dest_root, lang, descriptions=None):
     if target == "claude-code":
         print(m["plugin_note"])
@@ -278,12 +315,7 @@ def install_skills(q, m, target, dest_root, lang, descriptions=None):
     if force:
         kb_manage.backup_once(MANAGE_DEFAULTS, "before installing skills", lang, [dest_root])
     opts = argparse.Namespace(force=force, dry_run=False, link=False)
-    desc = None
-    if descriptions:
-        desc = load_descriptions(descriptions)
-    elif lang != "en":
-        with open(os.path.join(ROOT, "locales", lang, "descriptions.json"), encoding="utf-8") as f:
-            desc = json.load(f)
+    desc = skill_descriptions(lang, descriptions)
     done = sum(install_one(n, dest_root, opts, desc) for n in SKILLS)
     kb_manage.record(skills_dir=dest_root)
     print(f"installed {done} of {len(SKILLS)} skills in {dest_root}")
@@ -470,8 +502,14 @@ def setup_library(q, m, il, lang, preset=None, preset_default="life"):
 
 
 def add_instructions_line(q, m, il, target, reg, lang):
-    line = il.instructions_line(reg, lang)
     path, verified = INSTRUCTION_FILES.get(target, (None, False))
+    write_line(q, m, il, path, verified, reg, lang)
+
+
+def write_line(q, m, il, path, verified, reg, lang):
+    """Shows the knowledge-base line for the instructions file at path and writes it after a question;
+    asks nothing when the file already has it. Without a path the line is shown to be pasted."""
+    line = il.instructions_line(reg, lang)
     if not path:
         print(m["line_paste"])
         print("  " + line)
@@ -489,6 +527,71 @@ def add_instructions_line(q, m, il, target, reg, lang):
         kb_manage.record(instructions=path)
     else:
         print(m["skipped_line"])
+
+
+def skill_version(folder):
+    """The Version: line of a skill folder's SKILL.md, or ""."""
+    try:
+        with open(os.path.join(folder, "SKILL.md"), encoding="utf-8", errors="replace") as f:
+            m = re.search(r"^Version:\s*(\S+)", f.read(200000), re.M)
+    except OSError:
+        return ""
+    return m.group(1) if m else ""
+
+
+def usable_library(reg):
+    """True when the registry names a library that can be used: a local one whose folder is there, or
+    one that is not a local folder (it cannot be checked from here)."""
+    for lib in reg.get("libraries", []):
+        backend = lib.get("backend") or {}
+        if backend.get("type", "local") != "local":
+            return True
+        root = backend.get("root")
+        if root and os.path.isdir(os.path.expanduser(root)):
+            return True
+    return False
+
+
+def upgrade(asker=Asker, lang="en", places=None, default_root=None, instructions=None, descriptions=None,
+            preset_default="life"):
+    """Replaces the knowledge-base skills with this release, asking nothing about where or whether.
+    places maps a skill to the skills folder its copy in effect is in; a skill without one goes to
+    default_root. The present state is backed up first. With a usable library the libraries stay as they
+    are and only the knowledge-base line in instructions (a file path, or None to show it) is refreshed,
+    after a question when it changes; without one the library questions of the wizard follow."""
+    sys.path.insert(0, os.path.join(ROOT, "skills", "kb-incremental", "scripts"))
+    import init_library as il
+    q = asker(lang)
+    m = MSG[lang]
+    del kb_manage._auto[:]  # one backup per upgrade, also when a client runs several
+    places = places or {}
+    roots = {n: places.get(n) or default_root or TARGETS["agents"][0] for n in SKILLS}
+    olds = {n: skill_version(os.path.join(roots[n], n)) for n in SKILLS}
+    dirs = list(dict.fromkeys(roots[n] for n in SKILLS))
+    desc = skill_descriptions(lang, descriptions)  # a bad descriptions file stops before anything is written
+    kb_manage.backup_once(MANAGE_DEFAULTS, "before upgrading skills", lang, dirs)
+    opts = argparse.Namespace(force=True, dry_run=False, link=False)
+    for n in SKILLS:
+        install_one(n, roots[n], opts, desc)
+    for d in dirs:
+        kb_manage.record(skills_dir=d)
+    done = [m["was" if olds[n] else "new_skill"].format(name=n, new=skill_version(os.path.join(roots[n], n)),
+                                                       old=olds[n]) for n in SKILLS]
+    print(m["upgraded"].format(skills=", ".join(done) if lang == "en" else "、".join(done)))
+    verified = next((v for p, v in INSTRUCTION_FILES.values() if p == instructions), True)
+    reg = il.load_registry_or_new(il.registry_path(), lang)
+    if usable_library(reg):
+        write_line(q, m, il, instructions, verified, reg, lang)
+        print(m["kept"])
+        return
+    reg = setup_library(q, m, il, lang, None, preset_default)
+    if reg is None:
+        print(m["later"])
+        return
+    write_line(q, m, il, instructions, verified, reg, lang)
+    print("\n" + m["done"])
+    for t in m["tries"]:
+        print("  " + t)
 
 
 def wizard(asker=Asker, lang=None, agent=None, preset=None, descriptions=None, preset_default="life",

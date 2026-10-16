@@ -407,6 +407,59 @@ class KbClientTest(unittest.TestCase):
         x = next(y for y in self.server.get("/api/skills")[1]["skills"] if y["dir"] == kb[0]["dir"])
         self.assertEqual((x["version"], x["release"]), ("0.1.0", kb[0]["release"]))
 
+    def set_version(self, folder, version):
+        path = os.path.join(folder, "SKILL.md")
+        write(path, re.sub(r"(?m)^Version: .*$", "Version: " + version, read(path)))
+
+    def release(self):
+        return re.search(r"(?m)^Version: (\S+)", read(os.path.join(ROOT, "skills", "kb-note", "SKILL.md"))).group(1)
+
+    def test_upgrade_with_a_library_asks_nothing(self):
+        self.assertEqual(self.setup_library()[0], "ok")
+        skills = self.p("home", ".claude", "skills")
+        self.set_version(os.path.join(skills, "kb-note"), "0.1.0")
+        write(os.path.join(skills, "kb-note", "mine.md"), "a local change\n")
+        before = self.server.get("/api/state")[1]["backups"]
+        result, out, asked = self.server.run("skill_upgrade", [])
+        self.assertEqual(result, "ok", out)
+        self.assertEqual(asked, [])  # no agent, install, replace or library question; the line is there
+        self.assertIn("kb-note " + self.release() + " (was 0.1.0)", out)
+        self.assertIn("Libraries unchanged", out)
+        self.assertNotIn("No library set up", out)
+        self.assertEqual(sorted(os.listdir(skills)), ["kb-incremental", "kb-note", "kb-query"])
+        self.assertFalse(os.path.exists(os.path.join(skills, "kb-note", "mine.md")))
+        self.assertEqual(self.server.get("/api/state")[1]["backups"], before + 1)  # backed up first
+        self.assertFalse(os.path.exists(self.p("home", ".config", "opencode", "skills")))  # only where in effect
+        # a changed line is written after one question, in the file OpenCode reads it from
+        claude = self.p("home", ".claude", "CLAUDE.md")
+        write(claude, read(claude).replace("team projects", "an older scope"))
+        result, out, asked = self.server.run("skill_upgrade", [True])
+        self.assertEqual(result, "ok", out)
+        self.assertEqual(len(asked), 1)
+        self.assertIn("I keep knowledge bases: Work (team projects).", read(claude))
+        self.assertFalse(os.path.exists(self.p("home", ".config", "opencode", "AGENTS.md")))
+
+    def test_upgrade_replaces_only_the_copy_in_effect(self):
+        self.assertEqual(self.setup_library()[0], "ok")
+        claude = self.p("home", ".claude", "skills")
+        own = self.p("home", ".config", "opencode", "skills")
+        shutil.copytree(claude, own)
+        self.set_version(os.path.join(own, "kb-query"), "0.1.0")
+        self.set_version(os.path.join(claude, "kb-query"), "0.2.0")
+        result, out, _ = self.server.run("skill_upgrade", [])
+        self.assertEqual(result, "ok", out)
+        self.assertIn("Version: " + self.release(), read(os.path.join(own, "kb-query", "SKILL.md")))
+        self.assertIn("Version: 0.2.0", read(os.path.join(claude, "kb-query", "SKILL.md")))  # shadowed: left alone
+
+    def test_upgrade_without_a_usable_library_offers_one(self):
+        self.assertEqual(self.setup_library()[0], "ok")
+        shutil.rmtree(self.p("home", "kb", "work"))  # registered, but the folder is gone
+        result, out, asked = self.server.run("skill_upgrade", [False])
+        self.assertEqual(result, "ok", out)
+        self.assertEqual(len(asked), 1)  # set up a library?
+        self.assertIn("kb-note " + self.release(), out)
+        self.assertIn("No library set up", out)
+
     def test_quit(self):
         work = self.server.get("/api/state")[1]["work"]
         self.assertTrue(os.path.isdir(work))
@@ -942,6 +995,13 @@ class ChatTest(unittest.TestCase):
         ev.until(lambda e: e["type"] == "part" and e["role"] == "assistant" and e["text"] == "echo: after the restart",
                  "answer after the restart")
 
+    def test_upgrade_restarts_opencode(self):
+        ev = self.ready()
+        result, out, asked = self.server.run("skill_upgrade", [False])  # no library: do not set one up
+        self.assertEqual(result, "ok", out)
+        self.assertTrue(os.path.isfile(self.p("home", ".config", "opencode", "skills", "kb-note", "SKILL.md")))
+        ev.until(lambda e: e["type"] == "agent" and e["state"] == "starting" and e.get("restart"), "restart")
+
     def test_bad_requests(self):
         self.ready()
         s = self.server
@@ -1424,6 +1484,8 @@ class ChatTest(unittest.TestCase):
         status, r = s.post("/api/intake", {"library": "work", "paths": [self.p("material")]})
         self.assertEqual((status, r.get("reason")), (409, "locked"), r)
         self.assertEqual(s.post("/api/action", {"action": "rollback"})[0], 409)
+        status, r = s.post("/api/action", {"action": "skill_upgrade"})
+        self.assertEqual((status, r.get("reason")), (409, "locked"), r)
         status, r = s.post("/api/action", {"action": "backup"})
         self.assertEqual(status, 200, r)  # backing up only reads the libraries
         s.post("/api/answer", {"job": r["job"], "cancel": True})

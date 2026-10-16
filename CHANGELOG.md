@@ -2,6 +2,13 @@
 
 All three skills share one version number. To release, update this file, the "Version:" line of every SKILL.md and the plugin manifests together and merge to main; the release workflow then publishes v<version>.
 
+## Unreleased
+
+Upgrading the knowledge-base skills from the browser client is a step of its own and asks no setup questions. The skills are unchanged.
+- tools/kb-client Upgrade runs the new step skill_upgrade (install.upgrade) instead of Set up. It replaces each knowledge-base skill in the folder where OpenCode reads it (a missing one goes to OpenCode's own folder) without asking which agent, whether to install or whether to replace, after a backup. With a usable library (a registered local library whose folder exists, or one that is not a local folder) the libraries stay as they are and the knowledge-base line is refreshed in the instructions file OpenCode reads, after one question when it changes; without one the library questions of Set up follow. The step holds the write lock and restarts OpenCode when it ends. Set up and install.py are unchanged.
+- tools/kb-client Skills: Upgrade is greyed out while an intake run, a task window or a step holds the write lock; its tooltip names what it waits for and, for intake, that automatic intake can be switched off first. A refused step unfolds the knowledge base and shows the server's reason instead of a generic message.
+- install.py: a skill is copied next to the installed one first (.NAME.new) and swapped in afterwards, so a failed copy leaves the installed skill as it was.
+
 ## 1.22.0
 
 The browser client keeps several conversation windows, and the tasks that write the libraries run one at a time. The skills are unchanged.
