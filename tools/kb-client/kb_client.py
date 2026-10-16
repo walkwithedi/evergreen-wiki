@@ -1384,7 +1384,7 @@ class Handler(BaseHTTPRequestHandler):
             except agent_mod.Refused as e:
                 why = "too_many" if e.reason == "too_many" else "window_busy"
                 return self.send(409, {"error": m[why], "reason": e.reason})
-        log.info("write task %s started in %s", name, win)
+        log.info("write task %s started in %s", TASKS[TASKS.index(name)], win)  # the fixed name, never the request's
         return self.send(200, {"ok": True, "win": win})
 
     def static(self, path):

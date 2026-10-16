@@ -1379,7 +1379,7 @@ class ChatTest(unittest.TestCase):
         self.assertEqual(self.server.post("/api/chat/focus", {"win": w2})[0], 200)
         before = [(w["id"], w["session"]) for w in self.chat()["agent"]["windows"]]
         self.server.stop()
-        ev = self.ready()
+        self.ready()
         st = self.chat()["agent"]
         self.assertEqual([(w["id"], w["session"]) for w in st["windows"]], before)
         self.assertEqual([w["title"] for w in st["windows"]], ["t-" + sid for _, sid in before])  # kept too
@@ -1516,7 +1516,7 @@ class ChatTest(unittest.TestCase):
         self.assertEqual(self.texts(w1)[:2], ["hello", "echo: hello"])
         # the intake window comes back after a restart only while its run can be continued
         self.server.stop()
-        ev = self.ready()
+        self.ready()
         self.assertIn("intake", [w["kind"] for w in self.chat()["agent"]["windows"]])
 
     def test_automatic_intake_does_not_wait_for_other_windows(self):
