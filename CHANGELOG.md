@@ -2,7 +2,7 @@
 
 All three skills share one version number. To release, update this file, the "Version:" line of every SKILL.md and the plugin manifests together and merge to main; the release workflow then publishes v<version>.
 
-## Unreleased
+## 1.22.0
 
 The browser client keeps several conversation windows, and the tasks that write the libraries run one at a time. The skills are unchanged.
 - tools/kb-client windows: a row of tabs above the conversation, one OpenCode conversation each (agent.Window), at most eight plus the intake's own window. POST /api/chat/open (a new window, or with --chat-first an earlier conversation, in the window that has it or a new one), /api/chat/close (a working window only with stop), /api/chat/focus; send, new, stop, allow_all and terminal take win, GET /api/chat/state?win= shows one window, and the conversation events carry win. A "windows" event lists the windows (kind chat, task or intake, title from OpenCode, status, cards waiting, Allow everything) and the write lock. The windows and the current one are kept in kb-client.json (windows, current; with --chat-first windows_by_dir per work folder, which takes over the earlier sessions entry) and come back after a restart; a background tab marks work, waiting cards and new replies. /api/chat/switch is replaced by open. Simple mode keeps one window.
