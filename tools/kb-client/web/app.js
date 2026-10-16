@@ -16,6 +16,15 @@
       move: "Move a library",
       uninstall: "Uninstall",
       move_this: "Move",
+      auto_label: "Automatic intake",
+      auto_confirm: "Files put in this library's drop folder are filed without asking: the client switches Allow everything on while it files them, and keeps running after the page is closed while a library has automatic intake on (Quit stops it). Files that cannot be filed go to a Not-filed folder for you. Turn it on?",
+      auto_drop: "Drop files in",
+      auto_waiting: "{n} file(s) in the drop folder; filing starts once they have not changed for two minutes and the assistant is free.",
+      auto_last: "Last run {at}: {written} written, {duplicate} already in the library, {not_filed} need you.",
+      auto_last_stopped: "Last run {at} was stopped: {written} written, {waiting} left in the drop folder.",
+      auto_last_cons: "{consolidated} consolidated.",
+      auto_manual: "{n} file(s) could not be filed and wait for you in",
+      intake_auto: "automatic",
       graph: "Graph",
       close: "Close",
       graph_title: "Graph: {lib}",
@@ -33,7 +42,7 @@
       ideas_label: "Ideas behind the knowledge base",
       idea_prev: "Previous", idea_next: "Next", idea_more: "More", idea_less: "Less", idea_pause: "Pause", idea_play: "Play",
       skills_title: "Skills",
-      skills_intro: "What the assistant can do. Every skill can be changed (backed up first) and restored; knowledge-base skills are also upgraded by Set up.",
+      skills_intro: "What the assistant can do. Every other skill can be changed (backed up first) and restored; knowledge-base skills are only upgraded, by Set up, when this client has a newer version.",
       skill_new: "New skill", skill_import: "Import", skills_none_found: "No skills found where OpenCode reads them.",
       skill_kb_group: "Knowledge base", skill_other_group: "Other skills",
       skill_try: "Try it", skill_upgrade: "Upgrade", skill_modify: "Change", skill_restore_btn: "Restore",
@@ -41,6 +50,7 @@
       skill_triggers: "Say: ", skill_version: "version {v}",
       skill_backup: "Back up a skill", skill_restore: "Restore a skill",
       skill_upgrade_hint: "Upgrading replaces the skill's folder with the new release; a change made here stays only in its backup.",
+      skill_latest: "Up to date: this client comes with {v}.",
       try_req: "{phrase}",
       modify_title: "Change {name}",
       modify_how: "What should change?",
@@ -260,6 +270,15 @@
       move: "移动知识库",
       uninstall: "卸载",
       move_this: "移动",
+      auto_label: "自动入库",
+      auto_confirm: "放进这个知识库投放文件夹的文件会自动入库、不再询问：入库期间客户端会打开「全部允许」，并且只要有知识库开着自动入库，关掉页面后客户端也继续运行（点「退出」才停止）。无法入库的文件移到「未处理」文件夹等你处理。要打开吗？",
+      auto_drop: "投放文件夹：",
+      auto_waiting: "投放文件夹里有 {n} 个文件；文件两分钟内不再变化、助手空闲时开始入库。",
+      auto_last: "上次运行 {at}：写入 {written} 个，库里已有 {duplicate} 个，{not_filed} 个需要你处理。",
+      auto_last_stopped: "上次运行 {at} 被停止：写入 {written} 个，{waiting} 个留在投放文件夹。",
+      auto_last_cons: "整理了 {consolidated} 个。",
+      auto_manual: "{n} 个文件无法入库，在这里等你处理：",
+      intake_auto: "自动",
       graph: "关系图",
       close: "关闭",
       graph_title: "关系图：{lib}",
@@ -277,7 +296,7 @@
       ideas_label: "知识库背后的思路",
       idea_prev: "上一张", idea_next: "下一张", idea_more: "详情", idea_less: "收起", idea_pause: "暂停", idea_play: "播放",
       skills_title: "技能",
-      skills_intro: "助手能做的事。每个技能都可以修改（先自动备份）和回滚；知识库技能还可以用「安装与建库」升级。",
+      skills_intro: "助手能做的事。其他技能都可以修改（先自动备份）和回滚；知识库技能只在这个客户端带有新版本时用「安装与建库」升级。",
       skill_new: "新建技能", skill_import: "导入", skills_none_found: "OpenCode 能读到的位置没有找到技能。",
       skill_kb_group: "知识库", skill_other_group: "其他技能",
       skill_try: "试一试", skill_upgrade: "升级", skill_modify: "修改", skill_restore_btn: "回滚",
@@ -285,6 +304,7 @@
       skill_triggers: "口令：", skill_version: "版本 {v}",
       skill_backup: "备份技能", skill_restore: "回滚技能",
       skill_upgrade_hint: "升级会用新版本替换整个技能文件夹；在这里做的修改只保留在备份里。",
+      skill_latest: "已是最新：这个客户端带的是 {v}。",
       try_req: "{phrase}",
       modify_title: "修改 {name}",
       modify_how: "要改哪方面？",
@@ -669,6 +689,52 @@
     }).catch(lost);
   }
 
+  // Automatic intake of a local library: the switch, the drop folder, the last run and the files that
+  // need a person (POST /api/auto; the client does the rest, see auto.py).
+  function autoBox(lib) {
+    var a = lib.auto || { on: false };
+    var box = el("div", { "class": "auto" + (a.manual ? " attn" : "") });
+    var label = el("label", { "class": "auto-switch" });
+    var cb = el("input", { type: "checkbox" });
+    cb.checked = !!a.on;
+    cb.addEventListener("change", function () {
+      if (cb.checked && !window.confirm(t("auto_confirm"))) { cb.checked = false; return; }
+      api("POST", "/api/auto", { library: lib.id, on: cb.checked }).then(refresh).catch(function (e) {
+        cb.checked = !cb.checked;
+        note(String(e.message), "error");
+      });
+    });
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(" " + t("auto_label")));
+    box.appendChild(label);
+    if (a.on && a.inbox) {
+      var p = el("p", { "class": "hint" }, t("auto_drop") + " ");
+      p.appendChild(el("code", {}, a.inbox));
+      var copy = el("button", { type: "button", "class": "quiet small" }, t("copy_path"));
+      copy.addEventListener("click", function () { copyText(a.inbox, copy); });
+      p.appendChild(copy);
+      box.appendChild(p);
+      if (a.waiting) box.appendChild(el("p", { "class": "hint" }, t("auto_waiting", { n: a.waiting })));
+    }
+    var l = a.last;
+    if (l) {
+      var sum = t(l.state === "stopped" ? "auto_last_stopped" : "auto_last", l);
+      if (l.consolidated) sum += " " + t("auto_last_cons", l);
+      box.appendChild(el("p", { "class": "hint" }, sum));
+      if (l.log) {
+        var lw = el("p", { "class": "hint log-where" });
+        logWhere(lw, t("intake_log"), l.log);
+        box.appendChild(lw);
+      }
+    }
+    if (a.manual) {
+      var w = el("p", { "class": "warn" }, t("auto_manual", { n: a.manual }) + " ");
+      w.appendChild(el("code", {}, a.not_filed));
+      box.appendChild(w);
+    }
+    return box;
+  }
+
   function render() {
     // A client started with --simple refuses moving, uninstalling, rolling back, changing skills and
     // forgetting permission answers; style.css hides their buttons under body.simple.
@@ -694,6 +760,7 @@
         var g = el("button", { type: "button", "class": "quiet small" }, t("graph"));
         g.addEventListener("click", function () { openGraph(lib.id); });
         li.appendChild(g);
+        li.appendChild(autoBox(lib));
       }
       libs.appendChild(li);
     });
@@ -836,7 +903,7 @@
   function setBusy(on) {
     Array.prototype.forEach.call(document.querySelectorAll("[data-action], .lib button, #check-list button, " +
         ".skills-box button"), function (b) {
-      b.disabled = on;
+      b.disabled = on || b.classList.contains("latest");
     });
     show($("cancel"), on);
   }
@@ -2380,6 +2447,7 @@
     var done = (c.written || 0) + (c.duplicate || 0) + (c.manual || 0) + (c.failed || 0);
     var head = el("div", { "class": "intake-head" });
     head.appendChild(el("strong", {}, t("intake_title", { lib: r.label, done: done, total: r.total })));
+    if (r.auto) head.appendChild(el("span", { "class": "badge" }, t("intake_auto")));
     var cur = r.items.filter(function (it) { return it.status === "working"; })[0];
     var cons = r.consolidation || {};
     var step = el("span", { "class": "intake-step" },
@@ -2513,7 +2581,8 @@
     if (sk.used && sk.triggers && sk.triggers.length) {
       btn(t("skill_try"), "quiet", function () { fillInput(t("try_req", { phrase: sk.triggers[0] })); });
     }
-    if (sk.used) {
+    // The knowledge-base skills are changed only by an upgrade, offered while this client's release is newer.
+    if (sk.used && !sk.kb) {
       btn(t("skill_modify"), "quiet", function () { modifyCard(sk); });
       if (sk.backups) btn(t("skill_restore_btn"), "quiet", function () { startAction("skill_restore", sk.dir); });
     }
@@ -2522,9 +2591,25 @@
         if (!window.confirm(t("skill_upgrade_hint"))) return;
         startAction("setup");
       });
+      if (sk.version && sk.release && compareVersions(sk.version, sk.release) >= 0) {
+        var up = row.lastChild;
+        up.disabled = true;
+        up.classList.add("latest");  // setBusy leaves it off
+        up.title = t("skill_latest", { v: sk.release });
+      }
     }
     li.appendChild(row);
     return li;
+  }
+
+  // Dotted version numbers compared part by part as numbers (1.20.10 > 1.20.2); -1, 0 or 1.
+  function compareVersions(a, b) {
+    var x = String(a).split("."), y = String(b).split(".");
+    for (var i = 0; i < Math.max(x.length, y.length); i++) {
+      var p = parseInt(x[i] || "0", 10) || 0, q = parseInt(y[i] || "0", 10) || 0;
+      if (p !== q) return p < q ? -1 : 1;
+    }
+    return 0;
   }
 
   function drawSkills() {

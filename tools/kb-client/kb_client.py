@@ -18,8 +18,10 @@ the answer, and what it prints is streamed to the page. The conversation on the 
 server this client starts on 127.0.0.1 (agent.py); the page never talks to OpenCode itself. The folder
 browser only lists folders. The Skills section lists the skills OpenCode reads and manages them
 (skills_admin.py: backup before an edit, restore, import, a new skill from a template); the
-knowledge-base skills are also upgraded by Set up. Otherwise this file
-writes nothing but the current conversation's id. Python 3 standard library only.
+knowledge-base skills are upgraded by Set up. A local library can be switched to automatic intake
+(auto.py): the client files what is put in its drop folder without anybody on the page, and does not
+stop for being idle while a library is switched on. Otherwise this file writes nothing but the current
+conversation's id. Python 3 standard library only.
 """
 import argparse
 import getpass
@@ -47,6 +49,7 @@ import kb_manage  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import agent as agent_mod  # noqa: E402
+import auto as auto_mod  # noqa: E402
 import intake as intake_mod  # noqa: E402
 import skills_admin  # noqa: E402
 
@@ -265,6 +268,7 @@ class App:
         # The last intake run (intake.Run): one saved by an earlier client shows as stopped and can go on.
         intake_mod.clean(intake_root())
         self.intake = intake_mod.latest(intake_root())
+        self.auto = auto_mod.Watcher(self, kb_manage.state_dir(), lang)
 
     # ---------- steps ----------
 
@@ -316,7 +320,7 @@ class App:
             "simple": bool(self.options.get("simple")),
             "chat_first": bool(self.options.get("chat_first")),
             "home": os.path.expanduser("~"),
-            "libraries": libraries(),
+            "libraries": self.libraries(with_auto=True),
             "skills": skills_installed(),
             "agent": agent_status(),
             "backups": len(kb_manage.list_backups()),
@@ -371,9 +375,33 @@ class App:
         self.agent.retry(prog)
         return self.agent, None
 
-    def start_intake(self, lib_id, paths, resume=False):
+    def libraries(self, with_auto=False):
+        """libraries(), with each local library's automatic intake state (auto) when asked."""
+        libs = libraries()
+        if with_auto:
+            for lib in libs:
+                lib["auto"] = self.auto.lib_state(lib) if lib["root"] and lib["exists"] else {"on": False}
+        return libs
+
+    def idle_for_intake(self):
+        """True when an automatic run may start: no intake run and no step going."""
+        busy = self.intake is not None and self.intake.running()
+        return not busy and not (self.job is not None and not self.job.done)
+
+    def intake_scripts(self):
+        """The scripts folder of kb-incremental where OpenCode reads it, or ""."""
+        folder = next((f["folder"] for f in kb_skills()["found"] if f["name"] == "kb-incremental"), "")
+        scripts = os.path.join(folder, "scripts") if folder else ""
+        return scripts if scripts and os.path.isfile(os.path.join(scripts, "prep.py")) else ""
+
+    def queue_name(self, root):
+        return library_names(root).get("consolidation_queue") or "_Consolidation-Queue.md"
+
+    def start_intake(self, lib_id, paths, resume=False, auto=None):
         """Starts an intake run of paths into the local library lib_id, or of the files a stopped run did
-        not reach. (run, None), or (None, the reason as a MSG key)."""
+        not reach. auto: an automatic run's {"sources", "item_done", "ended"} (auto.Watcher), its files
+        taken as they are (the drop folder is inside the library), possibly none (consolidation only).
+        (run, None), or (None, the reason as a MSG key)."""
         with self.lock:
             last = self.intake
             if last is not None and last.running():
@@ -381,9 +409,8 @@ class App:
             ag = self.agent
             if ag is None or ag.state != "ready":
                 return None, "intake_agent"
-            folder = next((f["folder"] for f in kb_skills()["found"] if f["name"] == "kb-incremental"), "")
-            scripts = os.path.join(folder, "scripts")
-            if not os.path.isfile(os.path.join(scripts, "prep.py")):
+            scripts = self.intake_scripts()
+            if not scripts:
                 return None, "intake_skills"
             if resume:
                 if last is None:
@@ -395,7 +422,9 @@ class App:
             lib = next((x for x in libraries() if x["id"] == lib_id and x["root"] and x["exists"]), None)
             if lib is None:
                 return None, "intake_library"
-            if not resume:
+            if auto is not None:
+                sources = list(auto["sources"])
+            elif not resume:
                 sources = intake_mod.expand(paths, lib["root"])
                 if not sources:
                     return None, "intake_empty"
@@ -403,8 +432,10 @@ class App:
             work = os.path.join(intake_root(), run_id)
             os.makedirs(work, mode=0o700, exist_ok=True)
             back = last.back_to if resume and last is not None else (ag.session or "")
-            self.intake = intake_mod.Run(ag, lib, sources, scripts, work, self.lang, run_id, back)
-        log.info("intake %s: %d files into %s%s", run_id, len(sources), lib["id"], " (continued)" if resume else "")
+            hooks = {"item_done": auto["item_done"], "ended": auto["ended"]} if auto is not None else None
+            self.intake = intake_mod.Run(ag, lib, sources, scripts, work, self.lang, run_id, back, hooks)
+        log.info("intake %s: %d files into %s%s", run_id, len(sources), lib["id"],
+                 " (continued)" if resume else " (automatic)" if auto is not None else "")
         self.intake.start()
         return self.intake, None
 
@@ -419,6 +450,7 @@ class App:
             busy = self.job is not None and not self.job.done
             busy = busy or (self.agent is not None and self.agent.status != "idle")
             busy = busy or (self.intake is not None and self.intake.running())
+            busy = busy or self.auto.any_on(libraries())  # a library switched to automatic intake keeps it going
             if not busy and time.time() - self.last_seen > self.idle:
                 log.info("no page for %s seconds, stopping", self.idle)
                 threading.Thread(target=self.server.shutdown, daemon=True).start()
@@ -594,7 +626,7 @@ def graph(root, since=0.0):
     files, truncated = [], False
     for here, dirs, fnames in os.walk(real_root):
         rel_here = os.path.relpath(here, real_root)
-        dirs[:] = sorted(d for d in dirs if not d.startswith(".")
+        dirs[:] = sorted(d for d in dirs if not d.startswith((".", "_"))
                          and not (rel_here == "." and d in (names["archive_dir"], names["sources_dir"]))
                          and os.path.realpath(os.path.join(here, d)).startswith(real_root + os.sep))
         for f in sorted(fnames):
@@ -1053,6 +1085,14 @@ class Handler(BaseHTTPRequestHandler):
             if run is None:
                 return self.send(409, {"error": MSG[self.app.lang][why], "reason": why})
             return self.send(200, {"run": run.snapshot()})
+        if path == "/api/auto":
+            lib = next((x for x in libraries() if x["id"] == body.get("library") and x["root"] and x["exists"]), None)
+            if lib is None or not isinstance(body.get("on"), bool):
+                return self.send(400, {"error": MSG[self.app.lang]["intake_library"]})
+            try:
+                return self.send(200, {"ok": True, "auto": self.app.auto.switch(lib, body["on"])})
+            except OSError as e:
+                return self.send(409, {"error": " ".join(str(e).split())[:300]})
         if path == "/api/intake/stop":
             run = self.app.intake
             if run is not None and run.running():
@@ -1303,6 +1343,7 @@ def serve(app, port, open_browser):
         threading.Thread(target=webbrowser.open, args=(url,), daemon=True).start()
     if app.idle:
         threading.Thread(target=app.idle_watch, daemon=True).start()
+    app.auto.start()
     def on_term(signum, frame):  # another program asked the client to stop: stop the same way as Quit
         log.info("stopping: signal %s", signum)
         threading.Thread(target=server.shutdown, daemon=True).start()
