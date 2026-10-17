@@ -2,7 +2,7 @@
 
 Turns Word, Excel and PowerPoint files, PDFs and mail (.eml) into Markdown an AI assistant can search: one merged file with an index, one file per document, or batch files for knowledge-base intake. Headings, tables, embedded workbooks and the position of every picture are kept; duplicate copies are filed once.
 
-Python 3 standard library only: no pandoc, LibreOffice, python-docx, openpyxl or python-pptx. The kb-incremental skill uses the same converter (`doc2kb_core.py`) to read uploads as Markdown; this folder is the stand-alone tool for converting whole folders on a Linux desktop or in a cron job.
+Python 3 standard library only: no pandoc, LibreOffice, python-docx, openpyxl or python-pptx. The kb-ingest skill uses the same converter (`doc2kb_core.py`) to make the batch files it ingests; this folder is the stand-alone tool for converting whole folders on a Linux desktop or in a cron job.
 
 [中文说明](README.zh-CN.md)
 

@@ -26,7 +26,7 @@ Knowledge-base batch files (--kb-batch): the documents go into batch files of at
 number of characters, with source numbers and paragraph anchors; kb_batch.py (next to this
 file) holds the format and splits them back.
 
-Used by tools/doc2kb/doc2kb.sh (desktop and cron use) and by the kb-incremental skill
+Used by tools/doc2kb/doc2kb.sh (desktop and cron use) and by the kb-ingest skill
 (scripts/convert.py), which imports process_one().
 """
 

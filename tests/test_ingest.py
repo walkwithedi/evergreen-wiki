@@ -33,14 +33,30 @@ class Tmp(unittest.TestCase):
 
 class SettingsTest(unittest.TestCase):
     def test_new_settings_are_known_and_checked(self):
-        good = {"schema": 1, "tier": "strong", "batch_chars": 50000, "quote_min": 4, "quote_max": 200}
+        good = {"schema": 2, "tier": "strong", "batch_chars": 50000, "quote_min": 4, "quote_max": 200}
         self.assertEqual(kbconf.validate(good), [])
-        bad = {"schema": 1, "tier": "medium", "batch_chars": 999, "quote_min": 0, "quote_max": 3}
+        bad = {"schema": 2, "tier": "medium", "batch_chars": 999, "quote_min": 0, "quote_max": 3}
         text = " ".join(kbconf.validate(bad))
         for word in ("tier", "batch_chars", "quote_min"):
             self.assertIn(word, text)
-        self.assertIn("quote_max", " ".join(kbconf.validate({"schema": 1, "quote_min": 10, "quote_max": 5})))
-        self.assertEqual(len(kbconf.validate({"schema": 1, "batch_chars": True})), 1)
+        self.assertIn("quote_max", " ".join(kbconf.validate({"schema": 2, "quote_min": 10, "quote_max": 5})))
+        self.assertEqual(len(kbconf.validate({"schema": 2, "batch_chars": True})), 1)
+
+    def test_schema_2_only(self):
+        self.assertEqual(kbconf.validate({"schema": 2}), [])
+        self.assertIn("1.x", " ".join(kbconf.validate({"schema": 1})))
+        for old in ("convert", "intake", "sources", "delivery", "inbox", "sensitivity", "metadata"):
+            self.assertIn("unknown key", " ".join(kbconf.validate({"schema": 2, old: {}})), old)
+        self.assertNotIn("convert", kbconf.DEFAULTS)
+
+    def test_old_library_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "_kb.json"), "w", encoding="utf-8") as f:
+                json.dump({"schema": 1, "label": "Old"}, f)
+            with self.assertRaises(kbconf.ConfigError) as e:
+                kbconf.load_library(d)
+            self.assertIn("1.x", str(e.exception))
+            self.assertIn("not migrated", str(e.exception))
 
     def test_new_folder_names(self):
         names = kbconf.resolve_names()
@@ -229,7 +245,7 @@ class CommandLineTest(Tmp):
     def test_file_then_pages(self):
         os.makedirs(self.p("lib"))
         with open(self.p("lib", "_kb.json"), "w", encoding="utf-8") as f:
-            json.dump({"schema": 1, "language": "en", "names": {"topics_dir": "Subjects"}}, f)
+            json.dump({"schema": 2, "language": "en", "names": {"topics_dir": "Subjects"}}, f)
         b = make_run(self.p("run"), [("plan.docx", "plan.docx", "2026-03-01 09:00", PLAN_V1)])
         with open(self.p("acc.jsonl"), "w", encoding="utf-8") as f:
             for c in accepted(b, card("S01", "p1", "The pilot starts in April.", "April start", "Pilot")):
@@ -253,7 +269,7 @@ class CommandLineTest(Tmp):
         b = make_run(self.p("run"), [("long.docx", "long.docx", "", "\n\n".join(["x" * 600] * 4))], limit=1000)
         os.makedirs(self.p("lib"))
         with open(self.p("lib", "_kb.json"), "w", encoding="utf-8") as f:
-            json.dump({"schema": 1}, f)
+            json.dump({"schema": 2}, f)
         with open(self.p("none.jsonl"), "w", encoding="utf-8") as f:
             f.write("")
         p = cli("file", b[0], "--cards", self.p("none.jsonl"), "--library", self.p("lib"))
@@ -293,7 +309,7 @@ class EndToEndTest(Tmp):
     def test_two_runs(self):
         os.makedirs(self.p("lib"))
         with open(self.p("lib", "_kb.json"), "w", encoding="utf-8") as f:
-            json.dump({"schema": 1, "tier": "weak"}, f)
+            json.dump({"schema": 2, "tier": "weak"}, f)
         os.makedirs(self.p("src1"))
         os.makedirs(self.p("src2"))
         fx.docx(self.p("src1", "report.docx"), english=True)
@@ -341,7 +357,7 @@ class LibraryCommandsTest(Tmp):
     def library(self, spec=SPEC_FILE, **kb):
         os.makedirs(self.p("lib"), exist_ok=True)
         with open(self.p("lib", "_kb.json"), "w", encoding="utf-8") as f:
-            json.dump(dict({"schema": 1, "partitions": {"max": 9, "topic_start": 2, "fallback": "09"}}, **kb), f)
+            json.dump(dict({"schema": 2, "partitions": {"max": 9, "topic_start": 2, "fallback": "09"}}, **kb), f)
         with open(self.p("lib", "00_Spec.md"), "w", encoding="utf-8") as f:
             f.write(spec)
 
@@ -409,7 +425,7 @@ class CheckPageTest(LibraryCase):
         self.assertEqual(res, {"unknown": ["Sources/plan#^p7"], "missing": ["Sources/plan#^p2"]})
         self.assertEqual(ingest.check_page(self.p("lib"), self.cfg, "Pilot", good), {"unknown": [], "missing": []})
         with open(self.p("lib", "_kb.json"), "w", encoding="utf-8") as f:
-            json.dump({"schema": 1}, f)
+            json.dump({"schema": 2}, f)
         p = cli("check-page", "--library", self.p("lib"), "--topic", "Pilot", "--page", self.p("work", "bad.md"), "--write")
         self.assertEqual(p.returncode, 3)
         self.assertFalse(os.path.exists(self.p("lib", "Topics", "Pilot.md")))
@@ -417,6 +433,49 @@ class CheckPageTest(LibraryCase):
         p = cli("check-page", "--library", self.p("lib"), "--topic", "Pilot", "--page", self.p("work", "good.md"), "--write")
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertEqual(read(self.p("lib", "Topics", "Pilot.md")), good)
+
+
+
+INGEST_SCRIPTS = os.path.join(ROOT, "skills", "kb-ingest", "scripts")
+
+
+def init(*args):
+    e = dict(os.environ, PYTHONIOENCODING="utf-8", LOG_LEVEL="WARNING")
+    return subprocess.run([sys.executable, os.path.join(INGEST_SCRIPTS, "init_library.py"), *args],
+                          capture_output=True, text=True, encoding="utf-8", errors="replace", env=e)
+
+
+class InitTest(Tmp):
+    BASE = ["--language", "en", "--timezone", "UTC", "--scope", "work material"]
+
+    def test_new_library_is_a_2_0_library(self):
+        p = init("write", "--root", self.p("lib"), "--preset", "work", *self.BASE, "--tier", "weak")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        kb = json.loads(read(self.p("lib", "_kb.json")))
+        self.assertEqual((kb["schema"], kb["tier"], kb["label"]), (2, "weak", "Work"))
+        self.assertEqual(kbconf.validate(kb), [])
+        self.assertEqual(sorted(os.listdir(self.p("lib"))),
+                         ["00_Spec.md", "00_Status-Card.md", "Archive", "Cards", "Quick-Notes", "Sources", "Topics", "_kb.json"])
+        self.assertIn("Version: v1", read(self.p("lib", "00_Spec.md")))
+        self.assertNotIn("{{", read(self.p("lib", "00_Spec.md")))
+        cfg = kbconf.load_library(self.p("lib"))
+        self.assertIn("work plans", kbconf.topics(read(self.p("lib", "00_Spec.md")), cfg))
+
+    def test_tier_default_and_chinese(self):
+        p = init("write", "--root", self.p("zh"), "--preset", "work", "--language", "zh", "--timezone", "UTC",
+                 "--scope", "工作资料")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(json.loads(read(self.p("zh", "_kb.json")))["tier"], "weak")
+        self.assertIn("版本：v1", read(self.p("zh", "00_Spec.md")))
+        p = init("write", "--root", self.p("s"), "--preset", "work", *self.BASE, "--tier", "strong")
+        self.assertEqual(json.loads(read(self.p("s", "_kb.json")))["tier"], "strong")
+
+    def test_life_preset_and_1x_options_gone(self):
+        p = init("write", "--root", self.p("life"), "--preset", "life", *self.BASE)
+        self.assertEqual(p.returncode, 2)
+        p = init("write", "--root", self.p("x"), "--preset", "work", *self.BASE, "--sources", "on")
+        self.assertEqual(p.returncode, 2)
+        self.assertFalse(os.path.exists(self.p("x")))
 
 
 if __name__ == "__main__":

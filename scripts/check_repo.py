@@ -8,7 +8,8 @@
   3. Environment-bound words (tool names, sandbox paths) appear only in the backend and
      environment references, never in SKILL.md or other references.
   4. No library file name is hard-coded in scripts: names come from kbconf.
-  5. Presets and the sample library pass kbconf validation; preset placeholders are present.
+  5. Presets and the sample library pass kbconf validation (schema 2); presets hold the spec with its
+     {{DATE}} placeholder and the status card, in every translation.
   6. Plugin manifests are valid JSON and carry the skills version.
 Exit code 1 on any problem.
 """
@@ -22,7 +23,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "shared", "scripts"))
 import kbconf  # noqa: E402
 
-SKILLS = ["kb-note", "kb-query", "kb-incremental", "kb-ingest"]
+SKILLS = ["kb-note", "kb-query", "kb-ingest"]
 ENV_WORDS = ["search_files", "read_file_content", "download_file_content", "create_file", "update_file",
              "get_file_metadata", "present_files", "/home/claude", "/mnt/user-data", "application/vnd.google-apps"]
 ENV_ALLOWED = {"backend-gdrive.md", "backend-local.md", "environment.md"}
@@ -96,28 +97,27 @@ def check_hardcoded_names():
 
 
 def check_libraries():
-    presets = glob.glob(os.path.join(ROOT, "skills", "kb-incremental", "assets", "presets", "*"))
-    for d in presets + [os.path.join(ROOT, "examples", "sample-life-kb")]:
+    presets = glob.glob(os.path.join(ROOT, "skills", "kb-ingest", "assets", "presets", "*"))
+    sample = os.path.join(ROOT, "examples", "sample-work-kb")
+    for d in presets + [sample]:
         rel = os.path.relpath(d, ROOT)
+        if not os.path.isfile(os.path.join(d, "_kb.json")):
+            bad(f"{rel}: missing _kb.json")
+            continue
         for msg in kbconf.validate(json.loads(read(os.path.join(d, "_kb.json")))):
             bad(f"{rel}/_kb.json: {msg}")
-        for f in ("_kb-params.md", "00_Spec.md"):
-            if not os.path.isfile(os.path.join(d, f)):
-                bad(f"{rel}: missing {f}")
     # translated presets (<preset>/<language>/) replace the text files, so they need the same set
     translated = [t for d in presets for t in glob.glob(os.path.join(d, "*")) if os.path.isdir(t)
                   and os.path.basename(t) != "summary"]
-    for d in translated:
-        if not os.path.isfile(os.path.join(d, "_kb-params.md")):
-            bad(f"{os.path.relpath(d, ROOT)}: missing _kb-params.md")
     for d in presets + translated:
-        spec = read(os.path.join(d, "00_Spec.md"))
-        for ph in ("{{DATE}}", "{{HEADING_LIMIT}}", "{{FILENAME_LIMIT}}"):
-            if ph not in spec:
-                bad(f"{os.path.relpath(d, ROOT)}/00_Spec.md: placeholder {ph} missing")
-        for k in kbconf.SUMMARY_KEYS:
-            if k != "spec" and not os.path.isfile(os.path.join(d, "summary", kbconf.DEFAULT_NAMES[k])):
-                bad(f"{os.path.relpath(d, ROOT)}/summary: missing {kbconf.DEFAULT_NAMES[k]}")
+        rel = os.path.relpath(d, ROOT)
+        spec = os.path.join(d, kbconf.DEFAULT_NAMES["spec"])
+        if not os.path.isfile(spec):
+            bad(f"{rel}: missing {kbconf.DEFAULT_NAMES['spec']}")
+        elif "{{DATE}}" not in read(spec):
+            bad(f"{rel}/{kbconf.DEFAULT_NAMES['spec']}: placeholder {{{{DATE}}}} missing")
+        if not os.path.isfile(os.path.join(d, "summary", kbconf.DEFAULT_NAMES["status_card"])):
+            bad(f"{rel}/summary: missing {kbconf.DEFAULT_NAMES['status_card']}")
 
 
 def check_manifests(version):

@@ -16,7 +16,7 @@ A few rules keep the skills reliable:
    Claude Code sessions get the same through .claude/settings.json: the checks run once when a cloud session starts and before every git commit Claude makes, the commit scan before every git push (a failure blocks the command); editing a skill's copy of a shared/ file is blocked, and editing a file under shared/ refreshes the copies.
    On GitHub, every pull request runs the checks on four platforms, the personal-data scan over its commits (lines, messages, author e-mails, image and document metadata) and gitleaks over all of history, CodeQL (bugs and security problems in the scripts and workflows) and dependency review; Scorecard reports supply-chain practices weekly, and Dependabot keeps the actions current. Report security problems as SECURITY.md describes.
 
-1. Edit shared files only under shared/, then run python3 scripts/sync_shared.py. CI fails when a copy is stale. This includes the converter: tools/doc2kb/doc2kb_core.py and the copy in kb-incremental come from shared/scripts/doc2kb_core.py.
+1. Edit shared files only under shared/, then run python3 scripts/sync_shared.py. CI fails when a copy is stale. This includes the converter: tools/doc2kb/doc2kb_core.py and the copy in kb-ingest come from shared/scripts/doc2kb_core.py.
 2. Keep environment-specific tool names and paths in the backend and environment references; SKILL.md and other references use the abstract operations. scripts/check_repo.py enforces this.
 3. Scripts use only the Python standard library, run on Python 3.8+, log to stderr in the format used by the other scripts and accept --log-level.
 4. Never hard-code a library file or folder name in a script; take it from kbconf names.

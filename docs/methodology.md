@@ -21,9 +21,9 @@ An assistant can answer from your documents, but raw documents disagree with eac
 - Rewrites are checked by a script. The old card and the new card are compared item by item; every missing item must be explained in a change list, and the new card may not shrink below 70% without the owner's consent.
 - Never delete, never edit sources. Older versions move to the archive with a time stamp; issues are recorded, not silently fixed. Personal identifiers are the one exception: masked before anything is written.
 - No silent growth. When material fits no topic, the skill adds a topic to the closest partition (never a new partition), rewrites the spec with a revision note, and lists the change for review.
-- File fast, consolidate after. Writing an item into the library and reconciling it with the summary files are separate steps. Filing is mechanical and happens per item, so material is searchable as soon as it arrives; reconciling needs close reading and the owner's review, so it happens in rounds over many filed items, from a queue kept in the library. Until an item is consolidated, answers that rely on it say so.
+- Quote or no card. Every conclusion written into the library is a card that carries the exact sentence it rests on; a script finds that sentence in the source before the card is written, and topic pages are built only from cards.
 - Search caps and fixed reading order. The assistant reads the status card first, then the specific list, then sources, and stops after a fixed number of searches. Answers name their basis file.
 
-## What the presets give you
+## What the preset gives you
 
-Two starting points, both editable during setup: a work library (strategy, projects, architecture, meetings and decisions, operations, ownership, metrics, reference) and a life library (health, money, insurance, home, family, IDs and legal, devices and subscriptions, learning, reference). The life preset includes sensitivity classes: identifiers are masked, health and money facts are recorded, never interpreted.
+One starting point, editable during setup: a work library (goals and plans, projects and tasks, proposals and deliverables, meetings and decisions, policies and procedures, organisation and roles, data and reports, reference and templates).

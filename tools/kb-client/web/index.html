@@ -104,30 +104,10 @@
       </div>
       <p class="hint" id="workdir-note" data-t="workdir_hint" hidden>The assistant reads and edits files in this folder without asking.</p>
       <div class="win-tabs" id="win-tabs" role="tablist" hidden></div>
-      <p class="hint lock-note" id="lock-note" hidden><span id="lock-text"></span>
-        <button type="button" class="quiet small" id="lock-view" data-t="lock_view">Show</button></p>
+      <p class="hint lock-note" id="lock-note" hidden><span id="lock-text"></span></p>
       <div class="tasks" id="tasks">
-        <button type="button" class="task-main" data-task="intake"><strong data-t="task_intake">File material</strong>
-          <span data-t="task_intake_hint">Choose files or folders; each is written into the library</span></button>
         <button type="button" class="task-main" data-task="note"><strong data-t="task_note">Quick note</strong>
           <span data-t="task_note_hint">Keep one sentence in the library at once</span></button>
-        <button type="button" class="task-extra" data-task="resume" id="task-resume" hidden data-t="task_resume">Continue intake</button>
-        <button type="button" class="task-extra" data-task="notes" id="task-notes" hidden></button>
-        <details class="task-more" id="task-more">
-          <summary data-t="task_more">More</summary>
-          <button type="button" data-task="lint"><strong data-t="task_lint">Health check</strong>
-            <span data-t="task_lint_hint">Look for broken links, missing pages and stale files</span></button>
-          <button type="button" data-task="archive"><strong data-t="task_archive">Archive old versions</strong>
-            <span data-t="task_archive_hint">Move superseded versions to the archive folder</span></button>
-        </details>
-      </div>
-      <div class="intake" id="intake" hidden></div>
-      <div class="hint intake-long" id="intake-long" hidden>
-        <p data-t="intake_long">Filing and consolidating take a long time.</p>
-        <details><summary data-t="intake_cli">How to open it from a terminal</summary>
-          <p><span data-t="intake_cli_hint">In a terminal, go to your own work folder and run:</span>
-            <code>opencode</code> <button type="button" class="quiet small" id="intake-cli-copy" data-t="intake_cli_copy">Copy</button></p>
-        </details>
       </div>
       <p class="hint" id="chat-one-agent" data-t="chat_one_agent">If OpenCode is also open in a terminal, quit it before filing material, so that only one of them writes to the library.</p>
       <p class="info" id="chat-info" hidden></p>

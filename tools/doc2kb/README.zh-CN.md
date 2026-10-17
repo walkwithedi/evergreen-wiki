@@ -2,7 +2,7 @@
 
 把 Word、Excel、PowerPoint、PDF 和邮件（.eml）转换成 AI 助手便于检索的 Markdown：合并成一个带索引的文件、每份文档一个文件，或供知识库入库的批文件。标题层级、表格、嵌入的 Excel 附件和每张图片的位置都会保留；重复的副本只收录一份。
 
-只用 Python 3 标准库，不依赖 pandoc、LibreOffice、python-docx、openpyxl、python-pptx。kb-incremental skill 入库时用同一个转换器（`doc2kb_core.py`）把上传材料先转成 Markdown；本目录是独立工具，用于在 Linux 桌面或定时任务里批量转换整个目录。
+只用 Python 3 标准库，不依赖 pandoc、LibreOffice、python-docx、openpyxl、python-pptx。kb-ingest skill 用同一个转换器（`doc2kb_core.py`）生成它入库用的批文件；本目录是独立工具，用于在 Linux 桌面或定时任务里批量转换整个目录。
 
 [English](README.md)
 

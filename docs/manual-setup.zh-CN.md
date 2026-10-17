@@ -7,23 +7,21 @@
 ## 1. 安装技能
 
 - Claude Code：`/plugin marketplace add walkwithedi/evergreen-wiki`，然后 `/plugin install evergreen-wiki@evergreen-wiki`。
-- claude.ai 或 Claude App：从 [Releases](../../../releases) 下载带 -zh 的 kb-note、kb-query、kb-incremental 三个 zip，在设置的 Skills 页面逐个上传。
-- 其他支持 Agent Skills 的助手：`python3 install.py --target agents --locale zh`（也可用 `--target gemini`、`opencode`、`codex`、`claude-code` 或 `--dest <文件夹>`）；`--descriptions <文件>` 用自己的技能描述（每个技能一行，格式同 `locales/zh/descriptions.json`），`--force` 替换已安装的版本，`--dry-run` 只预览。安装向导（`python3 install.py`）可用 `--agent <目标>` 和 `--preset life|work` 免答这两题，也可用 `--descriptions`。向导里选到已有知识库的文件夹（含 `_kb.json` 或 `00_` 开头的规范文件）时，先给预览，再按原样登记，不改动任何文件；之后对助手说「初始化 <库名>」，由助手按库内规范补齐配置。
+- claude.ai 或 Claude App：从 [Releases](../../../releases) 下载带 -zh 的 kb-note、kb-query、kb-ingest 三个 zip，在设置的 Skills 页面逐个上传。
+- 其他支持 Agent Skills 的助手：`python3 install.py --target agents --locale zh`（也可用 `--target gemini`、`opencode`、`codex`、`claude-code` 或 `--dest <文件夹>`）；`--descriptions <文件>` 用自己的技能描述（每个技能一行，格式同 `locales/zh/descriptions.json`），`--force` 替换已安装的版本，`--dry-run` 只预览。安装向导（`python3 install.py`）可用 `--agent <目标>` 免答这一题，也可用 `--descriptions`；新库的档位随助手而定（OpenCode 为弱档，其他为强档），可在预览里改。向导里选到已有 2.0 知识库的文件夹（`_kb.json` 的 schema 为 2）时，先给预览，再按原样登记，不改动任何文件。1.x 知识库（schema 1）会被拒绝：2.0 不迁移 1.x 知识库，可以继续用 1.x 版本，或在空文件夹里新建 2.0 知识库，把材料重新入库。
 
 ## 2. 建库
 
-对助手说「新建知识库」。它会问三个问题：放在哪里（Drive 文件夹或本地文件夹）、用哪个预设（工作或生活）、库里收什么内容；语言、时区等自动推断。之后给出完整预览，确认后才写入。中文库的标题与文件名长度阈值自动取 55/80。
+对助手说「新建知识库」。它会问两个问题：放在哪里（Drive 文件夹或本地文件夹）、库里收什么内容；语言、时区、档位等自动推断。之后给出完整预览，确认后才写入。中文库的标题与文件名长度阈值自动取 55/80。
 
 在终端里也可以直接用技能所用的同一个脚本：
 
 ```bash
-python3 skills/kb-incremental/scripts/init_library.py plan  --root ~/kb/life --preset life --language zh
-python3 skills/kb-incremental/scripts/init_library.py write --root ~/kb/life --preset life --language zh --scope "我和家人：证件、健康、保险、财务、住房"
+python3 skills/kb-ingest/scripts/init_library.py plan  --root ~/kb/atlas --preset work --language zh --tier weak
+python3 skills/kb-ingest/scripts/init_library.py write --root ~/kb/atlas --preset work --language zh --tier weak --scope "Atlas 项目的计划、会议纪要和报告"
 ```
 
-文件夹里已有 Markdown 文件时脚本会拒绝写入；已有的知识库请对助手说「初始化」并指明该库，走已有库分支，不会覆盖任何文件。
-
-已有中文知识库的，在 `_kb.json` 的 names 里写上库内实际的中文文件名与文件夹名（如 00_当前有效状态卡.md、归档、随手记、_旧），无须改名迁移。
+文件夹里已有 Markdown 文件或 `_kb.json` 时脚本会拒绝写入。`--tier` 取 weak（主题页由脚本生成，适合推理能力有限的模型，例如通过 OpenCode 运行的本地模型）或 strong（主题页由模型撰写，脚本核对每处引用）。
 
 ## 3. 登记
 
@@ -38,7 +36,7 @@ claude.ai 上由首次引导把注册表存进 Drive（第一个库文件夹里�
 在助手每次都会读的指令里（CLAUDE.md、AGENTS.md、GEMINI.md 或 claude.ai 项目指令）加一行：
 
 ```text
-我有知识库：生活（我和家人：证件、健康、保险、财务、住房）；工作（工作目标与计划、项目与事务、会议与决策、制度流程、报表等工作资料）。相关问题先用 kb-query 查知识库，再查代码或凭记忆回答；要记录用 kb-note。新对话开始时，如知识库有未完成的分批入库，先提醒是否继续。
+我有知识库：Atlas 项目（Atlas 项目的计划、会议纪要和报告）；工作（工作目标与计划、项目与事务、会议与决策、制度流程、报表等工作资料）。相关问题先用 kb-query 查知识库，再查代码或凭记忆回答；要记录用 kb-note；要入库用 kb-ingest。
 ```
 
 不加的话，听起来不像私人事务的问题（如「支付接口限流是多少」）可能会被当作代码或常识问题直接回答。`init_library.py instructions --file <文件> --apply` 会按注册表写入或更新这一行，文件其余内容不动。各助手对应的文件见[英文版](manual-setup.md#4-tell-your-assistant-the-libraries-exist)的表格。
@@ -53,7 +51,7 @@ claude.ai 上由首次引导把注册表存进 Drive（第一个库文件夹里�
 
 - `python3 install.py backup [--note 说明]`：备份已安装的技能、所有含知识库说明行的指令文件、注册表和安装记录。安装程序在替换技能、往注册表加库或写入说明行之前也会自动备份一次。
 - `python3 install.py rollback [--id 编号]`：恢复一次备份。恢复前先把现状再备份一次，所以回滚本身也能撤销。
-- `python3 install.py move <库 id> --to <文件夹>`：把一个已登记的本机知识库移到该文件夹下，库文件夹名不变。只搬知识库本身，放原始文件的文件夹留在原处：入库时资料从哪里选都可以。先复制，再逐个文件比对大小和 SHA-256（空文件夹和符号链接也比对），全部一致才把注册表改到新位置；不一致时清掉复制出的内容，其余都不动。以下情况拒绝移动：分批入库没做完；新位置在库里面、不是空文件夹或已登记为别的库；磁盘空间不够。最后才问是否删除原文件夹，默认保留，要输入「删除」才删，删除前再比对一次。移动前请退出助手，移动后重开；Obsidian 里改为打开新位置。
+- `python3 install.py move <库 id> --to <文件夹>`：把一个已登记的本机知识库移到该文件夹下，库文件夹名不变。只搬知识库本身，放原始文件的文件夹留在原处：入库时资料从哪里选都可以。先复制，再逐个文件比对大小和 SHA-256（空文件夹和符号链接也比对），全部一致才把注册表改到新位置；不一致时清掉复制出的内容，其余都不动。以下情况拒绝移动：新位置在库里面、不是空文件夹或已登记为别的库；磁盘空间不够。最后才问是否删除原文件夹，默认保留，要输入「删除」才删，删除前再比对一次。移动前请退出助手，移动后重开；Obsidian 里改为打开新位置。
 - `python3 install.py uninstall`：从安装用过的每个文件夹删除三个技能，删去指令文件里的知识库说明行（其余内容不动，删空的文件一并删除），删除注册表（其中登记的全部库）以及安装记录和全部备份。知识库文件夹默认保留：要删时先选「是」，再逐个确认（默认否），最后输入「删除」。只有含 `_kb.json` 或 `00_` 开头规范文件的文件夹才会列出；符号链接、根目录、家目录及其上级、包含本程序或助手设置的文件夹从不列出。插件方式安装的用 `/plugin` 卸载。
 
 安装记录和备份存放在 `~/.config/evergreen-wiki/`（Windows 为 `%APPDATA%\evergreen-wiki`；可用 `XDG_CONFIG_HOME` 改位置）。知识库文件夹从不进备份：移动之后再回滚到移动前的备份，只恢复注册表登记，所以只在原文件夹还在时才这样回滚。

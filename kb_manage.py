@@ -25,8 +25,8 @@ import sys
 
 log = logging.getLogger("kb_manage")
 ROOT = os.path.dirname(os.path.abspath(__file__))
-SCRIPTS = os.path.join(ROOT, "skills", "kb-incremental", "scripts")
-SKILLS = ["kb-note", "kb-query", "kb-incremental"]
+SCRIPTS = os.path.join(ROOT, "skills", "kb-ingest", "scripts")
+SKILLS = ["kb-note", "kb-query", "kb-ingest"]
 COMMANDS = ("backup", "rollback", "move", "uninstall")
 # A spec file marks a folder as a library: the presets name it 00_Spec.md, Chinese libraries often 00_规范.md.
 SPEC_RE = re.compile(r"^00_.*(spec|规范).*\.md$", re.I)
@@ -55,7 +55,6 @@ MSG = {
         "protected": "the root, home folder or a folder holding it, this program, the skills or the instructions",
         "not_library": "no _kb.json and no 00_ spec file, so it does not look like a library",
         "cannot_move": "Cannot move {label} ({root}): {why}.",
-        "batch_open": "Library {label} has an unfinished batch intake ({path}). Tell your agent \"continue intake\" or \"finish intake\" first, then move it.",
         "same_place": "The new place is where the library already is: {root}",
         "dest_inside": "The new place {parent} is inside {src}.",
         "parent_file": "{parent} is a file, not a folder.",
@@ -119,7 +118,6 @@ MSG = {
         "protected": "是根目录、家目录或其上级，或包含本程序、技能或指令文件",
         "not_library": "没有 _kb.json，也没有 00_ 开头的规范文件，不像知识库",
         "cannot_move": "不能移动「{label}」（{root}）：{why}。",
-        "batch_open": "知识库「{label}」有没做完的分批入库（{path}）。请先对助手说「继续入库」做完，或说「结束入库」，再来移动。",
         "same_place": "新位置就是知识库现在的位置：{root}",
         "dest_inside": "新位置 {parent} 在 {src} 里面。",
         "parent_file": "{parent} 是文件，不是文件夹。",
@@ -502,16 +500,6 @@ def is_empty_dir(path):
     return os.path.isdir(path) and not os.path.islink(path) and not os.listdir(path)
 
 
-def batch_plan(root):
-    il = init_library()
-    try:
-        name = il.kbconf.load_library(root)["names"]["batch_plan"]
-    except Exception as e:  # an incomplete library falls back to the default name
-        log.info("cannot read the settings of %s: %s", root, e)
-        name = il.kbconf.DEFAULT_NAMES["batch_plan"]
-    return os.path.join(root, name)
-
-
 def move_jobs(lib_id, to, m, defaults):
     """Check the move; returns (label, [(source, destination)]) with the library first."""
     libs = {i: (label, root) for i, label, root in registered_libs()}
@@ -521,9 +509,6 @@ def move_jobs(lib_id, to, m, defaults):
     why = lib_check(root, defaults)
     if why:
         raise Refused(m["cannot_move"].format(label=label, root=root or "-", why=m[why]))
-    plan = batch_plan(root)
-    if os.path.exists(plan):
-        raise Refused(m["batch_open"].format(label=label, path=plan))
     parent = norm(to)
     if os.path.lexists(parent) and not os.path.isdir(parent):
         raise Refused(m["parent_file"].format(parent=parent))

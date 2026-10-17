@@ -38,8 +38,8 @@ class ManageTest(unittest.TestCase):
         self.claude_md = self.p("home", ".claude", "CLAUDE.md")
         write(self.claude_md, "# Mine\n")
         self.lib = self.p("home", "kb", "work")
-        # language, agent, install, set up, preset, folder, scope, confirm preview, write line
-        p = self.run_install(["--wizard"], ["2", "", "", "", "2", self.lib, "team projects", "", ""])
+        # language, agent, install, set up, folder, scope, confirm preview, write line
+        p = self.run_install(["--wizard"], ["2", "", "", "", self.lib, "team projects", "", ""])
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         self.skill = self.p("home", ".claude", "skills", "kb-note", "SKILL.md")
         with mock.patch.dict(os.environ, self.env, clear=True):
@@ -139,10 +139,6 @@ class ManageTest(unittest.TestCase):
             p = self.manage(args)
             self.assertEqual(p.returncode, 2, args)
             self.assertIn(msg, p.stdout, args)
-        write(os.path.join(self.lib, "_intake-batches.json"), "{}\n")
-        p = self.manage(["move", "work", "--to", self.p("new")])
-        self.assertEqual(p.returncode, 2)
-        self.assertIn("unfinished batch intake", p.stdout)
         self.assertEqual(self.roots(), ["~/kb/work"])
 
     def test_move_mismatch_removes_copy(self):

@@ -32,8 +32,6 @@ FEED_KEEP = 5000  # events kept for a page that reconnects; older ones come back
 ASK_ALL = {"permission": {name: "ask" for name in (
     "read", "edit", "glob", "grep", "list", "bash", "task", "external_directory", "webfetch", "websearch",
     "lsp", "skill")}}
-# An option a question marks as the recommended one
-RECOMMENDED = re.compile(r"recommend|推荐", re.I)
 # The skills load their own instructions; reading a skill is never a question for the user.
 ASK_ALL["permission"]["skill"] = "allow"
 # Subagents that only look things up; what they do in turn is asked for like everything else.
@@ -51,7 +49,7 @@ SYSTEM_DIRS = ("/bin", "/boot", "/dev", "/etc", "/lib", "/lib32", "/lib64", "/li
                "/sys", "/usr", "/var")
 MAX_RECENT = 5  # work folders remembered
 MAX_SESSIONS = 50  # conversations listed for a work folder
-MAX_WINDOWS = 8  # conversation windows the user opens; the intake's own window is not counted
+MAX_WINDOWS = 8  # conversation windows the user opens
 EDIT_TOOLS = ("edit", "write", "patch", "multiedit", "apply_patch")
 MAX_DIFF = 200000  # characters of an edit's diff passed to the page
 
@@ -449,18 +447,16 @@ class Feed:
             return self.events[start:]
 
 
-# The skill scripts whose runs mark a stage of an intake on the page: script name, then the subcommands
-# that count (None: any). Only these fixed names reach the page, never the command line itself.
-STAGE_SCRIPTS = {"batch_plan": ("plan", "next", "done", "skip", "finish", "status", "add"), "convert": None,
-                 "index_tool": ("check", "add", "update", "write"), "clean": None, "card_check": None,
-                 "assemble": None, "package": None, "archive_plan": None, "pick_materials": None,
-                 "meta": ("name", "date", "entities", "terms", "yaml"), "prep": ("scan", "file"),
-                 "consolidate": ("list", "fill", "done")}
+# The skill scripts whose runs mark a stage of an ingest run on the page: script name, then the
+# subcommands that count (None: any). Only these fixed names reach the page, never the command line itself.
+STAGE_SCRIPTS = {"doc2kb_core": None, "quote_check": ("check", "write"), "kb_batch": ("split",),
+                 "ingest": ("file", "pages", "topics", "add", "retopic", "check"), "pick_materials": None,
+                 "init_library": ("plan", "write", "render", "register", "instructions")}
 SCRIPT_RE = re.compile(r"(?:^|[\s/'\"])(\w+)\.py['\"]?(?:\s+([a-z]+))?")
 
 
 def stage_script(command):
-    """"convert", "index_tool check" and the like for a command running one of STAGE_SCRIPTS, else ""."""
+    """"doc2kb_core", "quote_check check" and the like for a command running one of STAGE_SCRIPTS, else ""."""
     for m in SCRIPT_RE.finditer(str(command)):
         name, sub = m.group(1), m.group(2) or ""
         if name not in STAGE_SCRIPTS:
@@ -509,17 +505,14 @@ class Refused(Exception):
 
 class Window:
     """One conversation window of the page: its OpenCode conversation, the subagents started from it and
-    what waits in it. kind: chat, task (a write task started from a button; task is {"name", "library"})
-    or intake (the client's own intake)."""
+    what waits in it."""
 
-    def __init__(self, wid, session=None, kind="chat", task=None):
+    def __init__(self, wid, session=None):
         self.id = wid
         self.session = session
-        self.kind = kind
-        self.task = task
         self.title = ""
         self.status = "idle"
-        self.material = []  # paths chosen for this conversation's intake
+        self.material = []  # paths named as material in this conversation
         self.children = set()
         self.permissions = {}  # pending, id -> event
         self.questions = {}
@@ -537,7 +530,7 @@ class Window:
         self.status = "idle"
 
     def saved(self):
-        return {"id": self.id, "session": self.session, "kind": self.kind, "task": self.task, "title": self.title}
+        return {"id": self.id, "session": self.session, "title": self.title}
 
     def info(self):
         return dict(self.saved(), status=self.status,
@@ -624,18 +617,17 @@ class Agent:
     # ----- windows -----
 
     def _set_windows(self, entry):
-        """The windows of a saved entry ({"windows": [...], "current"}), checked; at least one chat window."""
+        """The windows of a saved entry ({"windows": [...], "current"}), checked; at least one window.
+        Windows an earlier version kept for its own intake are left out."""
         self.windows = {}
         for x in (entry or {}).get("windows") or []:
             if not isinstance(x, dict) or not re.fullmatch(r"w\d{1,6}", str(x.get("id", ""))) or x["id"] in self.windows:
                 continue
             sid = x.get("session")
             sid = sid if isinstance(sid, str) and re.fullmatch(r"[\w-]{1,100}", sid) else None
-            kind = x.get("kind") if x.get("kind") in ("chat", "task", "intake") else "chat"
-            task = x.get("task")
-            task = {"name": str(task.get("name", "")), "library": str(task.get("library", ""))} \
-                if kind == "task" and isinstance(task, dict) else None
-            self.windows[x["id"]] = Window(x["id"], sid, kind, task)
+            if x.get("kind") == "intake":
+                continue
+            self.windows[x["id"]] = Window(x["id"], sid)
             self.windows[x["id"]].title = str(x.get("title") or "")[:200] if sid else ""
             self.n = max(self.n, int(x["id"][1:]))
         cur = (entry or {}).get("current")
@@ -643,15 +635,15 @@ class Agent:
         self._keep_one()
 
     def _keep_one(self):
-        """At least one window that is not the intake's; the current one is shown."""
-        if not any(w.kind != "intake" for w in list(self.windows.values())):
+        """At least one window; the current one is shown."""
+        if not self.windows:
             self._add()
-        if self.current not in self.windows or self.windows[self.current].kind == "intake":
-            self.current = next(w.id for w in list(self.windows.values()) if w.kind != "intake")
+        if self.current not in self.windows:
+            self.current = next(iter(self.windows))
 
-    def _add(self, session=None, kind="chat", task=None):
+    def _add(self, session=None):
         self.n += 1
-        w = Window(f"w{self.n}", session, kind, task)
+        w = Window(f"w{self.n}", session)
         self.windows[w.id] = w
         return w
 
@@ -684,7 +676,7 @@ class Agent:
         if self.state == "simple":
             raise Refused("simple")
         if session is not None:
-            have = next((w for w in list(self.windows.values()) if w.session == session and w.kind != "intake"), None)
+            have = next((w for w in list(self.windows.values()) if w.session == session), None)
             if have:
                 self.focus(have.id)
                 return have.id
@@ -692,7 +684,7 @@ class Agent:
             if listed is None:
                 raise LookupError(session)
         with self.lock:
-            if sum(1 for w in list(self.windows.values()) if w.kind != "intake") >= MAX_WINDOWS:
+            if len(self.windows) >= MAX_WINDOWS:
                 raise Refused("too_many")
             w = self._add(session)
             w.title = listed["title"] if session is not None else ""
@@ -718,46 +710,8 @@ class Agent:
         self.emit_windows()
 
     def focus(self, wid):
-        w = self.window(wid)
-        if w.kind != "intake":
-            self.current = w.id
-            self._save()
-
-    def task(self, name, library, text, wid=None):
-        """Sends text in a task window: wid when it is one that is idle, else a new one for the task.
-        Returns the window id. The client checks the write lock first."""
-        with self.lock:
-            w = self.windows.get(wid) if wid else None
-            if w is not None and (w.kind != "task" or w.busy()):
-                raise Refused("busy")
-            if w is None:
-                if self.state == "simple":
-                    w = self.window()
-                else:
-                    if sum(1 for x in list(self.windows.values()) if x.kind != "intake") >= MAX_WINDOWS:
-                        raise Refused("too_many")
-                    w = self._add(kind="task", task={"name": name, "library": library or ""})
-                    self.current = w.id
-                    self._save()
-        self.emit_windows()
-        self.send(text, win=w.id)
-        return w.id
-
-    def intake_window(self):
-        """The window of the client's intake, made when there is none; it does not count against MAX_WINDOWS."""
-        with self.lock:
-            w = next((x for x in list(self.windows.values()) if x.kind == "intake"), None)
-            if w is None:
-                w = self._add(kind="intake")
-                self._save()
-        self.emit_windows()
-        return w
-
-    def close_intake(self):
-        """Drops the intake window kept from an earlier start (nothing of its run is left to continue)."""
-        for w in [x for x in list(self.windows.values()) if x.kind == "intake"]:
-            self.windows.pop(w.id, None)
-        self._keep_one()
+        self.current = self.window(wid).id
+        self._save()
 
     # ----- start and stop -----
 
@@ -1312,21 +1266,6 @@ class Agent:
             if self.reply_permission(ev["id"], "once"):
                 self.feed.emit("auto", win=w.id, permission=ev["permission"], patterns=ev["patterns"][:5],
                                child=ev["child"])
-
-    def answer_recommended(self, rid, fallback):
-        """Answers a question card for a run the client drives with Allow everything on: each question with
-        its recommended option (one whose label or description says so), else its first option, else
-        fallback as a typed answer. The answers sent, or None."""
-        w = self._card(rid, "questions")
-        if w is None:
-            return None
-        answers = []
-        for x in w.questions[rid]["questions"]:
-            opts = x["options"]
-            pick = next((o for o in opts if RECOMMENDED.search(o["label"] + " " + o["description"])),
-                        opts[0] if opts else None)
-            answers.append([pick["label"]] if pick else [fallback] if x["custom"] else [])
-        return answers if self.reply_question(rid, answers) else None
 
     def reply_question(self, rid, answers):
         w = self._card(rid, "questions")

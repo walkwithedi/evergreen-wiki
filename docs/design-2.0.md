@@ -194,7 +194,7 @@ _kb.json additions:
 }
 ```
 
-kbconf accepts and checks these keys (tier weak or strong, batch_chars at least 1000, quote_min at least 1, quote_max not below quote_min) while the schema stays 1; it becomes 2 when kb-incremental is removed (step 3c).
+kbconf accepts and checks these keys (tier weak or strong, batch_chars at least 1000, quote_min at least 1, quote_max not below quote_min). The schema is 2; a _kb.json of schema 1 is a 1.x library and is refused, since 2.0 does not migrate 1.x libraries.
 
 ## 9. Implementation steps
 

@@ -15,7 +15,6 @@ The library is a Drive folder; backend.root in the registry is its folder ID. Th
 | write_new | create_file with parentId, title, textContent; contentMimeType text/markdown for .md, application/json for .json, text/plain for .txt; disableConversionToGoogleType true |
 | ensure_folder | find_folder; if absent, create_file with mimeType application/vnd.google-apps.folder |
 | move_rename | update_file with fileId, the new parentId and, when renaming, the new title |
-| replace_content | update_file with fileId and the new textContent; the file keeps its ID. Used only for a plan item marked "updated again in this run" (fast intake). If the connector cannot replace content, move the copy to the archive folder as for any old version instead, under a name built the same way |
 | folder_name | get_file_metadata on the folder ID, use its title |
 
 ## Rules
@@ -25,32 +24,12 @@ The library is a Drive folder; backend.root in the registry is its folder ID. Th
 3. Never use a file ID from memory; take IDs from search results in this conversation.
 4. If a file ID from an earlier step fails, search for the file again by name.
 5. A permission error on write or move means the connected Google account cannot edit that folder: stop and say so.
-6. Drive allows several files with one name in a folder. That is how versions pile up, and why archive mode exists.
+6. Drive allows several files with one name in a folder, so a new version is written only after the old copy has moved to the archive folder; find_exact afterwards must find exactly one copy.
 
-## Delivery (delivery = direct, the default)
+## Writing an ingest run
 
-Drive allows several files with one name, so a new version is written only after the old one has moved to the archive folder. Same two rounds as a local library, with the connector doing the writes:
-
-1. Round 1, preview. Copy _kb.json to <work>/_kb.json. For each output file (root files, and entity pages in the entities folder), find_exact its name in the folder it goes to, and collect every copy found as {"rel": "<name or entities_dir/name>", "id": "<file id>", "modified": "<modifiedTime>"} in <work>/existing.json (an empty list when nothing exists). Then
-   python3 scripts/package.py remote-preview <work>/out --library <work>/_kb.json --existing <work>/existing.json --plan <work>/deliver-plan.json --max-name-len <Table D>
-   Show the preview: new files, and existing files whose old copy will move to the archive folder. End with: reply "confirm" to write. The turn ends here.
-2. Round 2, after the user confirms. ensure_folder the archive folder (and the entities folder if the plan has entity pages). For each item of the plan, in order:
-   a. find_exact the name again. If the copies differ from the plan (a copy appeared, disappeared or changed modifiedTime), skip the item and record "changed after preview".
-   b. move_rename each old copy listed under "archive" into the archive folder with its archive_as title.
-   An item with "replace" (fast intake, updated again in this run): replace_content of that copy instead of b and c.
-   c. write_new the new file (contentMimeType text/markdown, disableConversionToGoogleType true) in the root or the entities folder.
-   d. find_exact once more: exactly one copy must remain. Record "ok" or the error in <work>/results.json as {"<rel>": "ok" | "<error>"}. On a permission error stop at once and report that the connected account needs edit rights on the folder.
-3. python3 scripts/package.py remote-log --plan <work>/deliver-plan.json --results <work>/results.json prints the run log and two file names. write_new the log (text/plain) and the readme (text/plain, under the readme file name printed) into the archive folder.
-4. Report written and failed counts from the log, and the names of any failures. Nothing is left for the user to upload, and archive mode is not needed afterwards.
-
-Without Python: build the same preview by hand (archive names <stem><old_suffix><YYYYMMDDHHMMSS>.md, one second apart from now in the library timezone), carry out round 2 the same way, and write the run log with the same lines.
-
-Fast intake (references/fast.md in kb-incremental) delivers each item as soon as it is filed: run round 1 with --run <work>/run.json and carry out round 2 without waiting, since the run was confirmed once at its start. The file index and the consolidation queue are archived once per run and replaced after that; remote-log says when to append to the run log and readme written earlier in the run instead of writing new ones.
+The scripts cannot write to Drive, so kb-ingest runs them on a staging folder laid out like the library and then writes the changed files back after the user confirms the preview (kb-ingest, "Libraries in Google Drive"): each old copy is moved into the archive folder with move_rename, under <stem><old_suffix><YYYYMMDDHHMMSS>.md, before write_new writes the new file (contentMimeType text/markdown, disableConversionToGoogleType true); find_exact afterwards finds exactly one copy of each name. A permission error stops the writing at once: the connected account needs edit rights on the folder.
 
 Many files make many connector calls. Above about 30 files, say so in the preview and suggest splitting the material into two runs.
 
-## Delivery (delivery = zip)
-
-Used only when _kb.json sets delivery to zip, or has an "inbox" entry: the user runs an inbox script that unpacks uploaded zips (an Apps Script or similar, not part of this kit). Intake output is packed into one zip (scripts/package.py zip); follow the inbox hints for upload and keep the zip layout exactly as package.py builds it. Without an inbox script, the user uploads the files by hand and then runs archive mode, which moves the older same-name copies to the archive folder.
-
-Quick notes (kb-note), the second round of note filing, init and archive mode always write to Drive directly, after a preview the user confirms (kb-note writes without a preview because it only ever creates one new file).
+Quick notes (kb-note) and init always write to Drive directly, after a preview the user confirms (kb-note writes without a preview because it only ever creates one new file).

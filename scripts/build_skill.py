@@ -22,7 +22,7 @@ import zipfile
 log = logging.getLogger("build_skill")
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s.%(funcName)s:%(lineno)d - %(message)s"
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SKILLS = ["kb-note", "kb-query", "kb-incremental"]
+SKILLS = ["kb-note", "kb-query", "kb-ingest"]
 SKIP_DIRS = {"__pycache__", ".pytest_cache"}
 SKIP_FILES = {".DS_Store"}
 

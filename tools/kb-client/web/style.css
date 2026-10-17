@@ -120,11 +120,6 @@ input[type=text] {
 .scope { color: var(--muted); font-size: 13px; }
 .where { color: var(--muted); font-size: 13px; word-break: break-all; margin: 2px 0 6px; }
 .warn { color: var(--warn); font-size: 13px; }
-.auto { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--line); }
-.auto .hint, .auto .warn { margin: 4px 0 0; overflow-wrap: anywhere; }
-.auto code { font-size: 12.5px; }
-.auto.attn { border-left: 3px solid var(--warn); padding-left: 7px; }
-.auto-switch { font-size: 13px; display: inline-flex; gap: 4px; align-items: center; cursor: pointer; }
 .empty, .hint { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
 .actions { display: flex; flex-direction: column; gap: 8px; }
 .actions button { text-align: left; }
@@ -262,7 +257,7 @@ textarea {
 .fold > .text { margin-top: 4px; }
 .note.queued { font-style: italic; }
 
-/* intake stages, progress and batch cards */
+/* ingest stages */
 .stages { border: 1px solid var(--line); border-radius: 8px; background: var(--soft); padding: 8px 10px; margin: 0 0 8px; }
 .stage-list { display: flex; flex-wrap: wrap; gap: 4px 6px; list-style: none; margin: 0; padding: 0; font-size: 13px; }
 .stage-list li { padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); cursor: pointer; }
@@ -270,8 +265,6 @@ textarea {
 .stage-list li.now { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .stage-list li.past::before { content: "\2713  "; }
 .stage-why { margin: 6px 0 0; font-size: 13px; }
-.progress { margin: 4px 0 0; font-size: 13px; font-weight: 600; }
-.note.batch { color: var(--good); border-left: 3px solid var(--good); padding-left: 8px; }
 
 /* library graph */
 :root { --k-entity: #8a5a00; --k-summary: #2e7d4f; --k-topic: #2f5fae; --k-original: #7b4d8f; --k-missing: #9aa0a6; --k-new: #c2410c; }
@@ -335,7 +328,7 @@ textarea {
 .steps-body { margin: 4px 0 0 12px; display: flex; flex-direction: column; gap: 2px; }
 #step .panel-head h2 { flex: 1; }
 
-/* ideas carousel: welcome area, and shorter while an intake runs */
+/* ideas carousel: welcome area, and shorter while an ingest run goes on */
 .ideas { margin-top: 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--soft);
   padding: 14px 16px 10px; }
 .ideas:empty { display: none; }
@@ -493,42 +486,13 @@ body.kb-open .kb-toggle { background: var(--soft); color: var(--accent); }
 .skill-pop li.bad { color: var(--bad); list-style: none; margin-left: -18px; }
 .skill-pop .hint { margin: 4px 0; }
 
-/* task buttons: two main ones with a line on what they do, the rest when they apply or under More */
+/* task buttons, with a line on what they do */
 .tasks { align-items: stretch; }
-.tasks button.task-main, .task-more button { display: flex; flex-direction: column; align-items: flex-start; text-align: left;
+.tasks button.task-main { display: flex; flex-direction: column; align-items: flex-start; text-align: left;
   gap: 1px; padding: 6px 14px; }
 .tasks button.task-main { border-color: var(--accent); }
 .tasks button.task-main strong { color: var(--accent); }
 .tasks button span { font-size: 12.5px; color: var(--muted); font-weight: normal; }
-.tasks button.task-extra { border-style: dashed; }
-.task-more { position: relative; align-self: center; }
-.task-more > summary { cursor: pointer; color: var(--muted); font-size: 14px; padding: 6px 8px; list-style: none; }
-.task-more > summary::-webkit-details-marker { display: none; }
-.task-more > summary::after { content: " \25BE"; }
-.task-more[open] { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; }
-.task-more[open] > summary { align-self: center; }
-
-/* intake run by the client */
-.intake { border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 8px; background: var(--soft);
-  padding: 10px 14px; display: flex; flex-direction: column; gap: 6px; }
-.intake-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.intake-step { flex: 1; color: var(--muted); font-size: 13px; }
-.intake-bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
-.intake-bar > span { display: block; height: 100%; background: var(--accent); transition: width .3s; }
-.intake-items { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow: auto; font-size: 13.5px; }
-.intake-items li { display: flex; gap: 8px; padding: 2px 0; align-items: baseline; }
-.intake-items .mark { width: 14px; flex: none; text-align: center; color: var(--muted); }
-.intake-items .file { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.intake-items .what { color: var(--muted); overflow-wrap: anywhere; }
-.intake-items .st-written .mark, .intake-items .st-written .what { color: var(--good); }
-.intake-items .st-working .file { font-weight: 600; }
-.intake-items .st-failed .mark, .intake-items .st-failed .what { color: var(--bad); }
-.intake-items .st-manual .mark, .intake-items .st-manual .what { color: var(--warn); }
-.intake-sum { margin: 4px 0 0; font-weight: 600; }
-.intake .hint { margin: 0; overflow-wrap: anywhere; }
-.intake-long { margin: 0; }
-.intake-long p { margin: 0 0 4px; overflow-wrap: anywhere; }
-.intake-long summary { cursor: pointer; }
 
 /* where the logs are */
 .log-where { overflow-wrap: anywhere; }

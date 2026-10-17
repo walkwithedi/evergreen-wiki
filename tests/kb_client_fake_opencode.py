@@ -7,22 +7,16 @@ OpenCode does. FAKE_OPENCODE_LOG: file that gets one JSON line per call (the arg
 every request). FAKE_OPENCODE_MODE: "noserve" (serve exits at once), "noserve1" (only the first serve
 exits at once; needs FAKE_OPENCODE_LOG), "noapi" (GET /permission is 404), "slow" (serve never says it
 listens). Messages starting with PERM <permission> <pattern>, QUESTION or SLOW
-make the session ask for a permission, ask a question or wait to be aborted (so does the page's Health check
-request); SUBAGENT <permission>
+make the session ask for a permission, ask a question or wait to be aborted; SUBAGENT <permission>
 <pattern> starts a subagent session that asks for that permission; THINK sends reasoning first; RUN <command>
 shows a finished bash step running that command; STEPS <n> gives one answer with n tool steps (the third
-one failed); EDIT shows a finished edit step with a diff. A message naming a decision_<n>.json file is a
-client intake turn: the head and decision files are written (FAKE_OPENCODE_INTAKE: bad_once, never, slow).
-A message naming a consolidate_<r>.json file is a client consolidation round: one row leaves the library's
-queue and the result file is written (FAKE_OPENCODE_CONSOLIDATE: "ask" asks the step-5 question first and
-consolidates only when it is answered with Accept all, "stuck" changes nothing). GET /session lists the sessions with this
+one failed); EDIT shows a finished edit step with a diff. GET /session lists the sessions with this
 server's folder, their time and parent (a conversation's title is
 t-<id>, sent as session.updated after its first message); GET /config/providers offers example/model-1 and example/model-2.
 """
 import json
 import os
 import queue
-import re
 import socketserver
 import sys
 import threading
@@ -31,8 +25,6 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 LOG = os.environ.get("FAKE_OPENCODE_LOG", "")
 STORE = os.environ.get("FAKE_OPENCODE_STORE", "")  # file keeping the conversations from one serve to the next
-INTAKE_RE = re.compile(r"/[^\s，。）]+decision_\d+\.json")
-CONSOLIDATE_RE = re.compile(r"/[^\s，。）]+consolidate_\d+\.json")
 MODE = os.environ.get("FAKE_OPENCODE_MODE", "")
 
 
@@ -48,7 +40,6 @@ class World:
         self.sessions = {}  # id -> [{"info", "parts"}]
         self.meta = {}  # id -> {"parentID", "time"}
         self.clients = []
-        self.bad = set()  # decision files answered wrongly once (FAKE_OPENCODE_INTAKE bad_once)
         self.waits = {}  # permission or question id -> (threading.Event, [reply])
         self.aborts = {}
         self.n = 0
@@ -178,89 +169,13 @@ class World:
             self.sessions[sid].append({"info": info, "parts": [part]})
             self.emit("message.updated", sessionID=sid, info=info)
             self.emit("message.part.updated", sessionID=sid, part=part, time=0)
-        elif words[0] == "SLOW" or text.startswith(("health check the ", "检查知识库")):  # also the page's Health check
+        elif words[0] == "SLOW":
             ev = self.aborts.setdefault(sid, threading.Event())
             ev.clear()
             self.message(sid, "assistant", "aborted" if ev.wait(20) else "slow done")
-        elif CONSOLIDATE_RE.search(text):
-            self.message(sid, "assistant", self.consolidate(text, sid))
-        elif INTAKE_RE.search(text):
-            self.message(sid, "assistant", self.intake(text, sid))
         else:
             self.message(sid, "assistant", "echo: " + text)
         self.emit("session.status", sessionID=sid, status={"type": "idle"})
-
-    def consolidate(self, text, sid):
-        """A client consolidation round: the first row of the queue named by the library root leaves it."""
-        result = CONSOLIDATE_RE.search(text).group(0)
-        mode = os.environ.get("FAKE_OPENCODE_CONSOLIDATE", "")
-        root = re.search(r"(?:Library|知识库)[:：][^(（]*[(（](.+?)[)）]\n", text).group(1)
-        files = 0
-        if mode == "ask":
-            rid = self.next("que")
-            self.waits[rid] = (threading.Event(), [])
-            self.emit("question.asked", id=rid, sessionID=sid, questions=[
-                {"question": "Apply these changes?", "header": "Changes",
-                 "options": [{"label": "Leave some out first", "description": ""},
-                             {"label": "Accept all (recommended)", "description": ""},
-                             {"label": "Cancel the round", "description": ""}]}])
-            got = self.wait_for(rid, 60)
-            self.emit("question.replied", sessionID=sid, requestID=rid, answers=got)
-            if not (got and got[0] and got[0][0].startswith("Accept all")):
-                mode = "stuck"
-        if mode != "stuck":
-            queue = os.path.join(root, "_Consolidation-Queue.md")
-            with open(queue, encoding="utf-8") as f:
-                lines = f.read().split("\n")
-            for i, ln in enumerate(lines):
-                cells = [c.strip() for c in ln.strip().strip("|").split("|")]
-                if ln.strip().startswith("|") and cells[0].endswith(".md"):
-                    del lines[i]
-                    files = 1
-                    break
-            with open(queue, "w", encoding="utf-8") as f:
-                f.write("\n".join(lines))
-        with open(result, "w", encoding="utf-8") as f:
-            json.dump({"files": files, "changes": 2 * files}, f)
-        return "round done"
-
-    def intake(self, text, sid):
-        """A client intake turn: writes the head file and the decision file the message names. The title
-        is the original file's name; a name-hit message makes it the next version. FAKE_OPENCODE_INTAKE:
-        "bad_once" writes an unusable decision the first time for each item, "never" writes nothing,
-        "slow" waits until the turn is aborted."""
-        decision = INTAKE_RE.search(text).group(0)
-        head = re.sub(r"decision_(\d+)\.json$", r"head_\1.md", decision)
-        mode = os.environ.get("FAKE_OPENCODE_INTAKE", "")
-        if mode == "never":
-            return "thinking about it"
-        if mode == "slow":  # waits to be stopped
-            ev = self.aborts.setdefault(sid, threading.Event())
-            ev.clear()
-            return "aborted" if ev.wait(20) else "slow done"
-        if mode == "bad_once" and decision not in self.bad:
-            self.bad.add(decision)
-            with open(decision, "w", encoding="utf-8") as f:
-                f.write('{"partition": ""}')
-            return "decided"
-        orig = re.search(r"(?:Original file|原文件)[:：]\s*(.+)", text)
-        title = os.path.splitext(os.path.basename(orig.group(1).strip()))[0] if orig else ""
-        prev = {}
-        if os.path.isfile(decision):
-            try:
-                with open(decision, encoding="utf-8") as f:
-                    prev = json.load(f)
-            except ValueError:
-                prev = {}
-        title = title or prev.get("title") or "Item"
-        same = bool(prev.get("same_version")) or "next version of that file" in text or "新版本" in text and "同名" in text
-        with open(head, "w", encoding="utf-8") as f:
-            f.write("> Source: " + title + "\n")
-        with open(decision, "w", encoding="utf-8") as f:
-            json.dump({"partition": "02", "topic": "Atlas", "type": "Report", "title": title,
-                       "close_read": False, "same_version": same}, f)
-        return "decided"
-        self.emit("session.idle", sessionID=sid)
 
 
 WORLD = World()
