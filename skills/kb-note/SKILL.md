@@ -1,6 +1,6 @@
 ---
 name: kb-note
-description: Saves a small piece of information from the conversation into the user's knowledge base as a quick note, to be filed properly later by kb-incremental. Use when the user says "note this", "save this", "add this to my knowledge base", "jot this down" or similar, for example "note this: send the draft plan to Alex by Friday". Writes the user's words, key points and context to one new file in the library's quick-notes folder, replies with the file name and the key point, and when notes pile up suggests saying "file my quick notes". Only creates files, never changes existing ones. Use only when the user asks; never save on your own or ask whether to save. Requests aimed at the assistant's own memory ("remember that", "from now on") are not for this skill. Filing, archiving and health checks belong to kb-incremental; questions belong to kb-query.
+description: Saves a small piece of information from the conversation into the user's knowledge base as a quick note, to be ingested properly later with kb-ingest. Use when the user says "note this", "save this", "add this to my knowledge base", "jot this down" or similar, for example "note this: send the draft plan to Alex by Friday". Writes the user's words, key points and context to one new file in the library's quick-notes folder, replies with the file name and the key point, and when notes pile up suggests saying "file my quick notes". Only creates files, never changes existing ones. Use only when the user asks; never save on your own or ask whether to save. Requests aimed at the assistant's own memory ("remember that", "from now on") are not for this skill. Ingesting material and setting up libraries belong to kb-ingest; questions belong to kb-query.
 ---
 
 # Quick notes: save a piece of the conversation
@@ -25,8 +25,7 @@ Load the registry. Match the content against each library's scope.
 1. The user named a library: use it.
 2. Exactly one scope fits: use it.
 3. None or several fit: ask "Which library: <labels>?" in one sentence. Never default.
-Then read that library's backend file (references/backend-gdrive.md or references/backend-local.md) and its _kb.json (for language, timezone, sensitivity and names).
-After the note is saved, check that library for an unfinished intake (references/config.md, section 4) and for files waiting for consolidation (section 5), and remind once per conversation; this skill only reminds and hands "continue intake" and "consolidate" to kb-incremental.
+Then read that library's backend file (references/backend-gdrive.md or references/backend-local.md) and its _kb.json (for language, timezone and names).
 
 ## Step 3: write the note
 
@@ -50,7 +49,6 @@ Context:
 Rules:
 1. Suggested partition and topic: only if this conversation already read the library spec's Table A; otherwise "not judged". Do not fetch the spec just for this. It is only a hint.
 2. With sensitivity enabled: mask ID numbers, card and account numbers, passwords and one-time codes with asterisks, keeping at most the last keep_last characters, in words and key points alike. Never add health, money or investment advice or interpretation.
-3. Extra hard rules in the library's _kb-params.md also apply here.
 4. Dates, numbers, names and organisations exactly as the user wrote them. A relative date ("next Wednesday") gets the computed date in brackets in the key points, marked "computed".
 
 ## Step 4: save it

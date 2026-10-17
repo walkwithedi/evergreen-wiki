@@ -17,7 +17,6 @@ FAKE = os.path.join(ROOT, "tests", "kb_client_fake_opencode.py")
 CANCEL = object()
 sys.path.insert(0, os.path.join(ROOT, "tools", "kb-client"))
 import agent  # noqa: E402
-import intake as intake_mod  # noqa: E402
 import kb_client  # noqa: E402
 
 
@@ -141,9 +140,9 @@ class KbClientTest(unittest.TestCase):
         return os.path.join(self.tmp, *parts)
 
     def setup_library(self):
-        # agent, install the skills, set up a library, its kind, folder and scope,
+        # agent, install the skills, set up a library, its folder and scope,
         # write it (Enter at the preview), add the knowledge-base line
-        return self.server.run("setup", ["claude-code", True, True, "work", self.p("home", "kb", "work"),
+        return self.server.run("setup", ["claude-code", True, True, self.p("home", "kb", "work"),
                                          "team projects", "", True])
 
     def test_requests_need_the_token_and_the_local_host(self):
@@ -196,8 +195,6 @@ class KbClientTest(unittest.TestCase):
         self.assertEqual(st["agent"]["program"], "")
         result, out, asked = self.setup_library()
         self.assertEqual(result, "ok", out)
-        kind = [q for q in asked if q["kind"] == "choose" and [o["value"] for o in q["options"]] == ["life", "work"]]
-        self.assertEqual(kind[0]["default"], "work")  # the client suggests a work library
         self.assertEqual(self.server.last_type, "text/event-stream; charset=utf-8")
         self.assertIn("Preview", out)
         self.assertTrue(any(q["kind"] == "folder" for q in asked))
@@ -223,19 +220,19 @@ class KbClientTest(unittest.TestCase):
         self.assertFalse(self.server.get("/api/state")[1]["instructions"])
 
     def test_preview_answered_with_choices(self):
-        # agent, install, set up, kind, folder, scope; at the preview: change item 2 (Label), then write
-        result, out, asked = self.server.run("setup", ["claude-code", True, True, "work", self.p("home", "kb", "work"),
+        # agent, install, set up, folder, scope; at the preview: change item 2 (Label), then write
+        result, out, asked = self.server.run("setup", ["claude-code", True, True, self.p("home", "kb", "work"),
                                                        "team projects", "change", "2", "Team", "write", True])
         self.assertEqual(result, "ok", out)
         previews = [q for q in asked if q["kind"] == "choose" and q["options"][0]["value"] == "write"]
         self.assertEqual(len(previews), 2)
         self.assertEqual([o["value"] for o in previews[0]["options"]], ["write", "change", "cancel"])
         items = next(q for q in asked if q["kind"] == "choose" and q["options"][0]["value"] == "1")
-        self.assertEqual(len(items["options"]), 9)
+        self.assertEqual(len(items["options"]), 7)
         self.assertEqual(json.loads(read(self.p("home", "kb", "work", "_kb.json")))["label"], "Team")
 
     def test_preview_cancelled_with_a_choice(self):
-        result, out, _ = self.server.run("setup", ["claude-code", True, True, "work", self.p("home", "kb", "work"),
+        result, out, _ = self.server.run("setup", ["claude-code", True, True, self.p("home", "kb", "work"),
                                                    "team projects", "cancel"])
         self.assertIn("Cancelled", out)
         self.assertFalse(os.path.exists(self.p("home", "kb", "work", "_kb.json")))
@@ -319,7 +316,7 @@ class KbClientTest(unittest.TestCase):
     def test_answers_of_the_wrong_type_take_the_default(self):
         # a yes question answered with text counts as its default (yes); a folder question answered with a
         # number counts as no answer, so it is asked again
-        result, out, asked = self.server.run("setup", ["claude-code", "yes", True, "work", 7,
+        result, out, asked = self.server.run("setup", ["claude-code", "yes", True, 7,
                                                        self.p("home", "kb", "work"), "team projects", "", True])
         self.assertEqual(result, "ok", out)
         self.assertEqual([q["kind"] for q in asked].count("folder"), 2)
@@ -359,29 +356,6 @@ class KbClientTest(unittest.TestCase):
         agent = self.server.get("/api/state")[1]["agent"]
         self.assertTrue(agent["model"])
         self.assertTrue(agent["config"].endswith("opencode.jsonc"))
-
-    def test_progress(self):
-        self.assertEqual(self.server.get("/api/progress")[1], {"progress": []})
-        result, out, _ = self.setup_library()
-        self.assertEqual(result, "ok", out)
-        self.assertEqual(self.server.get("/api/progress")[1], {"progress": []})  # no run open
-        batches = [{"n": 1, "group": "minutes", "part": "", "status": "done", "files": [{"path": "/x/a.docx"}],
-                    "result": {"written": 4, "duplicates": 1, "review": 0}},
-                   {"n": 2, "group": "plans", "part": "1/2", "status": "started", "files": [], "result": {}},
-                   {"n": 3, "group": "plans", "part": "2/2", "status": "pending", "files": [], "result": {}}]
-        write(self.p("home", "kb", "work", "_intake-batches.json"),
-              json.dumps({"schema": 1, "batches": batches, "final_step": "pending"}))
-        p = self.server.get("/api/progress")[1]["progress"]
-        self.assertEqual(len(p), 1)
-        p = p[0]
-        self.assertEqual((p["id"], p["batches"], p["done"], p["skipped"], p["current"], p["current_group"]),
-                         ("work", 3, 1, 0, 2, "plans"))
-        self.assertEqual((p["written"], p["duplicates"], p["review"], p["final_step"]), (4, 1, 0, "pending"))
-        self.assertEqual(p["finished"], [{"n": 1, "group": "minutes", "part": "",
-                                          "result": {"written": 4, "duplicates": 1, "review": 0}}])
-        self.assertNotIn("/x/a.docx", json.dumps(p))  # counts, not file paths
-        write(self.p("home", "kb", "work", "_intake-batches.json"), "{broken")
-        self.assertEqual(self.server.get("/api/progress")[1], {"progress": []})
 
     def test_graph_of_a_registered_library(self):
         self.assertEqual(self.server.get("/api/graph?lib=work")[0], 404)
@@ -426,7 +400,7 @@ class KbClientTest(unittest.TestCase):
         self.assertIn("kb-note " + self.release() + " (was 0.1.0)", out)
         self.assertIn("Libraries unchanged", out)
         self.assertNotIn("No library set up", out)
-        self.assertEqual(sorted(os.listdir(skills)), ["kb-incremental", "kb-note", "kb-query"])
+        self.assertEqual(sorted(os.listdir(skills)), ["kb-ingest", "kb-note", "kb-query"])
         self.assertFalse(os.path.exists(os.path.join(skills, "kb-note", "mine.md")))
         self.assertEqual(self.server.get("/api/state")[1]["backups"], before + 1)  # backed up first
         self.assertFalse(os.path.exists(self.p("home", ".config", "opencode", "skills")))  # only where in effect
@@ -541,369 +515,13 @@ class ChatTest(unittest.TestCase):
         status, r = self.server.post("/api/chat/send", dict(kw, text=text))
         self.assertEqual(status, 200, r)
 
-    def intake_library(self):
-        # skills where OpenCode reads them, and a local work library
-        ev = self.start("", "--agent", "opencode", "--preset", "work")
-        ev.until(lambda e: e["type"] == "agent" and e["state"] == "ready", "ready")
-        result, out, _ = self.server.run("setup", [True, True, self.p("home", "kb", "work"), "team projects", "",
-                                                   True, True, True])
-        self.assertEqual(result, "ok", out)
-        ev.until(lambda e: e["type"] == "agent" and e["state"] == "ready", "ready after setup", timeout=60)
-        material = self.p("material")
-        write(os.path.join(material, "Atlas weekly 1.md"), "# Weekly status\n\nRiverside Clinic moved to phase two.\n")
-        write(os.path.join(material, "sub", "Atlas weekly 2.txt"), "Second week: the review is done.\n")
-        write(os.path.join(material, "sub", "copy of week 1.md"),
-              "# Weekly status\n\nRiverside Clinic moved to phase two.\n")  # the same content again
-        write(os.path.join(material, ".hidden.md"), "not material\n")
-        return ev, material
-
-    def intake_until_done(self, timeout=90):
-        end = time.time() + timeout
-        while time.time() < end:
-            run = self.server.get("/api/intake")[1]["run"]
-            if run and run["state"] in ("done", "stopped"):
-                return run
-            time.sleep(0.3)
-        raise AssertionError(f"intake not done: {run}")
-
-    def test_intake_by_the_client(self):
-        ev, material = self.intake_library()
-        status, r = self.server.post("/api/intake", {"library": "work", "paths": [material]})
-        self.assertEqual(status, 200, r)
-        self.assertEqual(r["run"]["total"], 3)  # hidden files are left out
-        # the intake's window takes no messages while it runs
-        self.assertEqual(self.server.post("/api/chat/send", {"text": "hello", "win": r["run"]["win"]})[0], 409)
-        run = self.intake_until_done()
-        by_file = {it["file"]: it for it in run["items"]}
-        self.assertEqual(by_file["Atlas weekly 1.md"]["status"], "written", run)
-        self.assertEqual(by_file["Atlas weekly 2.txt"]["status"], "written", run)
-        self.assertEqual(by_file["copy of week 1.md"]["status"], "duplicate", run)
-        lib = self.p("home", "kb", "work")
-        for it in run["items"]:
-            if it["status"] == "written":
-                self.assertTrue(os.path.isfile(os.path.join(lib, it["name"])), it)
-        index = read(os.path.join(lib, "01_File-Index.md"))
-        self.assertIn("Atlas weekly 1.md", index)
-        self.assertIn("Atlas weekly 2.txt", index)
-        done = ev.until(lambda e: e["type"] == "intake" and e["run"]["state"] == "done", "intake event")
-        self.assertEqual(done["run"]["counts"], run["counts"])
-        # the same folder again: everything is a duplicate, nothing is asked
-        self.server.post("/api/intake", {"library": "work", "paths": [material]})
-        again = self.intake_until_done()
-        self.assertEqual(again["counts"], {"duplicate": 3}, again)
-
-    def test_intake_asks_again_and_stops(self):
-        self.env["FAKE_OPENCODE_INTAKE"] = "bad_once"
-        _, material = self.intake_library()
-        self.server.post("/api/intake", {"library": "work", "paths": [os.path.join(material, "Atlas weekly 1.md")]})
-        run = self.intake_until_done()
-        self.assertEqual(run["items"][0]["status"], "written", run)  # the second answer was usable
-        sent = [c for c in self.calls() if c.get("path", "").endswith("/prompt_async")]
-        self.assertGreaterEqual(len(sent), 2)
-
-    def test_intake_without_a_usable_answer(self):
-        self.env["FAKE_OPENCODE_INTAKE"] = "never"
-        _, material = self.intake_library()
-        write(os.path.join(material, "scan.bin"), "\x00\x01\x02")
-        self.server.post("/api/intake", {"library": "work", "paths": [os.path.join(material, "Atlas weekly 1.md"),
-                                                                       os.path.join(material, "scan.bin")]})
-        run = self.intake_until_done()
-        self.assertEqual([it["status"] for it in run["items"]], ["failed", "manual"], run)
-        self.assertIn("3", run["items"][0]["reason"])  # asked three times
-        self.assertFalse(any(f.startswith("02_") for f in os.listdir(self.p("home", "kb", "work"))))
-
-    def test_intake_stop_and_continue(self):
-        self.env["FAKE_OPENCODE_INTAKE"] = "slow"
-        _, material = self.intake_library()
-        self.server.post("/api/intake", {"library": "work", "paths": [material]})
-        end = time.time() + 30
-        while self.server.get("/api/intake")[1]["run"]["step"] != "ask" and time.time() < end:
-            time.sleep(0.2)
-        self.assertEqual(self.server.post("/api/intake/stop", {})[0], 200)
-        run = self.intake_until_done()
-        self.assertEqual(run["state"], "stopped")
-        self.assertEqual(run["counts"], {"waiting": 3}, run)
-        status, r = self.server.post("/api/intake", {"resume": True})
-        self.assertEqual(status, 200, r)
-        self.assertEqual(r["run"]["total"], 3)
-        self.server.post("/api/intake/stop", {})
-        self.intake_until_done()
-
-    def test_intake_log_and_conversation_back(self):
-        ev, material = self.intake_library()
-        self.send("hello")
-        ev.until(lambda e: e["type"] == "part" and e["text"] == "echo: hello", "answer")
-        self.send("PERM read " + self.p("home", "kb", "work", "00_Spec.md"))  # allowed by the client, and logged
-        ev.until(lambda e: e["type"] == "auto", "auto")
-        before = self.server.get("/api/chat/state")[1]["agent"]["session"]
-        self.server.post("/api/intake", {"library": "work", "paths": [material]})
-        run = self.intake_until_done()
-        self.assertEqual(self.server.get("/api/chat/state")[1]["agent"]["session"], before)  # never left
-        work = self.p("home", ".config", "evergreen-wiki", "intake", run["id"])
-        self.assertEqual(run["log"], os.path.join(work, "intake.log"))
-        text = read(run["log"])
-        self.assertEqual(os.stat(run["log"]).st_mode & 0o777, 0o600)
-        for part in ("run: prep.py scan", "exit 0", "decision: {", "written ->", "duplicate", "run " + run["id"] + " done"):
-            self.assertIn(part, text)
-        self.assertNotIn("Riverside Clinic moved to phase two", text)  # never the files' text
-        logs = self.p("home", ".config", "evergreen-wiki", "logs")
-        day = [f for f in os.listdir(logs) if f.startswith("kb-client-")]
-        self.assertEqual(len(day), 1)
-        self.assertEqual(os.stat(os.path.join(logs, day[0])).st_mode & 0o777, 0o600)
-        self.assertIn("permission read allowed by the client (rule)", read(os.path.join(logs, day[0])))
-
-    def test_intake_survives_the_client(self):
-        self.env["FAKE_OPENCODE_INTAKE"] = "slow"
-        _, material = self.intake_library()
-        self.server.post("/api/intake", {"library": "work", "paths": [material]})
-        end = time.time() + 30
-        while self.server.get("/api/intake")[1]["run"]["step"] != "ask" and time.time() < end:
-            time.sleep(0.2)
-        self.server.stop()  # the client dies in the middle of the run
-        self.env["FAKE_OPENCODE_INTAKE"] = ""
-        ev = self.start()
-        ev.until(lambda e: e["type"] == "agent" and e["state"] == "ready", "ready")
-        run = self.server.get("/api/intake")[1]["run"]
-        self.assertEqual((run["state"], run["counts"]), ("stopped", {"waiting": 3}), run)
-        status, r = self.server.post("/api/intake", {"resume": True})
-        self.assertEqual(status, 200, r)
-        run = self.intake_until_done()
-        self.assertEqual(run["counts"], {"written": 2, "duplicate": 1}, run)
-
-    def queue_rows(self):
-        text = read(self.p("home", "kb", "work", "_Consolidation-Queue.md"))
-        return [ln for ln in text.split("\n") if ln.startswith("|") and ".md" in ln.split("|")[1]]
-
-    def test_intake_then_consolidation_unattended(self):
-        self.env["FAKE_OPENCODE_CONSOLIDATE"] = "ask"
-        ev, material = self.intake_library()
-        self.assertEqual(self.server.post("/api/chat/allow_all", {"on": True})[0], 200)
-        self.server.post("/api/intake", {"library": "work", "paths": [material]})
-        run = self.intake_until_done()
-        cons = run["consolidation"]
-        self.assertEqual((run["state"], cons["state"]), ("done", "done"), run)
-        self.assertEqual((cons["files"], cons["changes"], cons["queue"], cons["round"]), (2, 4, 0, 2), cons)
-        self.assertEqual(self.queue_rows(), [])
-        text = read(run["log"])
-        self.assertIn("question answered as recommended", text)
-        self.assertIn("Accept all (recommended)", text)
-        sent = [c["body"]["parts"][0]["text"] for c in self.calls() if c.get("path", "").endswith("/prompt_async")]
-        rounds = [x for x in sent if "consolidate_" in x]
-        self.assertEqual(len(rounds), 2)
-        self.assertTrue(all("unattended" in x for x in rounds), rounds)
-
-    def test_consolidation_waits_for_a_person(self):
-        self.env["FAKE_OPENCODE_CONSOLIDATE"] = "ask"
-        ev, material = self.intake_library()
-        self.server.post("/api/intake", {"library": "work", "paths": [os.path.join(material, "Atlas weekly 1.md")]})
-        q = ev.until(lambda e: e["type"] == "question", "the step-5 question", timeout=60)
-        time.sleep(3)
-        run = self.server.get("/api/intake")[1]["run"]
-        self.assertEqual((run["state"], run["step"], run["consolidation"]["state"]), ("running", "consolidate", "running"))
-        self.assertIn("a card waits for a person", read(run["log"]))
-        status, _ = self.server.post("/api/chat/question", {"id": q["id"], "answers": [["Accept all (recommended)"]]})
-        self.assertEqual(status, 200)
-        run = self.intake_until_done()
-        self.assertEqual((run["consolidation"]["state"], run["consolidation"]["files"]), ("done", 1), run)
-        sent = [c["body"]["parts"][0]["text"] for c in self.calls() if c.get("path", "").endswith("/prompt_async")]
-        self.assertTrue(any("At step 5 ask the user as usual" in x for x in sent))
-
-    def test_consolidation_that_does_not_move(self):
-        self.env["FAKE_OPENCODE_CONSOLIDATE"] = "stuck"
-        _, material = self.intake_library()
-        self.server.post("/api/intake", {"library": "work", "paths": [os.path.join(material, "Atlas weekly 1.md")]})
-        run = self.intake_until_done()
-        cons = run["consolidation"]
-        self.assertEqual((run["state"], cons["state"], cons["round"], cons["queue"]), ("done", "failed", 2, 1), cons)
-        self.assertIn("2 rounds", cons["reason"])
-
-    def test_consolidation_stopped_and_continued(self):
-        self.env["FAKE_OPENCODE_CONSOLIDATE"] = "ask"
-        ev, material = self.intake_library()
-        self.server.post("/api/intake", {"library": "work", "paths": [os.path.join(material, "Atlas weekly 1.md")]})
-        ev.until(lambda e: e["type"] == "question", "the step-5 question", timeout=60)
-        self.server.post("/api/intake/stop", {})
-        run = self.intake_until_done()
-        self.assertEqual((run["state"], run["consolidation"]["state"]), ("stopped", "stopped"), run)
-        self.assertEqual(self.server.post("/api/chat/allow_all", {"on": True})[0], 200)
-        status, r = self.server.post("/api/intake", {"resume": True})
-        self.assertEqual((status, r["run"]["total"]), (200, 0), r)
-        run = self.intake_until_done()
-        self.assertEqual((run["state"], run["consolidation"]["state"], run["consolidation"]["queue"]), ("done", "done", 0), run)
-        self.assertEqual(self.server.post("/api/intake", {"resume": True})[0], 409)  # nothing is left
-
-    def auto_library(self, mode=""):
-        """A work library switched to automatic intake, with short times; returns (events, material, drop
-        folder entry)."""
-        self.env.update(KB_CLIENT_AUTO_POLL="1", KB_CLIENT_AUTO_SETTLE="1")
-        if mode:
-            self.env["FAKE_OPENCODE_INTAKE"] = mode
-        ev, material = self.intake_library()
-        status, r = self.server.post("/api/auto", {"library": "work", "on": True})
-        self.assertEqual(status, 200, r)
-        a = r["auto"]
-        lib = self.p("home", "kb", "work")
-        self.assertEqual(a["inbox"], os.path.join(lib, "_Inbox"))
-        self.assertTrue(os.path.isdir(a["inbox"]) and os.path.isdir(a["not_filed"]))
-        return ev, material, a
-
-    def auto_until(self, test, what, timeout=90):
-        end = time.time() + timeout
-        run = None
-        while time.time() < end:
-            run = self.server.get("/api/intake")[1]["run"]
-            if run and run.get("auto") and test(run):
-                return run
-            time.sleep(0.3)
-        raise AssertionError(f"no automatic run {what}: {run}")
-
-    def keep_originals(self, on):
-        conf = self.p("home", "kb", "work", "_kb.json")
-        data = json.loads(read(conf))
-        data["sources"] = {"keep": on}
-        write(conf, json.dumps(data))
-
-    def test_automatic_intake(self):
-        ev, material, a = self.auto_library()
-        lib = self.p("home", "kb", "work")
-        self.keep_originals(False)
-        shutil.copy(os.path.join(material, "Atlas weekly 1.md"), a["inbox"])
-        os.makedirs(os.path.join(a["inbox"], "sub"))
-        shutil.copy(os.path.join(material, "sub", "Atlas weekly 2.txt"), os.path.join(a["inbox"], "sub"))
-        shutil.copy(os.path.join(material, "sub", "copy of week 1.md"), a["inbox"])
-        with open(os.path.join(a["inbox"], "scan.png"), "wb") as f:
-            f.write(b"\x89PNG\r\n\x1a\n" + b"\0" * 64)
-        run = self.auto_until(lambda r: r["state"] == "done", "done")
-        self.assertEqual(run["counts"], {"written": 2, "duplicate": 1, "manual": 1}, run)
-        # the library keeps no originals: written files move to Filed, the duplicate is removed, the
-        # picture waits in Not-filed; nothing is left at the top of the drop folder
-        self.assertEqual(sorted(os.listdir(os.path.join(a["inbox"], "Filed"))), ["Atlas weekly 1.md", "Atlas weekly 2.txt"])
-        self.assertEqual(os.listdir(a["not_filed"]), ["scan.png"])
-        run = self.server.get("/api/intake")[1]["run"]
-        manual = next(it for it in run["items"] if it["status"] == "manual")
-        self.assertEqual(manual["source"], os.path.join(a["not_filed"], "scan.png"))
-        self.assertEqual(sorted(os.listdir(a["inbox"])), ["Filed", "Not-filed", "sub"])
-        self.assertEqual(os.listdir(os.path.join(a["inbox"], "sub")), [])
-        for it in run["items"]:
-            if it["status"] == "written":
-                self.assertTrue(os.path.isfile(os.path.join(lib, it["name"])), it)
-        # Allow everything was on for the run only
-        self.assertTrue(any(e["type"] == "allow_all" and e["on"] for e in ev.seen) or
-                        ev.until(lambda e: e["type"] == "allow_all" and e["on"], "allow all on"))
-        ev.until(lambda e: e["type"] == "allow_all" and not e["on"], "allow all off again", timeout=30)
-        self.assertFalse(self.server.get("/api/chat/state?win=" + run["win"])[1]["agent"]["allow_all"])
-        state = self.server.get("/api/state")[1]
-        auto = next(x for x in state["libraries"] if x["id"] == "work")["auto"]
-        self.assertEqual((auto["on"], auto["manual"], auto["waiting"]), (True, 1, 0), auto)
-        self.assertEqual((auto["last"]["written"], auto["last"]["duplicate"], auto["last"]["not_filed"]), (2, 1, 1))
-        self.assertTrue(os.path.isfile(auto["last"]["log"]))
-        self.assertIn("automatic intake from", read(auto["last"]["log"]))
-        saved = json.loads(read(self.p("home", ".config", "evergreen-wiki", "auto-intake.json")))
-        self.assertTrue(saved["libraries"]["work"]["on"])
-        # the drop folder is not part of the graph
-        g = self.server.get("/api/graph?lib=work")[1]
-        self.assertFalse([n for n in g["nodes"] if n["path"].startswith("_Inbox")], g)
-        # a file that is not new: nothing else runs; switched off, the folder stays and nothing is taken
-        self.assertEqual(self.server.post("/api/auto", {"library": "work", "on": False})[1]["auto"]["on"], False)
-        shutil.copy(os.path.join(material, "Atlas weekly 1.md"), os.path.join(a["inbox"], "again.md"))
-        time.sleep(4)
-        self.assertEqual(self.server.get("/api/intake")[1]["run"]["id"], run["id"])
-        self.assertTrue(os.path.isfile(os.path.join(a["inbox"], "again.md")))
-
-    def test_automatic_intake_removes_kept_originals(self):
-        ev, material, a = self.auto_library()
-        self.keep_originals(True)
-        shutil.copy(os.path.join(material, "sub", "Atlas weekly 2.txt"), a["inbox"])
-        run = self.auto_until(lambda r: r["state"] == "done", "done")
-        self.assertEqual(run["counts"], {"written": 1}, run)
-        self.assertEqual(sorted(os.listdir(a["inbox"])), ["Not-filed"])  # the copy is in Sources/
-        self.assertTrue(os.listdir(self.p("home", "kb", "work", "Sources")))
-
-    def test_automatic_intake_stops_when_allow_all_is_switched_off(self):
-        ev, material, a = self.auto_library("slow")
-        shutil.copy(os.path.join(material, "Atlas weekly 1.md"), a["inbox"])
-        going = self.auto_until(lambda r: r["state"] == "running" and r["step"] == "ask", "asking")
-        self.assertTrue(self.server.get("/api/chat/state?win=" + going["win"])[1]["agent"]["allow_all"])
-        self.assertEqual(self.server.post("/api/chat/allow_all", {"on": False, "win": going["win"]})[0], 200)
-        run = self.auto_until(lambda r: r["state"] == "stopped", "stopped")
-        self.assertEqual(run["counts"], {"waiting": 1}, run)
-        self.assertTrue(os.path.isfile(os.path.join(a["inbox"], "Atlas weekly 1.md")))  # left for later
-        self.assertIn("Allow everything was switched off", read(run["log"]))
-        # paused until a file that run did not have comes
-        time.sleep(4)
-        self.assertEqual(self.server.get("/api/intake")[1]["run"]["id"], run["id"])
-        last = next(x for x in self.server.get("/api/state")[1]["libraries"] if x["id"] == "work")["auto"]["last"]
-        self.assertEqual((last["state"], last["waiting"]), ("stopped", 1), last)
-
-    def test_automatic_intake_refusals(self):
-        self.ready()
-        self.assertEqual(self.server.post("/api/auto", {"library": "nowhere", "on": True})[0], 400)
-
-    def test_intake_prompt_keeps_the_text(self):
-        for lang, t in intake_mod.PROMPT.items():
-            item = t["item"]
-            self.assertNotRegex(item.replace("不做脱敏或打码", "").replace("Do no masking or redaction", ""),
-                                "脱敏|打码|[Mm]ask|[Rr]edact", lang)
-            self.assertTrue("不做脱敏或打码" in item or "Do no masking or redaction" in item, lang)
-
-    def test_answer_recommended(self):
-        ag = agent.Agent.__new__(agent.Agent)
-        sent = []
-        ag.reply_question = lambda rid, answers: sent.append(answers) or True
-        w = agent.Window("w1")
-        ag.windows = {"w1": w}
-        w.questions = {"q1": {"id": "q1", "questions": [
-            {"options": [{"label": "Leave some out", "description": ""}, {"label": "全部采用（推荐）", "description": ""}],
-             "custom": True},
-            {"options": [{"label": "A", "description": ""}, {"label": "B", "description": "recommended"}], "custom": True},
-            {"options": [{"label": "A", "description": ""}], "custom": True},
-            {"options": [], "custom": True}, {"options": [], "custom": False}]}}
-        self.assertEqual(ag.answer_recommended("q1", "go on"), [["全部采用（推荐）"], ["B"], ["A"], ["go on"], []])
-        self.assertIsNone(ag.answer_recommended("q2", "go on"))
-
-    def test_idle_waits_for_an_intake(self):
-        app = kb_client.App.__new__(kb_client.App)
-        stopped = []
-        app.idle, app.job, app.agent, app.last_seen = 1, None, None, 0
-        app.server = type("S", (), {"shutdown": lambda self: stopped.append(1)})()
-        running = [True]
-        app.intake = type("R", (), {"running": lambda self: running[0]})()
-        app.auto = type("W", (), {"any_on": lambda self, libs: False})()
-        import threading
-        t = threading.Thread(target=app.idle_watch, daemon=True)
-        t.start()
-        time.sleep(2.5)
-        self.assertEqual(stopped, [])
-        running[0] = False
-        auto_on = [True]  # a library switched to automatic intake keeps the client going too
-        app.auto = type("W", (), {"any_on": lambda self, libs: auto_on[0]})()
-        time.sleep(2.5)
-        self.assertEqual(stopped, [])
-        auto_on[0] = False
-        t.join(10)
-        time.sleep(0.2)
-        self.assertEqual(stopped, [1])
-
-    def test_old_logs_and_runs_are_removed(self):
+    def test_old_logs_are_removed(self):
         logs = self.p("home", ".config", "evergreen-wiki", "logs")
         old = os.path.join(logs, "kb-client-20000101.log")
         write(old, "x\n")
         os.utime(old, (time.time() - 8 * 86400,) * 2)
-        runs = self.p("home", ".config", "evergreen-wiki", "intake")
-        for name, state in (("done-old", "done"), ("stopped-old", "stopped")):
-            path = os.path.join(runs, name, "intake-run.json")
-            write(path, json.dumps({"run": {"state": state}}))
-            os.utime(path, (time.time() - 8 * 86400,) * 2)
         self.start()
         self.assertFalse(os.path.exists(old))
-        self.assertFalse(os.path.exists(os.path.join(runs, "done-old")))
-        self.assertTrue(os.path.exists(os.path.join(runs, "stopped-old")))  # kept to be continued
-
-    def test_intake_refusals(self):
-        self.assertEqual(self.server_or_start().post("/api/intake", {"library": "work", "paths": ["relative"]})[0], 400)
-        status, r = self.server.post("/api/intake", {"library": "work", "paths": ["/nowhere"]})
-        self.assertEqual((status, r.get("reason")), (409, "intake_skills"), r)
-        self.assertEqual(self.server.post("/api/intake", {"resume": True})[1].get("reason"), "intake_skills")
 
     def server_or_start(self):
         ev = self.ready()
@@ -976,13 +594,13 @@ class ChatTest(unittest.TestCase):
         saved = json.loads(read(self.p("home", ".config", "evergreen-wiki", "kb-client.json")))
         win = self.server.get("/api/chat/state")[1]["agent"]["current"]
         self.assertEqual(saved, {"session": new, "always": {}, "current": win,
-                                 "windows": [{"id": win, "session": new, "kind": "chat", "task": None, "title": ""}]})
+                                 "windows": [{"id": win, "session": new, "title": ""}]})
 
     def test_setup_restarts_opencode(self):
         ev = self.ready()
         self.send("hello there")
         ev.until(lambda e: e["type"] == "status" and e["status"] == "idle", "idle")
-        result, out, asked = self.server.run("setup", ["opencode", True, True, "work", self.p("home", "kb", "work"),
+        result, out, asked = self.server.run("setup", ["opencode", True, True, self.p("home", "kb", "work"),
                                                        "team projects", "", True])
         self.assertEqual(result, "ok", out)
         self.assertEqual(asked[0]["default"], "opencode")  # the client suggests the agent it talks to
@@ -1208,30 +826,9 @@ class ChatTest(unittest.TestCase):
 
     def test_tool_step_names_the_stage_script(self):
         ev = self.ready()
-        self.send("RUN cd /skills/kb-incremental && python3 scripts/convert.py a.docx out.md")
+        self.send("RUN cd /skills/kb-ingest && python3 scripts/quote_check.py check cards.jsonl b01.md")
         step = ev.until(lambda e: e["type"] == "part" and e["kind"] == "tool", "tool step")
-        self.assertEqual((step["script"], step["detail"]), ("convert", "Run a script"))
-
-    def test_open_run_material_is_read_without_a_card(self):
-        ev = self.ready()
-        result, out, _ = self.server.run("setup", ["opencode", True, True, "work", self.p("home", "kb", "work"),
-                                                   "team projects", "", True])
-        self.assertEqual(result, "ok", out)
-        ev.until(lambda e: e["type"] == "agent" and e["state"] == "ready", "ready after the restart")
-        material = self.p("disk", "minutes")
-        os.makedirs(material)
-        plan = self.p("home", "kb", "work", "_intake-batches.json")
-
-        def progress(status):
-            write(plan, json.dumps({"schema": 1, "sources": [material], "final_step": "pending",
-                                    "batches": [{"n": 1, "group": "minutes", "status": status, "files": [], "result": {}}]}))
-        progress("pending")  # a run continued in a new conversation: the material was not chosen there
-        self.send("PERM read " + os.path.join(material, "a.docx"))
-        self.assertEqual(ev.until(lambda e: e["type"] in ("auto", "permission"))["type"], "auto")
-        ev.until(lambda e: e["type"] == "part" and e["text"] == "permission: once", "reply")
-        progress("done")  # finished: its material is no longer allowed
-        self.send("PERM read " + os.path.join(material, "b.docx"))
-        self.assertEqual(ev.until(lambda e: e["type"] in ("auto", "permission"))["type"], "permission")
+        self.assertEqual((step["script"], step["detail"]), ("quote_check check", "Run a script"))
 
     def test_work_folder_is_written_without_a_card(self):
         ev = self.ready()
@@ -1280,12 +877,9 @@ class ChatTest(unittest.TestCase):
                 self.send("hello")
                 out = ev.until(lambda e: e["type"] == "part" and e["role"] == "assistant", "output")
                 self.assertEqual(out["text"].strip(), "run: hello")
-                # opencode run keeps no conversation: one window only, write tasks go to it
+                # opencode run keeps no conversation: one window only
                 status, r = self.server.post("/api/chat/open", {})
                 self.assertEqual((status, r.get("reason")), (409, "simple"), r)
-                ev.until(lambda e: e["type"] == "status" and e["status"] == "idle", "idle")
-                status, r = self.server.post("/api/chat/task", {"task": "lint", "text": "lint"})
-                self.assertEqual((status, r["win"]), (200, out["win"]), r)
                 self.assertEqual(len(self.chat()["agent"]["windows"]), 1)
 
     def test_subagent_permission_answered_by_the_client(self):
@@ -1465,134 +1059,6 @@ class ChatTest(unittest.TestCase):
         self.send("PERM edit " + self.p("elsewhere", "b.md"), win=w1)
         self.assertEqual(ev.until(lambda e: e["type"] in ("auto", "permission"))["type"], "auto")
 
-    def test_write_tasks_run_one_at_a_time(self):
-        ev, _ = self.intake_library()
-        s = self.server
-        w1 = self.chat()["agent"]["current"]
-        status, r = s.post("/api/chat/task", {"task": "lint", "library": "work", "text": "SLOW lint"})
-        self.assertEqual(status, 200, r)
-        tw = r["win"]
-        self.assertNotEqual(tw, w1)
-        self.busy(ev, tw)
-        st = self.chat()["agent"]
-        task_win = next(w for w in st["windows"] if w["id"] == tw)
-        self.assertEqual((task_win["kind"], task_win["task"]), ("task", {"name": "lint", "library": "work"}))
-        self.assertEqual(st["lock"], {"holder": "task", "win": tw, "task": "lint", "library": "work"})
-        # no other write task, no intake and no step that changes libraries meanwhile
-        status, r = s.post("/api/chat/task", {"task": "archive", "library": "work", "text": "archive"})
-        self.assertEqual((status, r.get("reason")), (409, "locked"), r)
-        status, r = s.post("/api/intake", {"library": "work", "paths": [self.p("material")]})
-        self.assertEqual((status, r.get("reason")), (409, "locked"), r)
-        self.assertEqual(s.post("/api/action", {"action": "rollback"})[0], 409)
-        status, r = s.post("/api/action", {"action": "skill_upgrade"})
-        self.assertEqual((status, r.get("reason")), (409, "locked"), r)
-        status, r = s.post("/api/action", {"action": "backup"})
-        self.assertEqual(status, 200, r)  # backing up only reads the libraries
-        s.post("/api/answer", {"job": r["job"], "cancel": True})
-        self.assertEqual(s.post("/api/chat/task", {"task": "other", "text": "x"})[0], 400)
-        # the other windows go on
-        self.send("hello", win=w1)
-        ev.until(lambda e: e["type"] == "part" and e.get("text") == "echo: hello", "answer")
-        # the lock goes once the task window is idle with no card waiting
-        s.post("/api/chat/stop", {"win": tw})
-        self.idle(ev, tw)
-        self.assertIsNone(self.chat()["agent"]["lock"])
-        status, r = s.post("/api/chat/task", {"task": "archive", "library": "work", "text": "SLOW archive"})
-        self.assertEqual(status, 200, r)
-        tw2 = r["win"]
-        self.busy(ev, tw2)
-        # a message in a task window goes on with its task: refused while another one holds the lock
-        status, r = s.post("/api/chat/send", {"text": "yes, go on", "win": tw})
-        self.assertEqual((status, r.get("reason")), (409, "locked"), r)
-        s.post("/api/chat/stop", {"win": tw2})
-        self.idle(ev, tw2)
-        self.send("SLOW go on", win=tw)
-        self.busy(ev, tw)
-        self.assertEqual(self.chat()["agent"]["lock"]["win"], tw)
-        s.post("/api/chat/stop", {"win": tw})
-
-    def test_library_writes_from_other_windows_ask_during_a_task(self):
-        ev, _ = self.intake_library()
-        s = self.server
-        lib = self.p("home", "kb", "work")
-        prep = self.p("home", ".config", "opencode", "skills", "kb-incremental", "scripts", "prep.py")
-        find = self.p("home", ".config", "opencode", "skills", "kb-query", "scripts", "kbfind.py")
-        w1 = self.chat()["agent"]["current"]
-        s.post("/api/chat/allow_all", {"on": True, "win": w1})
-        status, r = s.post("/api/chat/task", {"task": "lint", "library": "work", "text": "SLOW lint"})
-        tw = r["win"]
-        self.busy(ev, tw)
-
-        def answer(text):
-            self.send(text, win=w1)
-            got = ev.until(lambda e: e["type"] in ("auto", "permission") and e.get("win") == w1, text)
-            if got["type"] == "permission":
-                s.post("/api/chat/permission", {"id": got["id"], "reply": "reject"})
-            self.idle(ev, w1)
-            return got["type"]
-
-        # writing the library or running the intake skill's scripts asks, even with Allow everything on
-        self.assertEqual(answer("PERM edit " + os.path.join(lib, "x.md")), "permission")
-        self.assertEqual(answer(f"PERM bash python3 {prep} scan {lib}"), "permission")
-        # reading it, looking things up and everything else does not
-        self.assertEqual(answer("PERM read " + os.path.join(lib, "00_Spec.md")), "auto")
-        self.assertEqual(answer(f"PERM bash python3 {find} Atlas"), "auto")
-        self.assertEqual(answer("PERM edit " + self.p("elsewhere", "a.md")), "auto")
-        # the task window itself writes as before
-        self.send("PERM edit " + os.path.join(lib, "y.md"), win=tw)
-        # once the task is done, the library is written without a card again
-        s.post("/api/chat/stop", {"win": tw})
-        self.idle(ev, tw)
-        self.assertEqual(answer("PERM edit " + os.path.join(lib, "x.md")), "auto")
-
-    def test_intake_runs_in_its_own_window(self):
-        self.env["FAKE_OPENCODE_INTAKE"] = "slow"
-        ev, material = self.intake_library()
-        s = self.server
-        w1 = self.chat()["agent"]["current"]
-        self.send("hello", win=w1)
-        self.idle(ev, w1)
-        before = self.chat(w1)["agent"]["windows"][0]["session"]
-        s.post("/api/chat/allow_all", {"on": True, "win": w1})
-        status, r = s.post("/api/intake", {"library": "work", "paths": [material], "win": w1})
-        self.assertEqual(status, 200, r)
-        iw = r["run"]["win"]
-        self.assertNotEqual(iw, w1)
-        st = self.chat()["agent"]
-        self.assertEqual(next(w for w in st["windows"] if w["id"] == iw)["kind"], "intake")
-        self.assertEqual(st["lock"], {"holder": "intake", "win": iw})
-        self.assertTrue(self.chat(iw)["agent"]["allow_all"])  # taken from the window it was started from
-        self.busy(ev, iw)
-        # the conversation of the other windows goes on; the intake window takes no messages
-        self.send("during the intake", win=w1)
-        ev.until(lambda e: e["type"] == "part" and e.get("text") == "echo: during the intake", "answer")
-        status, r = s.post("/api/chat/send", {"text": "x", "win": iw})
-        self.assertEqual((status, r.get("reason")), (409, "intake_running"), r)
-        status, r = s.post("/api/chat/close", {"win": iw, "stop": True})
-        self.assertEqual((status, r.get("reason")), (409, "intake_running"), r)
-        status, r = s.post("/api/chat/task", {"task": "lint", "library": "work", "text": "lint"})
-        self.assertEqual((status, r.get("reason")), (409, "locked"), r)
-        s.post("/api/intake/stop", {})
-        self.intake_until_done()
-        self.assertEqual(next(w for w in self.chat()["agent"]["windows"] if w["id"] == w1)["session"], before)
-        self.assertEqual(self.texts(w1)[:2], ["hello", "echo: hello"])
-        # the intake window comes back after a restart only while its run can be continued
-        self.server.stop()
-        self.ready()
-        self.assertIn("intake", [w["kind"] for w in self.chat()["agent"]["windows"]])
-
-    def test_automatic_intake_does_not_wait_for_other_windows(self):
-        ev, material, a = self.auto_library()
-        w1 = self.chat()["agent"]["current"]
-        self.send("SLOW", win=w1)
-        self.busy(ev, w1)
-        shutil.copy(os.path.join(material, "Atlas weekly 1.md"), a["inbox"])
-        run = self.auto_until(lambda r: r["state"] == "done", "done")
-        self.assertEqual(run["counts"], {"written": 1}, run)
-        self.assertNotEqual(run["win"], w1)
-        self.assertFalse(self.chat(w1)["agent"]["allow_all"])  # switched on for the intake window only
-        self.server.post("/api/chat/stop", {"win": w1})
-
     def test_chat_first_windows_per_folder(self):
         a, b = self.p("home", "projects", "a"), self.p("home", "projects", "b")
         os.makedirs(a)
@@ -1724,10 +1190,10 @@ class DecideTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.lib = os.path.join(self.tmp, "home", "kb", "work")
         self.mat = os.path.join(self.tmp, "disk", "minutes")
-        self.skill = os.path.join(self.tmp, "home", ".config", "opencode", "skills", "kb-incremental")
+        self.skill = os.path.join(self.tmp, "home", ".config", "opencode", "skills", "kb-ingest")
         for d in (self.lib, self.mat, os.path.join(self.skill, "scripts")):
             os.makedirs(d)
-        write(os.path.join(self.skill, "scripts", "batch_plan.py"), "")
+        write(os.path.join(self.skill, "scripts", "ingest.py"), "")
         write(os.path.join(self.tmp, "home", "other.py"), "")
         os.symlink(os.path.join(self.tmp, "home"), os.path.join(self.lib, "out"))
         self.places = {"write": [self.lib], "read": [self.mat, self.skill],
@@ -1799,15 +1265,15 @@ class DecideTest(unittest.TestCase):
         self.assertFalse(self.ok("task", "explore", "general"))
 
     def test_commands(self):
-        script = os.path.join(self.skill, "scripts", "batch_plan.py")
+        script = os.path.join(self.skill, "scripts", "ingest.py")
         self.assertTrue(self.ok("bash", f"python3 {script} plan --root {self.lib}"))
         self.assertTrue(self.ok("bash", f"python3 -I {script}"))
-        self.assertTrue(self.ok("bash", f"cd {self.skill} && python3 scripts/batch_plan.py next"))
+        self.assertTrue(self.ok("bash", f"cd {self.skill} && python3 scripts/ingest.py next"))
         self.assertTrue(self.ok("bash", f"python3 '{script}' --title 'two words'"))
         for bad in (f"python3 {script}; rm -rf ~", f"python3 {script} && ls", f"python3 {script} | sh",
                     f"python3 {script} $(id)", f"python3 {script} `id`", f"python3 {script} > /tmp/x",
                     f"python3 {os.path.join(self.tmp, 'home', 'other.py')}", "ls -la",
-                    f"bash {script}", f"cd /tmp && python3 scripts/batch_plan.py",
+                    f"bash {script}", f"cd /tmp && python3 scripts/ingest.py",
                     f"python3 -c 'print(1)' {script}"):
             with self.subTest(bad=bad):
                 self.assertFalse(self.ok("bash", bad))
@@ -1820,7 +1286,7 @@ class DecideTest(unittest.TestCase):
         for good in (f"mkdir -p {work}/work {work}/out", f"mkdir {self.lib}/notes",
                      f"cp {index} {work}/work/_index.md", f"cp -p {self.mat}/a.docx {self.mat}/b.pdf {work}/work/",
                      f"cp -r {self.mat} {work}/material", f"cp '{self.mat}/a b.docx' {work}/work/",
-                     f"cp {os.path.join(self.skill, 'scripts', 'batch_plan.py')} {work}/x.py"):
+                     f"cp {os.path.join(self.skill, 'scripts', 'ingest.py')} {work}/x.py"):
             with self.subTest(good=good):
                 self.assertTrue(self.ok("bash", good))
         for bad in (f"mkdir -p {self.mat}/x", f"mkdir /etc/x", f"cp {index} {self.mat}/x",
@@ -1832,25 +1298,25 @@ class DecideTest(unittest.TestCase):
                 self.assertFalse(self.ok("bash", bad))
 
     def test_stage_script(self):
-        for command, script in (("python3 /s/kb-incremental/scripts/convert.py a b", "convert"),
-                                ('cd /s && python3 scripts/index_tool.py check w --orig "x"', "index_tool check"),
-                                ("python3 -I '/a b/scripts/card_check.py' o n", "card_check"),
-                                ("python3 scripts/batch_plan.py finish --plan p", "batch_plan finish"),
-                                ("python3 scripts/assemble.py h.md b.md out/x.md", "assemble"),
-                                ('python3 scripts/meta.py entities s.md --field "a=b"', "meta entities"),
-                                ("python3 scripts/prep.py scan m.docx --library l --work w --n 1", "prep scan"),
-                                ("python3 scripts/consolidate.py fill t.md h.md out/t.md", "consolidate fill"),
-                                ("python3 scripts/meta.py --help", ""),
-                                ("python3 scripts/batch_plan.py --help", ""), ("python3 other.py", ""),
+        for command, script in (("python3 /s/kb-ingest/scripts/doc2kb_core.py --batch m -o w --kb-batch", "doc2kb_core"),
+                                ('cd /s && python3 scripts/quote_check.py check c.jsonl "b 01.md"', "quote_check check"),
+                                ("python3 -I '/a b/scripts/pick_materials.py' --out x", "pick_materials"),
+                                ("python3 scripts/ingest.py file b01.md --cards a.jsonl --library l", "ingest file"),
+                                ("python3 scripts/ingest.py pages --library l --topic Pilot", "ingest pages"),
+                                ("python3 scripts/ingest.py add-topic --library l --topic Pilot", "ingest add"),
+                                ("python3 scripts/ingest.py check-page --library l --topic T --page p.md", "ingest check"),
+                                ("python3 scripts/init_library.py plan --root r", "init_library plan"),
+                                ("python3 scripts/ingest.py --help", ""),
+                                ("python3 scripts/quote_check.py --help", ""), ("python3 other.py", ""),
                                 ("ls scripts", "")):
             with self.subTest(command=command):
                 self.assertEqual(agent.stage_script(command), script)
 
     def test_quoted_text(self):
-        script = os.path.join(self.skill, "scripts", "batch_plan.py")
+        script = os.path.join(self.skill, "scripts", "ingest.py")
         for good in (f'python3 {script} add --kind topic --text "Projects: Atlas (new topic; a.docx)"',
                      f"python3 {script} add --text 'a | b & c > d'",
-                     f'cd {self.skill} && python3 scripts/batch_plan.py add --text "x (y; z)"'):
+                     f'cd {self.skill} && python3 scripts/ingest.py add --text "x (y; z)"'):
             with self.subTest(good=good):
                 self.assertTrue(self.ok("bash", good))
         for bad in (f'python3 {script} --text "$(id)"', f'python3 {script} --text "`id`"',
@@ -2064,15 +1530,15 @@ class SkillCommandTest(unittest.TestCase):
     def test_skill_command_on_several_lines(self):
         tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, tmp, True)
-        kb = os.path.join(tmp, "skills", "kb-incremental")
+        kb = os.path.join(tmp, "skills", "kb-ingest")
         lib = os.path.join(tmp, "lib")
         os.makedirs(os.path.join(kb, "scripts"))
         os.makedirs(lib)
-        write(os.path.join(kb, "scripts", "batch_plan.py"), "")
+        write(os.path.join(kb, "scripts", "ingest.py"), "")
         scripts = os.path.join(kb, "scripts")
         places = {"scripts": [scripts], "write": [lib], "read": [kb]}
-        script = os.path.join(scripts, "batch_plan.py")
-        joined = (f'python3 {script} plan \\\n  "{tmp}/inbox/Project Atlas" \\\n  --plan {lib}/_intake-batches.json \\\n'
+        script = os.path.join(scripts, "ingest.py")
+        joined = (f'python3 {script} plan \\\n  "{tmp}/inbox/Project Atlas" \\\n  --plan {lib}/cards.jsonl \\\n'
                   f"  --library-root {lib} \\\n  --batch-files 5 2>&1")
         blank = f'python3 {script} plan \\\n\\\n  "{tmp}/inbox/Project Atlas" \\\n  --batch-files 5 2>&1'  # an empty continued line
         for cmd in (joined, blank, joined.replace("\n", "\r\n"), f"python3 {script} plan x 2>/dev/null",

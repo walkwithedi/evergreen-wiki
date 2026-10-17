@@ -12,8 +12,8 @@
 ### 1.1 What it is for
 
 Turn accumulated Office documents, PDFs and mail into a plain-text knowledge base that an AI
-assistant can search and answer from. The kb-incremental skill uses the same converter to read
-uploads as Markdown instead of reading the binary files.
+assistant can search and answer from. The kb-ingest skill uses the same converter to make the
+batch files it ingests instead of reading the binary files.
 
 ### 1.2 Constraints
 
@@ -44,7 +44,7 @@ serves machine retrieval rather than human layout:
 Two deliverables, with separate responsibilities:
 
 1. **Parsing engine**: parses documents, extracts content, writes the output. Callable from the command
-   line, every behaviour controlled by options, no interface code. Other programs (the kb-incremental
+   line, every behaviour controlled by options, no interface code. Other programs (the kb-ingest
    skill) import it. The knowledge-base batch file format (5.6) sits in a module of its own, which also
    splits batch files back, so the skills that read batch files share it.
 2. **Entry script**: two ways to run

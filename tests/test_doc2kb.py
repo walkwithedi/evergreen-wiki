@@ -1,4 +1,4 @@
-"""Tests for the converter (shared/scripts/doc2kb_core.py), tools/doc2kb and kb-incremental's convert.py.
+"""Tests for the converter (shared/scripts/doc2kb_core.py), tools/doc2kb and its batch files.
 Standard library only: python3 -m unittest discover tests"""
 import json
 import os
@@ -14,7 +14,6 @@ TESTS = os.path.dirname(os.path.abspath(__file__))
 CORE = os.path.join(ROOT, "shared", "scripts", "doc2kb_core.py")
 KB_BATCH = os.path.join(ROOT, "shared", "scripts", "kb_batch.py")
 TOOL = os.path.join(ROOT, "tools", "doc2kb")
-SKILL_SCRIPTS = os.path.join(ROOT, "skills", "kb-incremental", "scripts")
 sys.path.insert(0, TESTS)
 sys.path.insert(0, os.path.join(ROOT, "shared", "scripts"))
 import doc2kb_core as core  # noqa: E402
@@ -349,130 +348,13 @@ class DedupToolTest(Tmp):
                 self.assertTrue(any(n.startswith("big.md.bak-") for n in os.listdir(self.p(lang, "inc"))))
 
 
-class ConvertScriptTest(Tmp):
-    def convert(self, *files, limit=10, lang="en", extra=()):
-        out = self.p("conv")
-        p = run([sys.executable, os.path.join(SKILL_SCRIPTS, "convert.py"), out, *files,
-                 "--lang", lang, "--image-limit", str(limit), *extra])
-        with open(os.path.join(out, "convert.json"), encoding="utf-8") as f:
-            return p.stdout, json.load(f)
-
-    def test_verdicts_and_placeholders(self):
-        f = fx.build_all(self.p("in"), english=True)
-        bad = self.p("in", "broken.docx")
-        with open(bad, "wb") as fh:
-            fh.write(b"not a zip")
-        note = self.p("in", "note.txt")
-        with open(note, "w", encoding="utf-8") as fh:
-            fh.write("plain")
-        out, res = self.convert(f["docx"], f["eml"], f["xlsx"], f["legacy"], bad, note)
-        verdicts = {os.path.basename(r["file"]): r["verdict"] for r in res["files"]}
-        self.assertEqual(verdicts, {"report-en.docx": "converted", "mail-en.eml": "converted",
-                                    "book-en.xlsx": "converted", "legacy-en.doc": "as-is",
-                                    "broken.docx": "fallback", "note.txt": "as-is"})
-        md = read(self.p("conv", "report-en.md"))
-        self.assertIn("\n[Image: img_001.png]\n", md)
-        self.assertIn("\n[Image: img_002.png]\n", md)
-        self.assertNotIn("Source file:", md)      # no converter header
-        self.assertTrue(os.path.isfile(self.p("conv", "images", "report-en", "img_001.png")))
-        self.assertEqual(res["images"], 3)
-        self.assertEqual(res["decision"], "read")
-        self.assertIn("images: 3 in 2 converted files, limit 10: read", out)
-
-    def test_ask_over_limit_and_chinese(self):
-        f = fx.build_all(self.p("in"))
-        _, res = self.convert(f["docx"], f["pptx"], limit=2, lang="zh")
-        self.assertEqual(res["decision"], "ask")
-        self.assertIn("[图片：img_001.png]", read(self.p("conv", "report-zh.md")))
-
-    def test_mostly_pictures_falls_back(self):
-        body = fx._p("x") + "".join(fx._img_p(f"rId{i}") for i in range(1, 5))
-        parts = {"word/document.xml": fx._doc(body), "word/styles.xml": fx.STYLES,
-                 "word/_rels/document.xml.rels": fx._rels([(f"rId{i}", f"media/i{i}.png") for i in range(1, 5)])}
-        for i in range(1, 5):
-            parts[f"word/media/i{i}.png"] = fx.png(200, 200, i)
-        path = fx._zip(self.p("shots.docx"), parts)
-        _, res = self.convert(path)
-        self.assertEqual(res["files"][0]["verdict"], "fallback")
-        self.assertIn("mostly pictures", res["files"][0]["reason"])
-        self.assertEqual(res["images"], 0)       # pictures of fallback files are not counted
-
-    def long_docx(self, name, paragraphs):
-        body = fx._p("Release plan", "Heading1") + "".join(
-            fx._p(f"Paragraph {i} of the plan, with enough words to count as body text.") for i in range(paragraphs))
-        body += fx._p("Risks", "2") + fx._p("The launch may slip.") + fx._p("Mitigation", "a3") + fx._p("Weekly review.")
-        parts = {"word/document.xml": fx._doc(body), "word/styles.xml": fx.STYLES,
-                 "word/_rels/document.xml.rels": fx._rels([])}
-        return fx._zip(self.p(name), parts)
-
-    def test_outline_for_long_text(self):
-        long_doc, short_doc = self.long_docx("long.docx", 150), self.long_docx("short.docx", 3)
-        out, res = self.convert(long_doc, short_doc)
-        files = {os.path.basename(r["file"]): r for r in res["files"]}
-        self.assertEqual(files["short.docx"]["outline"], "")
-        path = files["long.docx"]["outline"]
-        self.assertEqual(path, self.p("conv", "long.outline.txt"))
-        self.assertIn(f"| outline {path}", out)
-        self.assertEqual(res["outline_chars"], 6000)
-        md_lines = read(self.p("conv", "long.md")).split("\n")
-        outline = read(path)
-        self.assertIn(f"characters: {files['long.docx']['chars']} | lines: {len(md_lines)} | tables: 0 | pictures: 0",
-                      outline)
-        heads = [ln for ln in outline.split("\n") if ln[:1].isdigit()]
-        self.assertEqual([h.split(": ", 1)[1] for h in heads], ["# Release plan", "## Risks", "### Mitigation"])
-        for h in heads:  # every line number points at its heading in the converted text
-            n, text = h.split(": ", 1)
-            self.assertEqual(md_lines[int(n) - 1], text)
-        self.assertIn("Paragraph 0 of the plan", outline)
-
-    def test_outline_off(self):
-        _, res = self.convert(self.long_docx("long.docx", 150), extra=("--outline-chars", "0"))
-        self.assertEqual(res["files"][0]["outline"], "")
-        self.assertFalse(os.path.exists(self.p("conv", "long.outline.txt")))
-
-    def test_same_names_kept_apart(self):
-        f = fx.build_all(self.p("a"), english=True)
-        os.makedirs(self.p("b"))
-        other = shutil.copy(f["xlsx"], self.p("b", "book-en.xlsx"))
-        _, res = self.convert(f["xlsx"], other)
-        self.assertEqual([os.path.basename(r["md"]) for r in res["files"]], ["book-en.md", "book-en_2.md"])
-
-
 class ConfigTest(Tmp):
-    def test_convert_validation(self):
-        sys.path.insert(0, SKILL_SCRIPTS)
-        import kbconf
-        self.assertEqual(kbconf.validate({"schema": 1, "convert": {"enabled": True, "image_limit": 5}}), [])
-        problems = kbconf.validate({"schema": 1, "convert": {"enabled": "yes", "image_limit": -1, "x": 1}})
-        self.assertEqual(len(problems), 3)
-        self.assertEqual(kbconf.validate({"schema": 1, "convert": {"outline_chars": 0}}), [])
-        self.assertEqual(len(kbconf.validate({"schema": 1, "convert": {"outline_chars": -5}})), 1)
-        self.assertEqual(len(kbconf.validate({"schema": 1, "convert": {"outline_chars": "6000"}})), 1)
-        self.assertTrue(kbconf.validate({"schema": 1, "convert": True}))
-        p = self.p("lib", "_kb.json")
-        os.makedirs(os.path.dirname(p))
-        with open(p, "w", encoding="utf-8") as f:
-            json.dump({"schema": 1, "convert": {"enabled": True}}, f)
-        cfg = kbconf.load_library(p)
-        self.assertEqual(cfg["convert"]["image_limit"], 10)
-        self.assertTrue(cfg["convert"]["enabled"])
-        self.assertFalse(kbconf.DEFAULTS["convert"]["enabled"])
-
-    def test_init_convert_switch(self):
-        script = os.path.join(SKILL_SCRIPTS, "init_library.py")
-        base = ["--preset", "work", "--language", "en", "--timezone", "UTC", "--scope", "projects"]
-        run([sys.executable, script, "write", "--root", self.p("on"), *base])
-        self.assertTrue(json.loads(read(self.p("on", "_kb.json")))["convert"]["enabled"])
-        p = run([sys.executable, script, "write", "--root", self.p("off"), *base, "--convert", "off"])
-        self.assertIn("convert uploads to Markdown: off", p.stdout)
-        self.assertFalse(json.loads(read(self.p("off", "_kb.json")))["convert"]["enabled"])
-
     def test_tool_copy_is_current(self):
         sys.path.insert(0, os.path.join(ROOT, "scripts"))
         import sync_shared
         copies = sync_shared.copies()
         self.assertEqual(copies["tools/doc2kb/doc2kb_core.py"], "shared/scripts/doc2kb_core.py")
-        self.assertEqual(copies["skills/kb-incremental/scripts/doc2kb_core.py"], "shared/scripts/doc2kb_core.py")
+        self.assertEqual(copies["skills/kb-ingest/scripts/doc2kb_core.py"], "shared/scripts/doc2kb_core.py")
 
 
 @unittest.skipUnless(HAS_BASH, "needs bash")

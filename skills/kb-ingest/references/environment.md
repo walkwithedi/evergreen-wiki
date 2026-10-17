@@ -10,7 +10,7 @@ These skills follow the Agent Skills format and run in any assistant that suppor
 
 ## Running scripts
 
-Paths such as scripts/batch_plan.py are relative to this skill's folder, not to the current directory. Run a script by its full path in the skill's folder, or as cd <skill folder> && python3 scripts/<name>.py ..., one command per call, with no pipes, redirections or chained commands; put text arguments in quotes.
+Paths such as scripts/ingest.py are relative to this skill's folder, not to the current directory. Run a script by its full path in the skill's folder, or as cd <skill folder> && python3 scripts/<name>.py ..., one command per call, with no pipes, redirections or chained commands; put text arguments in quotes.
 
 ## Capabilities and fallbacks
 
@@ -18,7 +18,7 @@ Paths such as scripts/batch_plan.py are relative to this skill's folder, not to 
 | --- | --- |
 | Cannot run Python | Do each script's job by hand, following the "Without Python" note at that step, and mark the result "not script-checked" in the delivery note. |
 | Cannot reach the library (no Drive tool, path not found) | Stop. Say which connector or path is missing. Never answer from memory. |
-| Cannot write files | kb-note: show the finished note in the reply so the user can save it. kb-incremental: show every output file in full. |
+| Cannot write files | kb-note: show the finished note in the reply so the user can save it. kb-ingest: show every output file in full. |
 | No registry | Offer setup once, as references/config.md describes; never guess a library location. |
 
 ## Time

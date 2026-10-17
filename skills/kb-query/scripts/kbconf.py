@@ -4,8 +4,9 @@
 Two levels of configuration:
 
   Registry (user level)   kb-libraries.json: which libraries exist and where they live.
-  Library (per library)   _kb.json in the library root: label, language, timezone,
-                          metadata mode, sensitivity, partitions and file/folder names.
+  Library (per library)   _kb.json in the library root (schema 2): label, language, timezone,
+                          tier, batch and quote limits, partitions and file/folder names.
+                          A 1.x library (schema 1) is refused: 2.0 does not migrate them.
 
 Every name a skill or script uses (summary files, archive folder, "_old" suffix, ...)
 comes from resolve_names(), so a library can keep its own names (for example Chinese
@@ -31,9 +32,8 @@ from datetime import datetime, timedelta, timezone
 log = logging.getLogger("kbconf")
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s.%(funcName)s:%(lineno)d - %(message)s"
 
-SCHEMA = 1
+SCHEMA = 2
 KB_JSON = "_kb.json"
-PARAMS_FILE = "_kb-params.md"
 REGISTRY_FILE = "kb-libraries.json"
 
 # Default English names. A library overrides any of them through "names" in _kb.json.
@@ -53,10 +53,6 @@ DEFAULT_NAMES = {
     "notes_done_dir": "Filed",
     "old_suffix": "_old",
     "snapshot_prefix": "snapshot_",
-    "readme": "README.txt",
-    "run_log_prefix": "_run-log_",
-    "batch_plan": "_intake-batches.json",
-    "consolidation_queue": "_Consolidation-Queue.md",
     "note_marker": "Quick note:",
     "assistant_label": "Assistant",
     "user_label": "User",
@@ -68,47 +64,22 @@ SUMMARY_KEYS = ("spec", "status_card", "index", "open_items", "changelog", "glos
 DEFAULT_LIMITS = {"zh": (55, 80), "ja": (55, 80), "ko": (60, 90)}
 FALLBACK_LIMITS = (90, 120)
 
-# Converting uploads to Markdown before intake (kb-incremental scripts/convert.py).
-# enabled: off unless the library turns it on (new libraries from a preset do).
-# image_limit: pictures in one batch that are read without asking.
-# min_pdf_chars_per_page, min_chars_per_image: below these a file is read as the original.
-# outline_chars: converted text longer than this also gets an outline, read first; 0 turns it off.
-CONVERT_DEFAULTS = {"enabled": False, "image_limit": 10, "min_pdf_chars_per_page": 200,
-                    "min_chars_per_image": 100, "outline_chars": 6000}
-
-# Intake (kb-incremental). mode: fast files each item at once and leaves key conclusions and the
-# trigger check to consolidation (scripts/prep.py, scripts/consolidate.py); full runs every step per
-# item. consolidate_files: files handled in one consolidation round. Many files at once
-# (scripts/batch_plan.py): a batch closes at batch_files files or batch_mb megabytes; more than one
-# batch turns batch mode on.
-INTAKE_MODES = ("fast", "full")
-INTAKE_DEFAULTS = {"mode": "fast", "batch_files": 10, "batch_mb": 20, "consolidate_files": 10}
-
-# Originals kept in the library (local libraries with direct delivery only): keep copies each
-# filed original into names.sources_dir under its topic file's name; one larger than max_mb
-# megabytes is not copied.
-SOURCES_DEFAULTS = {"keep": False, "max_mb": 50}
-
 DEFAULTS = {
     "schema": SCHEMA,
     "label": "",
     "preset": "",
     "language": "en",
     "timezone": "UTC",
-    "metadata": "yaml",
-    "sensitivity": {"enabled": False, "keep_last": 4},
     "partitions": {"max": 9, "topic_start": 2, "fallback": ""},
-    "delivery": "",
-    "convert": CONVERT_DEFAULTS,
-    "intake": INTAKE_DEFAULTS,
-    "sources": SOURCES_DEFAULTS,
     "names": {},
 }
 # 2.0 intake (kb-ingest): tier (weak: scripts assemble the topic pages; strong: the model writes
 # them), characters per batch file, and the quote length a card's quote must keep to.
 TIERS = ("weak", "strong")
 INGEST_KEYS = ("tier", "batch_chars", "quote_min", "quote_max")
-KNOWN_KEYS = set(DEFAULTS) | {"backend", "inbox", "notes"} | set(INGEST_KEYS)
+KNOWN_KEYS = set(DEFAULTS) | {"backend", "notes"} | set(INGEST_KEYS)
+OLD_SCHEMA = ("this is a 1.x library (schema 1); 2.0 libraries are not migrated from 1.x: keep using the "
+              "1.x release for it, or set up a 2.0 library and ingest the material again")
 
 
 def utf8_stdio():
@@ -251,6 +222,8 @@ def search_key(file_name):
 def load_library(path):
     p = find_kb_json(path)
     raw = load_json(p)
+    if isinstance(raw, dict) and raw.get("schema") == 1:
+        raise ConfigError(f"{p}: {OLD_SCHEMA}")
     cfg = merge(DEFAULTS, raw)
     cfg["names"] = resolve_names(raw.get("names"))
     cfg["_path"] = p
@@ -263,18 +236,13 @@ def validate(raw):
     problems = []
     if not isinstance(raw, dict):
         return ["_kb.json must be a JSON object"]
+    if raw.get("schema") == 1:
+        return [OLD_SCHEMA]
     if raw.get("schema") != SCHEMA:
         problems.append(f"schema should be {SCHEMA}, got {raw.get('schema')!r}")
     for k in raw:
         if k not in KNOWN_KEYS:
             problems.append(f"unknown key {k!r}")
-    if raw.get("metadata", "yaml") not in ("yaml", "text"):
-        problems.append("metadata must be yaml or text")
-    if raw.get("delivery", "") not in ("", "zip", "direct"):
-        problems.append("delivery must be zip or direct")
-    problems += check_convert(raw.get("convert", {}))
-    problems += check_intake(raw.get("intake", {}))
-    problems += check_sources(raw.get("sources", {}))
     part = raw.get("partitions", {})
     mx, ts = part.get("max", 9), part.get("topic_start", 2)
     if not (isinstance(mx, int) and isinstance(ts, int) and 0 < ts <= mx <= 99):
@@ -341,56 +309,6 @@ def match_topic(name, known):
     """The known topic a card's topic names, ignoring case and spacing; None for a new topic."""
     key = topic_key(name)
     return next((t for t in known if topic_key(t) == key), None)
-
-
-def check_convert(conv):
-    if not isinstance(conv, dict):
-        return ["convert must be an object such as {\"enabled\": true}"]
-    problems = []
-    for k, v in conv.items():
-        if k not in CONVERT_DEFAULTS:
-            problems.append(f"unknown convert key {k!r}")
-        elif k == "enabled" and not isinstance(v, bool):
-            problems.append("convert.enabled must be true or false")
-        elif k != "enabled" and not (isinstance(v, int) and not isinstance(v, bool) and v >= 0):
-            problems.append(f"convert.{k} must be a whole number of 0 or more")
-    return problems
-
-
-def check_intake(intake):
-    if not isinstance(intake, dict):
-        return ["intake must be an object such as {\"batch_files\": 10}"]
-    problems = []
-    for k, v in intake.items():
-        if k not in INTAKE_DEFAULTS:
-            problems.append(f"unknown intake key {k!r}")
-        elif k == "mode":
-            if v not in INTAKE_MODES:
-                problems.append("intake.mode must be fast or full")
-        elif not (isinstance(v, int) and not isinstance(v, bool) and v >= 1):
-            problems.append(f"intake.{k} must be a whole number of 1 or more")
-    return problems
-
-
-def check_sources(src):
-    if not isinstance(src, dict):
-        return ["sources must be an object such as {\"keep\": true}"]
-    problems = []
-    for k, v in src.items():
-        if k not in SOURCES_DEFAULTS:
-            problems.append(f"unknown sources key {k!r}")
-        elif k == "keep" and not isinstance(v, bool):
-            problems.append("sources.keep must be true or false")
-        elif k == "max_mb" and not (isinstance(v, int) and not isinstance(v, bool) and v >= 0):
-            problems.append("sources.max_mb must be a whole number of 0 or more")
-    return problems
-
-
-def keeps_sources(cfg, backend_type="local"):
-    """True when intake copies originals into the library: sources.keep is on and the library is a
-    local one delivered directly (zip and Drive deliveries never carry originals)."""
-    return bool((cfg.get("sources") or {}).get("keep")) and backend_type == "local" and \
-        default_delivery(cfg, backend_type) == "direct"
 
 
 class TimezoneUnavailable(ConfigError):
@@ -468,13 +386,6 @@ def now(tz_name):
 def default_limits(language):
     lang = (language or "en").split("-")[0].lower()
     return DEFAULT_LIMITS.get(lang, FALLBACK_LIMITS)
-
-
-def default_delivery(cfg, backend_type):
-    """direct for every backend; zip only when set, or when a Drive library has its own inbox script."""
-    if cfg.get("delivery"):
-        return cfg["delivery"]
-    return "zip" if backend_type == "gdrive" and cfg.get("inbox") else "direct"
 
 
 def main():

@@ -1,6 +1,6 @@
 ---
 name: kb-ingest
-description: Ingests documents into an evergreen 2.0 knowledge base (Google Drive or local/Obsidian). Use when the user says "ingest", "file these", "add to the knowledge base" or hands over batch files or documents for the library. Turns each batch into cards (a conclusion with its exact source sentence), checks every quote against the source with a script, files the sources, cards and topic pages, archives older versions, and asks the user about new topics. Weak tier (local models): scripts build the topic pages; strong tier (Claude, ChatGPT): the model writes them and a script checks every citation. Material is searchable only once its run is finished. Not for questions (kb-query) or saving one note (kb-note).
+description: Ingests documents into an evergreen 2.0 knowledge base (Google Drive or local/Obsidian) and sets new libraries up. Use when the user says "ingest", "file these", "add to the knowledge base" or hands over batch files or documents for the library, and for "set up a knowledge base", "new library" or "get started with the knowledge base". Turns each batch into cards (a conclusion with its exact source sentence), checks every quote against the source with a script, files the sources, cards and topic pages, archives older versions, and asks the user about new topics. Weak tier (local models): scripts build the topic pages; strong tier (Claude, ChatGPT): the model writes them and a script checks every citation. Material is searchable only once its run is finished. Init mode creates a library from the work preset, registers it and tells the assistant it exists. Not for questions (kb-query) or saving one note (kb-note).
 ---
 
 # Knowledge base ingest
@@ -8,6 +8,11 @@ description: Ingests documents into an evergreen 2.0 knowledge base (Google Driv
 Version: 1.22.1
 
 This skill files material into a 2.0 library. Every conclusion it writes carries the source sentence it rests on, and a script checks that sentence before anything is written. The rules of a library (partitions, topics, folder names, tier) live in the library's own spec and _kb.json; read them each time, never from memory or from this file.
+
+## Modes
+
+- Ingest: the steps below.
+- Init and getting started: "set up a knowledge base", "new library", "first time", "get started with the knowledge base", or no registry yet while the user wants a library. Read references/init.md and follow it instead of the steps below; it does not run step 0.
 
 Before the first step, read references/config.md and references/environment.md once. Scripts are run as references/environment.md describes; paths such as scripts/ingest.py are relative to this skill's folder.
 
@@ -22,9 +27,9 @@ The summary files (status card, spec, indexes) sit in the library root. Beside t
 
 ## Step 0: choose the library (always first)
 
-1. Load the registry (references/config.md). A library named in the request or the project instructions is the one to use. No registry or no library: say so and stop; setting up a library is not part of this skill yet.
+1. Load the registry (references/config.md). A library named in the request or the project instructions is the one to use. No registry or no library: offer init mode once (references/init.md); never guess a library.
 2. Otherwise match the material against each library's scope. Exactly one fits: propose it in one line and continue when the user agrees or the request already made it clear. None or several: ask which. Never default.
-3. Read the backend file for that library (references/backend-gdrive.md or references/backend-local.md), then _kb.json and the spec from the library root.
+3. Read the backend file for that library (references/backend-gdrive.md or references/backend-local.md), then _kb.json and the spec from the library root. A _kb.json of schema 1 is a 1.x library: stop and say what references/init.md, rule 4, says.
 4. The tier is _kb.json "tier": weak or strong. Missing: strong when you are a Claude or ChatGPT client, weak otherwise (OpenCode or a local model), and say which you assumed.
 5. First line of the reply: Library: <label> (tier <tier>). From here on, read and write only inside that library.
 

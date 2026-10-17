@@ -4,8 +4,8 @@ An LLM-maintained knowledge base that stays current, cites its sources and is ea
 
 | Skill | You say | It does |
 | --- | --- | --- |
-| kb-note | "note this" | saves a piece of the conversation as a quick note, to be filed later |
-| kb-incremental | "file these", "file my quick notes", "archive old versions", "health check", "set up a knowledge base" | sorts material into partitions, de-duplicates it, keeps one current version per document, updates the status card when facts change, checks the library's health |
+| kb-note | "note this" | saves a piece of the conversation as a quick note |
+| kb-ingest | "ingest these", "add to the knowledge base", "set up a knowledge base" | turns documents into cards, each a conclusion with the exact source sentence it rests on, checks every quote with a script, files sources and cards, archives older versions and rebuilds the topic pages; sets up new libraries |
 | kb-query | any question the library may answer | searches the library first and answers with the file it came from, never from memory |
 
 [中文说明](README.zh-CN.md)
@@ -15,16 +15,11 @@ An LLM-maintained knowledge base that stays current, cites its sources and is ea
 A knowledge base an assistant maintains goes stale or drifts unless the rules are strict. These skills follow a few strict ones:
 
 - One file name per document. A new version replaces the old one under the same name; the old one moves to the archive folder. Nothing is ever deleted.
-- One status card per library holds the current answer to every recurring question, each line linked to its source. The assistant rewrites it only when new material actually contradicts it, and a script checks that no line was lost in the rewrite.
-- Every judgement (duplicate, new version, change of fact) needs a quote as evidence; without one the skill takes the conservative choice.
-- Partitions and topics come from the library's own spec, which grows when material does not fit, and tells you each time.
-- Entities (people, systems, organisations) get their own pages with backlinks, readable in Obsidian.
+- Every conclusion in the library is a card that carries the exact sentence it rests on, linked to the paragraph in the source. A script looks each quote up in the source before anything is written; a card whose quote is not found is not written.
+- Topic pages are built from the cards, newest first. With a model of limited reasoning (a weak tier, such as a local model run through OpenCode) a script builds them; with a strong model the model writes them and a script checks every citation.
+- Partitions and topics come from the library's own spec. A topic the spec does not have is added only after you agree.
 
-Uploads are converted to Markdown before intake (Word, Excel, PowerPoint, PDF, mail), so the assistant reads text instead of binary files: fewer tokens, faster runs. Files the converter cannot handle well (scans, documents that are mostly pictures) are read as originals, and when a batch holds many pictures you decide whether they are read. Each library turns this on or off in `_kb.json`; new libraries start with it on.
-
-Intake is fast by default and comes in two parts. Fast intake places, names, de-duplicates and writes each file as soon as it is ready, with one progress line per file, so it can be searched at once; it does not read the whole text. Consolidation comes after, when you say "consolidate" or accept the offer at the end of an intake: it writes each file's key conclusions, compares the files with the status card, and shows every proposed change to the summary files as a numbered list for you to accept or leave out. Files waiting for it are listed in the library's consolidation queue, and the skills remind you while it is not empty. `_kb.json` `intake.mode` set to `full` (or "full intake" in a request) does everything for each file before it is written, as before.
-
-A large folder is filed in batches. The assistant first counts the material (files per subfolder, types, sizes, what is already in the library) and shows a plan; after you start it, it files one subfolder or a few files at a time and prints a progress line after each batch, then rewrites the summary files once at the end and lists everything left for you to review. Progress is saved in the library, so you can stop between batches and say "continue intake" later, in a new conversation. The batch size is set in `_kb.json` (`intake`).
+Documents are converted locally into batch files before they are ingested (Word, Excel, PowerPoint, PDF, mail): plain text with a source number per document and an anchor on every paragraph, cut to a size that fits the library's tier. The assistant reads these instead of binary files, and quotes and links point at the anchors. Material becomes searchable once its run is filed.
 
 The full reasoning is in [docs/methodology.md](docs/methodology.md).
 
@@ -32,21 +27,20 @@ The full reasoning is in [docs/methodology.md](docs/methodology.md).
 
 Four pieces, all plain files on your computer or in Google Drive:
 
-- The skills (kb-note, kb-query, kb-incremental): instructions and scripts your agent loads. They do the work.
-- A library: a folder of Markdown files with its settings (`_kb.json`), spec, status card and file index. You can keep several, for example one for life and one for work.
+- The skills (kb-note, kb-query, kb-ingest): instructions and scripts your agent loads. They do the work.
+- A library: a folder of Markdown files with its settings (`_kb.json`), spec and status card, and folders for the sources, the cards and the topic pages. You can keep several, for example one per team or project.
 - The registry (`kb-libraries.json`): the list of your libraries, with each one's id, label, scope and place. The skills read it to choose the library for a request.
 - One line in the instructions your agent always reads (CLAUDE.md, AGENTS.md, GEMINI.md or Project instructions). It says the libraries exist, so the agent consults them before answering from memory.
 
 ```text
 you --ask--> agent --reads--> instructions line ("I keep knowledge bases: ...")
                |
-               +-- skill (kb-query, kb-note, kb-incremental)
+               +-- skill (kb-query, kb-note, kb-ingest)
                      +-- registry kb-libraries.json: which library, and where
-                     +-- library folder: Markdown files, status card, file index
-                           (+ Sources/: copies of the filed originals, in a local library that keeps them)
+                     +-- library folder: spec, status card, Sources/, Cards/, Topics/
 ```
 
-A local library can keep a copy of each filed original in its Sources folder, named after the topic file that holds its text and linked from it (`sources.keep` in `_kb.json`; new work libraries start with it on, life libraries off, because originals are not masked). The material you choose for an intake stays where it is.
+The material you choose for an ingest run stays where it is; the library keeps its converted text in Sources/.
 
 The installer (`install.py`) puts these in place and later backs them up, rolls back, moves a library or uninstalls. [tools/kb-client](tools/kb-client/) shows the same steps as a page in the browser. [tools/doc2kb](tools/doc2kb/) converts whole folders of documents to Markdown on its own.
 
@@ -56,7 +50,7 @@ Every release on the [Releases](../../releases) page carries these files:
 
 | File | What it is | Use it for |
 | --- | --- | --- |
-| `kb-note-<version>.zip`, `kb-query-<version>.zip`, `kb-incremental-<version>.zip` | one skill each, English trigger phrases | uploading the skills to claude.ai or the Claude apps |
+| `kb-note-<version>.zip`, `kb-query-<version>.zip`, `kb-ingest-<version>.zip` | one skill each, English trigger phrases | uploading the skills to claude.ai or the Claude apps |
 | the same names ending in `-zh.zip` | the same skills with Chinese trigger phrases | the same, in Chinese |
 | `evergreen-wiki-v<version>.zip` | the whole repository: skills, `install.py` with its backup, rollback, move and uninstall commands, tools/kb-client, tools/doc2kb, the sample library and the docs | installing for a terminal agent without git, on a computer without network, or from the page in the browser on a Linux desktop |
 | `doc2kb-v<version>.zip` | the document converter alone | converting folders of documents to Markdown without the skills |
@@ -75,7 +69,7 @@ Every release on the [Releases](../../releases) page carries these files:
 
 ## Quick start
 
-Pick the path that matches where you use your assistant. Every path asks three questions (which kind of library, where it lives, what belongs in it), shows a preview, and writes nothing until you confirm.
+Pick the path that matches where you use your assistant. Every path asks two questions (where the library lives, what belongs in it), shows a preview, and writes nothing until you confirm.
 
 ### In a terminal (Claude Code, Codex, Gemini CLI, OpenCode)
 
@@ -102,29 +96,24 @@ It needs Python 3.8 or later and a browser. Details in [tools/kb-client](tools/k
 
 ### In claude.ai or the Claude apps (Google Drive)
 
-1. Download the kb-note, kb-query and kb-incremental zips from [Releases](../../releases) (the -zh zips for Chinese trigger phrases) and upload each in Settings > Capabilities > Skills.
+1. Download the kb-note, kb-query and kb-ingest zips from [Releases](../../releases) (the -zh zips for Chinese trigger phrases) and upload each in Settings > Capabilities > Skills.
 2. Connect Google Drive, create an empty folder for the library, and open a Project for your knowledge base.
-3. In the Project, say "get started with the knowledge base". The assistant asks three questions, shows a preview, writes the library into the folder and gives you one line to paste into the Project instructions. Paste it, save, and start a new conversation in the Project. That line points to the library list kept in Drive, so adding more libraries later needs no further pasting, and filed material is written straight into Drive after you confirm a preview.
+3. In the Project, say "get started with the knowledge base". The assistant asks two questions, shows a preview, writes the library into the folder and gives you one line to paste into the Project instructions. Paste it, save, and start a new conversation in the Project. That line points to the library list kept in Drive, so adding more libraries later needs no further pasting, and filed material is written straight into Drive after you confirm a preview.
 
 Try everything first on the fictional [sample library](examples/). Prefer to do each step by hand, or need the registry format? See [docs/manual-setup.md](docs/manual-setup.md).
 
 ## How a library looks
 
 ```text
-life-kb/
-  _kb.json                 settings: language, timezone, names, sensitivity, conversion
-  _kb-params.md            process parameters: what to close-read, what counts as a change
-  00_Spec.md               partitions and topics, term fixes, thresholds, entities
-  00_Status-Card.md        current facts, each linked to its source
-  01_File-Index.md         every filed document with its source file and hash
-  01_Open-Items.md         due dates and to-dos (life) or open decisions (work)
-  01_Change-Log.md         how facts changed over time
-  01_Glossary-Issues.md    term fixes, masking log, open issues
-  02_Checkups_report_2026-annual.md
-  ...
-  Entities/                one page per person, organisation or system
-  Archive/                 older versions and run logs
-  Quick-Notes/             notes waiting to be filed
+work-kb/
+  _kb.json                 settings: language, timezone, tier, names
+  00_Spec.md               partitions and topics, term fixes, folder names, scope
+  00_Status-Card.md        current facts, each linked to its source passage
+  Sources/                 one Markdown file per source document, paragraphs anchored ^p1, ^p2, ...
+  Cards/                   one cards file per source: conclusion, exact quote, link, topic, date
+  Topics/                  one page per topic, built from the cards, newest first
+  Archive/                 older versions of sources and cards
+  Quick-Notes/             quick notes
 ```
 
 Every name is configurable in `_kb.json`, so an existing library in another language keeps its own file names.
@@ -143,7 +132,7 @@ Details: [docs/backends.md](docs/backends.md).
 
 | Environment | Status |
 | --- | --- |
-| Claude Code, local backend | end-to-end tested on the sample library and a new work library: query, note, intake, quick-note filing, health check, init, two-library routing |
+| Claude Code, local backend | kb-query and kb-note tested end to end; kb-ingest covered by the script tests and the sample library, an end-to-end run is still to do |
 | claude.ai / Claude apps, Drive backend | supported; English build not yet re-tested |
 | Codex, Gemini CLI, OpenCode | not yet verified; reports welcome |
 
@@ -153,7 +142,7 @@ Scripts need Python 3.8+ and nothing outside the standard library. Without Pytho
 
 [tools/doc2kb](tools/doc2kb/) is the converter as a stand-alone tool: it turns whole folders of Office files, PDFs and mail into one Markdown knowledge base with an index, from a Linux desktop dialog or a cron job, incrementally. Each release attaches it as `doc2kb-<version>.zip`.
 
-[tools/kb-client](tools/kb-client/) runs the installer and its backup, rollback, move and uninstall commands in a page in the browser, served from your own computer, for people who do not use a terminal, lists the registered libraries and the state of the skills, and holds a conversation with OpenCode (file material, quick notes, health checks, questions) with permission requests answered on the page; it comes with the evergreen-wiki zip.
+[tools/kb-client](tools/kb-client/) runs the installer and its backup, rollback, move and uninstall commands in a page in the browser, served from your own computer, for people who do not use a terminal, lists the registered libraries and the state of the skills, and holds a conversation with OpenCode (ingesting, quick notes, questions) with permission requests answered on the page; it comes with the evergreen-wiki zip.
 
 ## Development
 

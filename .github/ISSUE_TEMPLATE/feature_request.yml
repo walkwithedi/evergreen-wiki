@@ -21,7 +21,7 @@ body:
       options:
         - kb-note
         - kb-query
-        - kb-incremental
+        - kb-ingest
         - Setup and installer
         - Presets
         - Documentation

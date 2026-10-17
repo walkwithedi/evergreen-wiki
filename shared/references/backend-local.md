@@ -22,16 +22,11 @@ The library is a folder on disk; backend.root in the registry is its path (~ all
 1. Stay inside the library root. Never touch files outside it.
 2. Searches cover the root folder only, not subfolders, so the archive folder is excluded; read the entities or notes folder only when a step says so.
 3. Never delete a file. Older versions are moved to the archive folder.
-4. Before any write or move that is not a brand-new file, show a preview and wait for the user to confirm. A batch intake run is confirmed once, for all its batches, when the user starts it (references/batches.md in kb-incremental); its progress file is updated without asking. A fast intake run (references/fast.md in kb-incremental) is confirmed once at its start, for the delivery of every item it files.
+4. Before any write or move that is not a brand-new file, show a preview and wait for the user to confirm. An ingest run is confirmed once, for everything it writes, before its scripts run (kb-ingest, step 5).
 5. Keep line endings as LF and encoding as UTF-8.
 
-## Delivery (delivery = direct)
+## Writing an ingest run
 
-A folder cannot hold two files with the same name, so versions never pile up and there is nothing for archive mode to clean. Intake output is written straight into the library in two rounds:
+kb-ingest's scripts write straight into the library folder after the user confirms the preview: scripts/ingest.py file writes the sources and cards files and moves each older version, with its cards file, into the archive folder as <stem><old_suffix><YYYYMMDDHHMMSS>.md; scripts/ingest.py pages (or check-page --write) writes the topic pages. A folder cannot hold two files with the same name, so versions never pile up.
 
-1. python3 scripts/package.py preview <output dir> --library <root> --plan <work>/deliver-plan.json --max-name-len <Table D>  
-   Show the preview to the user: new files, and existing files whose old version will move to the archive folder. Stop and wait for confirmation.
-2. After the user confirms: python3 scripts/package.py deliver --plan <work>/deliver-plan.json  
-   The script re-checks every target, moves each old version to <archive_dir>/<stem><old_suffix><time stamp>.md (originals kept for an old version move there with it, under their own extension), copies the new file in, stores the readme as <archive_dir>/_delivery_<time>_README.txt and writes a run log next to it. Report its last lines.
-
-Without Python, do the same by hand: for each file, if it exists move it to the archive folder under the suffixed name first, then write the new file; finally write a run log with the same lines the script would print.
+Without Python, do the same by hand: for each file, if it exists move it to the archive folder under the suffixed name first, then write the new file.

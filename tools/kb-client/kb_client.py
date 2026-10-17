@@ -7,9 +7,8 @@ Options: --lang en|zh (default: the system language), --port N (default: a free 
 (print the address only), --idle SECONDS (stop after that long without the page; 0 never; default 120),
 --start-timeout SECONDS (wait that long for OpenCode to start; default 90), --opencode PATH (the
 OpenCode program to use; also KB_CLIENT_OPENCODE; default: found on PATH, in a common install folder
-or through the interactive shell), --log-level (default from LOG_LEVEL); for set up, --agent and
---preset life|work answer those questions in advance (otherwise a work library is suggested) and
---descriptions FILE replaces the skill descriptions (as install.py).
+or through the interactive shell), --log-level (default from LOG_LEVEL); for set up, --agent answers
+that question in advance and --descriptions FILE replaces the skill descriptions (as install.py).
 
 The server listens on 127.0.0.1 only and answers only requests that carry the token in the address it
 opens, so other pages in the browser cannot use it. The questions, previews and checks are the ones of
@@ -18,9 +17,8 @@ the answer, and what it prints is streamed to the page. The conversation on the 
 server this client starts on 127.0.0.1 (agent.py); the page never talks to OpenCode itself. The folder
 browser only lists folders. The Skills section lists the skills OpenCode reads and manages them
 (skills_admin.py: backup before an edit, restore, import, a new skill from a template); the
-knowledge-base skills are upgraded by their own step (install.upgrade). A local library can be switched to automatic intake
-(auto.py): the client files what is put in its drop folder without anybody on the page, and does not
-stop for being idle while a library is switched on. Otherwise this file writes nothing but the current
+knowledge-base skills are upgraded by their own step (install.upgrade). Material is ingested in the
+conversation, with the kb-ingest skill. Otherwise this file writes nothing but the current
 conversation's id. Python 3 standard library only.
 """
 import argparse
@@ -49,8 +47,6 @@ import kb_manage  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import agent as agent_mod  # noqa: E402
-import auto as auto_mod  # noqa: E402
-import intake as intake_mod  # noqa: E402
 import skills_admin  # noqa: E402
 
 log = logging.getLogger("kb_client")
@@ -65,12 +61,9 @@ MAX_BODY = 64 * 1024
 SIMPLE_REFUSED = {"rollback", "move", "uninstall", "skill_backup", "skill_restore", "skill_import", "skill_new",
                   "forget"}
 CHAT_ACTIONS = {name: name for name in ("start", "recheck", "send", "new", "stop", "permission", "question", "terminal", "forget",
-                                         "allow_all", "workdir", "sessions", "open", "close", "focus", "task")}
+                                         "allow_all", "workdir", "sessions", "open", "close", "focus")}
 CHAT_FIRST_ACTIONS = ("workdir", "sessions")  # only with --chat-first
-# The write tasks the page starts from a button, each in a task window; with an intake run and the steps
-# below they hold the write lock one at a time.
-TASKS = ("lint", "archive", "notes", "resume")
-# steps that change libraries; an upgrade can set one up and writes the knowledge-base line
+# steps that change libraries, holding the write lock; an upgrade can set one up and writes the knowledge-base line
 WRITE_STEPS = ("setup", "rollback", "move", "uninstall", "skill_upgrade")
 RESTART_STEPS = ("setup", "skill_upgrade")  # OpenCode is restarted after these, to read the skills again
 MAX_TEXT = 20000  # characters of one message from the page
@@ -92,13 +85,6 @@ MSG = {
         "chat_busy": "The assistant is still working; try again when it is done.",
         "no_program": "OpenCode was not found on this computer.",
         "not_ready": "The conversation is not ready yet.",
-        "intake_running": "An intake is running; stop it first or wait until it is done.",
-        "intake_agent": "Intake needs OpenCode running (not the simple mode); see Getting started.",
-        "intake_skills": "kb-incremental is not installed where OpenCode reads it: choose Set up first.",
-        "intake_library": "Choose a library on this computer.",
-        "intake_empty": "No files found in what was chosen.",
-        "intake_nothing": "Nothing is left to continue.",
-        "intake_window": "This window shows the client's intake only; talk in another window.",
         "locked": "Another task that writes the libraries is running; wait until it is done.",
         "too_many": "Eight windows are open; close one first.",
         "window_busy": "The assistant is still working in this window.",
@@ -123,13 +109,6 @@ MSG = {
         "chat_busy": "助手还在处理，等它处理完再试。",
         "no_program": "本机没有找到 OpenCode。",
         "not_ready": "对话还没有准备好。",
-        "intake_running": "正在入库：先停止，或等它做完。",
-        "intake_agent": "入库需要 OpenCode 正常运行（不能是简易模式），见首次使用清单。",
-        "intake_skills": "OpenCode 读得到的位置里没有 kb-incremental：请先「安装与建库」。",
-        "intake_library": "请选择本机上的知识库。",
-        "intake_empty": "所选的内容里没有找到文件。",
-        "intake_nothing": "没有可以继续的文件。",
-        "intake_window": "这个窗口只显示客户端执行的入库，请在其他窗口对话。",
         "locked": "另一个写知识库的任务正在运行，等它结束再试。",
         "too_many": "已经开了 8 个窗口，先关掉一个。",
         "window_busy": "助手还在这个窗口里处理。",
@@ -281,16 +260,12 @@ class App:
         self.last_seen = time.time()
         self.output = None
         self.server = None
-        # The last intake run (intake.Run): one saved by an earlier client shows as stopped and can go on.
-        intake_mod.clean(intake_root())
-        self.intake = intake_mod.latest(intake_root())
-        self.auto = auto_mod.Watcher(self, kb_manage.state_dir(), lang)
 
     # ---------- steps ----------
 
     def start(self, action, lib_id=None):
         """(the step's Job, None), or (None, why): "busy" while another step runs, "locked" for a step that
-        changes libraries while a write task holds the lock."""
+        changes libraries while another one holds the lock."""
         with self.lock:
             if self.job and not self.job.done:
                 return None, "busy"
@@ -342,7 +317,7 @@ class App:
             "simple": bool(self.options.get("simple")),
             "chat_first": bool(self.options.get("chat_first")),
             "home": os.path.expanduser("~"),
-            "libraries": self.libraries(with_auto=True),
+            "libraries": libraries(),
             "skills": skills_installed(),
             "agent": agent_status(),
             "backups": len(kb_manage.list_backups()),
@@ -372,10 +347,6 @@ class App:
                                              self.start_timeout, chat_first=bool(self.options.get("chat_first")))
                 self.agent.lock_fn = self.write_lock
                 self.agent.guard_fn = self.guard
-                run = self.intake
-                sources, cons_left = run.left() if run is not None else ([], False)
-                if not (sources or cons_left):
-                    self.agent.close_intake()  # its window comes back only while the run can be continued
         self.agent.start()
         return self.agent, None
 
@@ -398,111 +369,32 @@ class App:
         self.agent.retry(prog)
         return self.agent, None
 
-    def libraries(self, with_auto=False):
-        """libraries(), with each local library's automatic intake state (auto) when asked."""
-        libs = libraries()
-        if with_auto:
-            for lib in libs:
-                lib["auto"] = self.auto.lib_state(lib) if lib["root"] and lib["exists"] else {"on": False}
-        return libs
-
     # ---------- the write lock ----------
 
     def write_lock(self):
-        """Who holds the write lock, or None: {"holder": "intake", "win"} for an intake run, {"holder":
-        "step", "action"} for a step that changes libraries, {"holder": "task", "win", "task", "library"}
-        for a task window while the assistant works there or a card waits in it."""
-        run = self.intake
-        if run is not None and run.running():
-            return {"holder": "intake", "win": run.win}
+        """Who holds the write lock, or None: {"holder": "step", "action"} for a step that changes libraries."""
         job = self.job
         if job is not None and not job.done and job.action in WRITE_STEPS:
             return {"holder": "step", "action": job.action}
-        ag = self.agent
-        for w in list(ag.windows.values()) if ag is not None else []:
-            if w.kind == "task" and w.busy():
-                return {"holder": "task", "win": w.id, "task": (w.task or {}).get("name", ""),
-                        "library": (w.task or {}).get("library", "")}
         return None
 
     def guard(self, win):
-        """For agent.touches: the libraries and the intake skill's folders, while a window other than win
-        holds the write lock; None otherwise."""
+        """For agent.touches: the libraries and the knowledge-base skills' folders, while a step holds the
+        write lock; None otherwise."""
         lock = self.write_lock()
         if lock is None or lock.get("win") == win:
             return None
         roots = [lib["root"] for lib in libraries() if lib["root"] and lib["exists"]]
-        scripts = [f["folder"] for f in kb_skills()["found"] if f["name"] in ("kb-incremental", "kb-note")]
+        scripts = [f["folder"] for f in kb_skills()["found"] if f["name"] in ("kb-ingest", "kb-note")]
         return {"roots": roots, "scripts": scripts}
 
     def windows_changed(self):
         if self.agent is not None:
             self.agent.emit_windows()
 
-    def idle_for_intake(self):
-        """True when an automatic run may start: no intake run and no step going."""
-        busy = self.intake is not None and self.intake.running()
-        return not busy and not (self.job is not None and not self.job.done)
-
-    def intake_scripts(self):
-        """The scripts folder of kb-incremental where OpenCode reads it, or ""."""
-        folder = next((f["folder"] for f in kb_skills()["found"] if f["name"] == "kb-incremental"), "")
-        scripts = os.path.join(folder, "scripts") if folder else ""
-        return scripts if scripts and os.path.isfile(os.path.join(scripts, "prep.py")) else ""
-
-    def queue_name(self, root):
-        return library_names(root).get("consolidation_queue") or "_Consolidation-Queue.md"
-
-    def start_intake(self, lib_id, paths, resume=False, auto=None, win=None):
-        """Starts an intake run of paths into the local library lib_id, or of the files a stopped run did
-        not reach. auto: an automatic run's {"sources", "item_done", "ended"} (auto.Watcher), its files
-        taken as they are (the drop folder is inside the library), possibly none (consolidation only).
-        The run talks in the intake window; a run started from the page takes Allow everything from the
-        window win it was started in. (run, None), or (None, the reason as a MSG key)."""
-        with self.lock:
-            last = self.intake
-            if last is not None and last.running():
-                return None, "intake_running"
-            if self.write_lock() is not None:
-                return None, "locked"
-            ag = self.agent
-            if ag is None or ag.state != "ready":
-                return None, "intake_agent"
-            scripts = self.intake_scripts()
-            if not scripts:
-                return None, "intake_skills"
-            if resume:
-                if last is None:
-                    return None, "intake_nothing"
-                lib_id = last.lib["id"]
-                sources, cons_left = last.left()
-                if not sources and not cons_left:
-                    return None, "intake_nothing"
-            lib = next((x for x in libraries() if x["id"] == lib_id and x["root"] and x["exists"]), None)
-            if lib is None:
-                return None, "intake_library"
-            if auto is not None:
-                sources = list(auto["sources"])
-            elif not resume:
-                sources = intake_mod.expand(paths, lib["root"])
-                if not sources:
-                    return None, "intake_empty"
-            run_id = time.strftime("%Y%m%d-%H%M%S-") + secrets.token_hex(2)
-            work = os.path.join(intake_root(), run_id)
-            os.makedirs(work, mode=0o700, exist_ok=True)
-            iw = ag.intake_window()
-            if auto is None:
-                ag.set_allow_all(ag.window(win if win in ag.windows else None).allow_all, iw.id)
-            hooks = {"item_done": auto["item_done"], "ended": auto["ended"]} if auto is not None else None
-            self.intake = intake_mod.Run(ag, lib, sources, scripts, work, self.lang, run_id, iw.id, hooks)
-        log.info("intake %s: %d files into %s%s", run_id, len(sources), lib["id"],
-                 " (continued)" if resume else " (automatic)" if auto is not None else "")
-        self.intake.start()
-        return self.intake, None
-
     def places(self):
         pl = agent_places()
-        pl["write"] = pl["write"] + [d for d in (self.work, intake_root()) if os.path.isdir(d)]
+        pl["write"] = pl["write"] + [self.work] if os.path.isdir(self.work) else pl["write"]
         return pl
 
     def idle_watch(self):
@@ -510,8 +402,6 @@ class App:
             time.sleep(min(5, self.idle))
             busy = self.job is not None and not self.job.done
             busy = busy or (self.agent is not None and self.agent.status != "idle")
-            busy = busy or (self.intake is not None and self.intake.running())
-            busy = busy or self.auto.any_on(libraries())  # a library switched to automatic intake keeps it going
             if not busy and time.time() - self.last_seen > self.idle:
                 log.info("no page for %s seconds, stopping", self.idle)
                 threading.Thread(target=self.server.shutdown, daemon=True).start()
@@ -527,7 +417,7 @@ def run_action(action, asker, lang, options, lib_id=None):
         # each skill where OpenCode reads it now; a missing one goes to OpenCode's own folder
         places = {x["name"]: os.path.dirname(x["folder"]) for x in kb_skills()["found"]}
         install.upgrade(asker, lang, places, skills_admin.own_folder(), instructions_file(),
-                        options.get("descriptions"), preset_default="work")
+                        options.get("descriptions"), tier="weak")
         return None
     if action.startswith("skill_"):
         try:
@@ -536,8 +426,7 @@ def run_action(action, asker, lang, options, lib_id=None):
             print(str(e))
             return 1
     if action == "setup":
-        install.wizard(asker, lang, options.get("agent"), options.get("preset"), options.get("descriptions"),
-                       preset_default="work", agent_default="opencode")
+        install.wizard(asker, lang, options.get("agent"), options.get("descriptions"), agent_default="opencode")
         return None
     if action == "move":
         libs = [(i, label, root) for i, label, root in kb_manage.registered_libs()
@@ -628,7 +517,7 @@ def libraries():
 
 
 def quick_notes(root):
-    """How many quick notes wait in a local library's notes folder (names.notes_dir) to be filed."""
+    """How many quick notes wait in a local library's notes folder (names.notes_dir) to be ingested."""
     cfg = kb_manage.read_json(os.path.join(root, "_kb.json"), {})
     names = cfg.get("names") if isinstance(cfg, dict) else None
     folder = os.path.join(root, (names or {}).get("notes_dir") or "Quick-Notes")
@@ -636,33 +525,6 @@ def quick_notes(root):
         return sum(1 for f in os.listdir(folder) if f.endswith(".md") and not f.startswith((".", "_")))
     except OSError:
         return 0
-
-
-def progress():
-    """Batch intake progress of every registered local library that has a progress file, for the progress
-    line and the batch cards on the page: counts and group (folder) names, no file paths."""
-    out = []
-    for lib in libraries():
-        if not lib["root"] or not lib["exists"]:
-            continue
-        plan = kb_manage.read_json(kb_manage.batch_plan(lib["root"]), None)
-        if not isinstance(plan, dict) or not isinstance(plan.get("batches"), list):
-            continue
-        bs = [b for b in plan["batches"] if isinstance(b, dict)]
-        done = [b for b in bs if b.get("status") == "done"]
-        started = [b for b in bs if b.get("status") == "started"]
-
-        def total(key):
-            return sum(int((b.get("result") or {}).get(key) or 0) for b in done)
-        out.append({"id": lib["id"], "label": lib["label"], "batches": len(bs), "done": len(done),
-                    "skipped": sum(1 for b in bs if b.get("status") == "skipped"),
-                    "current": started[0].get("n") if started else None,
-                    "current_group": str(started[0].get("group", "")) if started else "",
-                    "written": total("written"), "duplicates": total("duplicates"), "review": total("review"),
-                    "finished": [{"n": b.get("n"), "group": str(b.get("group", "")), "part": str(b.get("part", "")),
-                              "result": b.get("result") or {}} for b in done],
-                    "final_step": str(plan.get("final_step", ""))})
-    return out
 
 
 GRAPH_MAX_NODES = 2000
@@ -756,31 +618,13 @@ def graph(root, since=0.0):
     return {"nodes": list(nodes.values()), "links": links, "truncated": truncated}
 
 
-def open_run_sources():
-    """The material chosen for every batch intake still open in a registered local library (the sources of
-    its progress file), so that a run continued in a new conversation reads it without a card. A run that
-    is finished, or a progress file that cannot be read, gives nothing. Used on the server only."""
-    out = []
-    for lib in libraries():
-        if not lib["root"] or not lib["exists"]:
-            continue
-        plan = kb_manage.read_json(kb_manage.batch_plan(lib["root"]), None)
-        if not isinstance(plan, dict) or not isinstance(plan.get("batches"), list):
-            continue
-        if not any(isinstance(b, dict) and b.get("status") in ("pending", "started") for b in plan["batches"]):
-            continue
-        out += [p for p in plan.get("sources") or [] if isinstance(p, str) and os.path.isabs(p) and os.path.exists(p)]
-    return out
-
-
 def agent_places():
     """Where OpenCode may act without asking (agent.decide): write in the registered local libraries;
-    read also the skills, the agent's own settings and the material of open batch intakes; run the
-    skills' scripts."""
+    read also the skills and the agent's own settings; run the skills' scripts."""
     write = [lib["root"] for lib in libraries() if lib["root"] and lib["exists"]]
     skills = [os.path.join(s["folder"], name) for s in skills_installed() for name in s["skills"]]
     read = skills + [install.AGENT_HOMES["opencode"], os.path.dirname(kb_manage.registry_path())]
-    read = [p for p in read if os.path.isdir(p)] + open_run_sources()
+    read = [p for p in read if os.path.isdir(p)]
     return {"write": write, "read": read,
             "scripts": [os.path.join(p, "scripts") for p in skills if os.path.isdir(os.path.join(p, "scripts"))]}
 
@@ -1090,11 +934,6 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, dict(graph(lib["root"], self.app.started), label=lib["label"], root=lib["root"]))
         if path == "/api/skills":
             return self.send(200, {"skills": skills_admin.list_skills(), "folder": skills_admin.own_folder()})
-        if path == "/api/intake":
-            run = self.app.intake
-            return self.send(200, {"run": run.snapshot() if run is not None else None})
-        if path == "/api/progress":
-            return self.send(200, {"progress": progress()})
         if path == "/api/places":
             return self.send(200, {"places": places()})
         if path == "/api/fs":
@@ -1150,33 +989,6 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200 if ok else 409, {"ok": ok})
         if path.startswith("/api/chat/"):
             return self.chat_post(path[len("/api/chat/"):], body)
-        if path == "/api/intake":
-            paths = body.get("paths") or []
-            if not isinstance(paths, list) or len(paths) > MAX_PATHS or \
-                    not all(isinstance(x, str) and os.path.isabs(x) for x in paths):
-                return self.send(400, {"error": "paths"})
-            lib_id = body.get("library")
-            resume = body.get("resume") is True
-            if not resume and (not isinstance(lib_id, str) or not paths):
-                return self.send(400, {"error": "library"})
-            win = body.get("win")
-            run, why = self.app.start_intake(lib_id, paths, resume, win=win if isinstance(win, str) else None)
-            if run is None:
-                return self.send(409, {"error": MSG[self.app.lang][why], "reason": why})
-            return self.send(200, {"run": run.snapshot()})
-        if path == "/api/auto":
-            lib = next((x for x in libraries() if x["id"] == body.get("library") and x["root"] and x["exists"]), None)
-            if lib is None or not isinstance(body.get("on"), bool):
-                return self.send(400, {"error": MSG[self.app.lang]["intake_library"]})
-            try:
-                return self.send(200, {"ok": True, "auto": self.app.auto.switch(lib, body["on"])})
-            except OSError as e:
-                return self.send(409, {"error": " ".join(str(e).split())[:300]})
-        if path == "/api/intake/stop":
-            run = self.app.intake
-            if run is not None and run.running():
-                run.stop()
-            return self.send(200, {"ok": True})
         if path == "/api/quit":
             log.info("stopping: Quit on the page")
             self.send(200, {"ok": True})
@@ -1286,13 +1098,7 @@ class Handler(BaseHTTPRequestHandler):
         if wid is not None and (not isinstance(wid, str) or wid not in ag.windows):
             return self.send(404, {"error": m["no_window"], "reason": "no_window"})
         w = ag.window(wid) if what not in ("permission", "question", "open", "workdir", "sessions", "forget") else None
-        running = self.app.intake is not None and self.app.intake.running()
         try:
-            if w is not None and w.kind == "intake" and what in ("send", "new", "terminal"):
-                why = "intake_running" if running else "intake_window"
-                return self.send(409, {"error": m[why], "reason": why})
-            if what == "task":
-                return self.chat_task(ag, body, wid)
             if what == "send":
                 text, material = body.get("text"), body.get("material") or []
                 if not isinstance(text, str) or not text.strip() or len(text) > MAX_TEXT:
@@ -1303,18 +1109,12 @@ class Handler(BaseHTTPRequestHandler):
                 model = body.get("model") or ""
                 if not isinstance(model, str) or (model and not self.app.options.get("chat_first")):
                     return self.send(400, {"error": "model"})
-                with self.app.lock:  # a message in a task window goes on with its task: it takes the lock again
-                    lock = self.app.write_lock()
-                    if w.kind == "task" and lock is not None and lock.get("win") != w.id:
-                        return self.send(409, {"error": m["locked"], "reason": "locked"})
-                    try:
-                        ag.send(text.strip(), material + text_paths(text), model, win=w.id)
-                    except ValueError:
-                        return self.send(400, {"error": "model"})
+                try:
+                    ag.send(text.strip(), material + text_paths(text), model, win=w.id)
+                except ValueError:
+                    return self.send(400, {"error": "model"})
                 return self.send(200, {"ok": True})
             if what == "workdir":
-                if running:
-                    return self.send(409, {"error": m["intake_running"], "reason": "intake_running"})
                 try:
                     return self.send(200, {"ok": True, "workdir": ag.set_workdir(body.get("path"))})
                 except ValueError as e:
@@ -1323,7 +1123,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(409, {"error": m["chat_busy"]})
             if what == "sessions":
                 return self.send(200, {"sessions": ag.sessions(), "current": ag.session,
-                                       "open": {x.session: x.id for x in ag.windows.values() if x.session and x.kind != "intake"}})
+                                       "open": {x.session: x.id for x in ag.windows.values() if x.session}})
             if what == "open":
                 session = body.get("session")
                 if session is not None and not self.app.options.get("chat_first"):
@@ -1335,8 +1135,6 @@ class Handler(BaseHTTPRequestHandler):
                 except agent_mod.Refused as e:
                     return self.send(409, {"error": m.get(e.reason, m["not_ready"]), "reason": e.reason})
             if what == "close":
-                if w.kind == "intake" and running:
-                    return self.send(409, {"error": m["intake_running"], "reason": "intake_running"})
                 try:
                     ag.close(w.id, body.get("stop") is True)
                 except agent_mod.Refused:
@@ -1386,26 +1184,6 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(502, {"error": " ".join(str(e).split())[:300]})
         return self.send(404, {"error": "not found"})
 
-    def chat_task(self, ag, body, wid):
-        """POST /api/chat/task: a write task's text (built by the page) sent in a task window, wid when it
-        names an idle one, else a new window; refused while another write task holds the lock."""
-        m = MSG[self.app.lang]
-        name, lib, text = body.get("task"), body.get("library") or "", body.get("text")
-        if name not in TASKS or not isinstance(lib, str) or not isinstance(text, str) or not text.strip() \
-                or len(text) > MAX_TEXT:
-            return self.send(400, {"error": "task"})
-        with self.app.lock:
-            lock = self.app.write_lock()
-            if lock is not None and (wid is None or lock.get("win") != wid):
-                return self.send(409, {"error": m["locked"], "reason": "locked"})
-            try:
-                win = ag.task(name, lib, text.strip(), wid)
-            except agent_mod.Refused as e:
-                why = "too_many" if e.reason == "too_many" else "window_busy"
-                return self.send(409, {"error": m[why], "reason": e.reason})
-        log.info("write task %s started in %s", TASKS[TASKS.index(name)], win)  # the fixed name, never the request's
-        return self.send(200, {"ok": True, "win": win})
-
     def static(self, path):
         """Only the page's own files, by fixed name and type."""
         name = "index.html" if path == "/" else path[1:]
@@ -1430,11 +1208,6 @@ LOG_KEEP_DAYS = 7
 
 def log_folder():
     return os.path.join(kb_manage.state_dir(), "logs")
-
-
-def intake_root():
-    """Where the client's intake runs keep their work folders, logs and saved state (intake.py)."""
-    return os.path.join(kb_manage.state_dir(), "intake")
 
 
 def open_log_file(level):
@@ -1475,7 +1248,6 @@ def serve(app, port, open_browser):
         threading.Thread(target=webbrowser.open, args=(url,), daemon=True).start()
     if app.idle:
         threading.Thread(target=app.idle_watch, daemon=True).start()
-    app.auto.start()
     def on_term(signum, frame):  # another program asked the client to stop: stop the same way as Quit
         log.info("stopping: signal %s", signum)
         threading.Thread(target=server.shutdown, daemon=True).start()
@@ -1504,7 +1276,6 @@ def main():
     ap.add_argument("--start-timeout", type=int, default=90, metavar="SECONDS")
     ap.add_argument("--opencode", default=os.environ.get("KB_CLIENT_OPENCODE", ""), metavar="PATH")
     ap.add_argument("--agent", choices=sorted(install.TARGETS))
-    ap.add_argument("--preset", choices=["life", "work"])
     ap.add_argument("--descriptions", metavar="FILE")
     ap.add_argument("--chat-first", action="store_true",
                     help="open on the conversation with the knowledge base folded away; a work folder can be chosen")
@@ -1532,7 +1303,7 @@ def main():
     # folder is taken from there, never from wherever the program was started.
     os.chdir(os.path.expanduser("~"))
     find_opencode(a.opencode)
-    app = App(lang, {"agent": a.agent, "preset": a.preset, "descriptions": a.descriptions, "opencode": a.opencode,
+    app = App(lang, {"agent": a.agent, "descriptions": a.descriptions, "opencode": a.opencode,
                "simple": a.simple, "chat_first": a.chat_first},
               a.idle, a.start_timeout)
     app.output = Output(sys.stdout)

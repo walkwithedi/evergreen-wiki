@@ -1,6 +1,6 @@
 ---
 name: kb-query
-description: Answers questions from the user's own knowledge base of Markdown files (Google Drive folder or local/Obsidian vault) by searching it first, never from memory; each fact names its source file, and when nothing is found it says where it looked. Use when a question may be recorded there - what was agreed or decided, current values and limits, owners, dates, status, open items, terms, how something changed; personal records such as IDs, health, insurance, money, contracts, due dates; or whether some material is already filed. Examples: "When is the launch date?", "Who owns Project Atlas?". When the user has a knowledge base set up (a kb-libraries.json registry, KB_LIBRARIES, or libraries named in project instructions), check it before searching code or answering from general knowledge, even if the user does not say "check my knowledge base". Not for unrelated general questions. Read-only - intake, archive, health checks and setup belong to kb-incremental; saving notes belongs to kb-note.
+description: Answers questions from the user's own knowledge base of Markdown files (Google Drive folder or local/Obsidian vault) by searching it first, never from memory; each fact names its source file, and when nothing is found it says where it looked. Use when a question may be recorded there - what was agreed or decided, current values and limits, owners, dates, status, open items, terms, how something changed; personal records such as IDs, health, insurance, money, contracts, due dates; or whether some material is already filed. Examples: "When is the launch date?", "Who owns Project Atlas?". When the user has a knowledge base set up (a kb-libraries.json registry, KB_LIBRARIES, or libraries named in project instructions), check it before searching code or answering from general knowledge, even if the user does not say "check my knowledge base". Not for unrelated general questions. Read-only - intake and setup belong to kb-ingest; saving notes belongs to kb-note.
 ---
 
 # Knowledge base questions
@@ -17,11 +17,9 @@ Read references/config.md and references/environment.md once before starting.
 2. Load the registry and match the question against each scope. Search the libraries that fit.
 3. Unclear, or more than one could hold the answer: search every library that might, without asking.
 4. If unsure whether a question falls in a library, read that library's spec Table A to check; still unsure, treat as rule 3.
-5. Intake, archive, health check or setup requests belong to kb-incremental.
+5. Intake and setup requests belong to kb-ingest.
 
 For each library searched, read its backend file and _kb.json. Start the answer with: Library: <label(s)>.
-
-After the answer, check each local library searched for an unfinished intake (references/config.md, section 4), and each library searched for files waiting for consolidation (section 5); remind once per conversation. This skill only reminds and hands "continue intake" and "consolidate" to kb-incremental.
 
 ## Step 2: which file first
 
@@ -78,7 +76,6 @@ Originals: a local library may keep a copy of each filed original in its sources
 4. Numbers and dates exactly as written, with units and the time they refer to; no conversion or estimate. Where files disagree, list each with its source.
 5. No inference. What the library does not record: "not recorded in the knowledge base". If general knowledge is really needed, put it in a separate paragraph headed "not from the knowledge base".
 6. Items still open in the open-items list: state that and the deadline recorded.
-7. A basis file that is still in the consolidation queue (names.consolidation_queue; read the queue once when a source file is the basis): add "this file is not consolidated yet; the status card may not reflect it yet" (「该文件尚未整合，状态卡可能还没有反映它的内容」). When it disagrees with the status card, say which is newer by the filed time in the queue, and still do not decide who is right.
 7. Quick notes: mark "quick note, not yet filed" with the note's file name, and that it has not been checked; keep any "unconfirmed" mark.
 8. Nothing found: say which libraries, files and keywords were searched, conclude "nothing found in the knowledge base", and suggest rewording or checking whether the material was filed.
 9. With sensitivity enabled: never show class-A data in full (ID, card and account numbers, passwords, codes); mask with asterisks, at most the last keep_last characters. No health, money or investment advice and no interpretation of results, diagnoses, returns or coverage; report only what is recorded.

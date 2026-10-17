@@ -1,0 +1,14 @@
+{
+  "schema": 2,
+  "label": "Sample Work",
+  "preset": "work",
+  "language": "en",
+  "timezone": "UTC",
+  "tier": "weak",
+  "partitions": {
+    "max": 9,
+    "topic_start": 2,
+    "fallback": "09"
+  },
+  "names": {}
+}

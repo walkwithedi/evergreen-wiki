@@ -16,15 +16,6 @@
       move: "Move a library",
       uninstall: "Uninstall",
       move_this: "Move",
-      auto_label: "Automatic intake",
-      auto_confirm: "Files put in this library's drop folder are filed without asking: the client switches Allow everything on while it files them, and keeps running after the page is closed while a library has automatic intake on (Quit stops it). Files that cannot be filed go to a Not-filed folder for you. Turn it on?",
-      auto_drop: "Drop files in",
-      auto_waiting: "{n} file(s) in the drop folder; filing starts once they have not changed for two minutes and the assistant is free.",
-      auto_last: "Last run {at}: {written} written, {duplicate} already in the library, {not_filed} need you.",
-      auto_last_stopped: "Last run {at} was stopped: {written} written, {waiting} left in the drop folder.",
-      auto_last_cons: "{consolidated} consolidated.",
-      auto_manual: "{n} file(s) could not be filed and wait for you in",
-      intake_auto: "automatic",
       graph: "Graph",
       close: "Close",
       graph_title: "Graph: {lib}",
@@ -37,7 +28,6 @@
       graph_empty: "The library has no files to show yet.",
       graph_new: "New or changed since the client started",
       links_out: "Links to", links_in: "Linked from",
-      view_graph: "View in the graph",
       welcome_title: "Welcome",
       ideas_label: "Ideas behind the knowledge base",
       idea_prev: "Previous", idea_next: "Next", idea_more: "More", idea_less: "Less", idea_pause: "Pause", idea_play: "Play",
@@ -52,7 +42,6 @@
       skill_upgrade_hint: "Upgrading replaces the skill's folder with the new release; a change made here stays only in its backup.",
       skill_latest: "Up to date: this client comes with {v}.",
       skill_wait: "{what}; upgrade when it is done.",
-      skill_wait_intake: "Intake is running; upgrade when this round is done, or switch automatic intake off first.",
       try_req: "{phrase}",
       modify_title: "Change {name}",
       modify_how: "What should change?",
@@ -112,45 +101,17 @@
       chat_new: "New conversation",
       side_fold: "Fold the left column", side_unfold: "Unfold the left column",
       side_label_kb: "Knowledge base", side_label_skills: "Skills",
-      win_add: "New window", win_n: "Conversation {n}", win_intake: "Intake", win_task: "{task} \u00b7 {lib}",
+      win_add: "New window", win_n: "Conversation {n}",
       win_close: "Close this window (the conversation stays in OpenCode)",
       win_close_confirm: "The assistant is still working in this window. Stop it and close the window?",
       win_busy: "working", win_cards: "waiting for you", win_unread: "new reply",
       win_full: "Eight windows are open; close one first.",
-      intake_window_hint: "This window shows the client's intake. Talk or use other skills in another window meanwhile.",
-      lock_task: "{what} is running", lock_intake: "Intake is running", lock_step: "A management step is running",
-      lock_note: "{what}: the tasks that write the libraries wait until it is done.", lock_view: "Show",
+      lock_step: "A management step is running",
+      lock_note: "{what}: the tasks that write the libraries wait until it is done.",
       session_open: "(open)",
-      task_intake: "File material",
       task_note: "Quick note",
-      task_notes: "File quick notes",
-      task_lint: "Health check",
-      task_archive: "Archive old versions",
-      task_resume: "Continue intake",
-      task_intake_hint: "Choose files or folders; each is written into the library",
       task_note_hint: "Keep one sentence in the library at once",
-      task_lint_hint: "Look for broken links, missing pages and stale files",
-      task_archive_hint: "Move superseded versions to the archive folder",
-      task_more: "More", task_notes_n: "File quick notes ({n})",
-      intake_title: "Filing into {lib}: {done}/{total}",
-      intake_step_scan: "Reading {file}", intake_step_ask: "The assistant fixes terms and places {file}",
-      intake_step_file: "Assembling {file}", intake_step_write: "Writing {file} into the library",
-      intake_st_waiting: "waiting", intake_st_working: "in progress", intake_st_written: "written",
-      intake_st_duplicate: "already in the library", intake_st_manual: "needs you", intake_st_failed: "failed",
-      intake_stop: "Stop", intake_stopping: "Stopping\u2026",
-      intake_done: "Done: {written} written, {duplicate} already in the library, {failed} failed, {manual} to handle by hand.",
-      intake_stopped: "Stopped: {waiting} not done yet. Continue picks them up.",
-      intake_stopped_cons: "Stopped before the consolidation was done. Continue picks it up.",
-      intake_step_consolidate: "Consolidating, round {round}/{rounds}: {files} files done, {changes} summary changes, {queue} left in the queue",
-      intake_cons_done: "Consolidated: {files} files, {changes} changes to the status card and other summary files.",
-      intake_cons_failed: "Consolidation not finished: {reason}",
-      intake_long: "Filing and consolidating take a long time (hours for many files). You can leave this page as it is; the result shows in this window when it is done. Meanwhile talk or use other skills in another window; writing a library from there asks first, so that only the intake changes it.",
-      intake_cli: "How to open it from a terminal", intake_cli_copy: "Copy",
-      intake_cli_hint: "In a terminal, go to your own work folder and run:",
-      intake_terminal_off: "Not while filing: it would join the conversation the run is using.",
-      intake_continue: "Continue", intake_where: "Written into {root}",
-      intake_manual_go: "Hand the {n} unreadable files to the assistant",
-      intake_log: "This run's log:", log_dir: "Logs:",
+      log_dir: "Logs:",
       log_hint: "Logs hold file names and paths, not the files' text. When something goes wrong, send the log to whoever maintains the client.",
       chat_one_agent: "If OpenCode is also open in a terminal, quit it before filing material, so that only one of them writes to the library.",
       chat_keys: "Enter sends, Shift+Enter starts a new line.",
@@ -174,7 +135,6 @@
       interim: "Working notes",
       perm_task: "Send a subagent", agent_explore: "explore (looks things up)",
       chat_no_library: "No library on this computer yet. Choose Set up first.",
-      pick_library: "Which library?",
       note_prompt: "What should be noted?",
       ok_cancel: "Cancel",
       auto: "Allowed without asking: {what}",
@@ -196,38 +156,16 @@
       q_skip: "Skip",
       q_own: "Your own answer",
       tool_running: "running", tool_completed: "done", tool_error: "failed", tool_pending: "waiting",
-      say_intake: "file these into the {lib} library:\n{paths}",
       say_note: "note this: {text}",
-      say_notes: "file my quick notes in the {lib} library",
-      say_lint: "health check the {lib} library",
-      say_archive: "archive old versions in the {lib} library",
-      say_resume: "continue intake in the {lib} library",
-      say_work: "Work folder: {path}",
-      continue_auto: "Batch {n} of {total} done; a new conversation continues the intake in {s} seconds.",
-      continue_cancel: "Cancel",
-      continue_left: "The intake in {lib} has batches left.",
-      continue_go: "Continue intake",
-      simple_no_intake: "Not available in simple mode: the assistant cannot ask questions here, so a batch plan cannot be confirmed.",
-      stage_count: "Take stock", stage_convert: "Convert", stage_dedup: "Duplicates and names",
-      stage_clean: "Clean up", stage_compare: "Compare conclusions", stage_write: "File", stage_final: "Wrap up",
-      why_count: "Each file gets a content fingerprint first, so files already in the library or repeated in the material are not read again.",
-      why_convert: "Office files and PDFs become plain text the assistant can read; your original files are only read, never changed.",
-      why_dedup: "Name equals version: a new version of a document lands on the same name and the old one goes to the archive.",
-      why_clean: "Only the formatting is tidied; nothing is shortened, so every sentence can still be traced to its source.",
-      why_compare: "A rewrite of the status card is compared item by item by a script; a conclusion changes only with evidence.",
-      why_write: "Files are added and old versions archived; nothing is ever deleted.",
-      why_final: "After the last batch, the status card, change log and open items are updated once, for everything filed.",
-      more_count: "Batches keep each step small enough to check. A run can stop after any batch and go on later with Continue intake.",
-      more_convert: "Pictures keep a placeholder; tables stay tables. The converted text is kept in the client's work folder only while the client runs.",
-      more_dedup: "Two different documents never share a name; when in doubt the assistant renames rather than overwrites. This removes most \"which version is current?\" questions.",
-      more_clean: "The source text is the evidence behind every conclusion in the library, so it is kept whole.",
-      more_compare: "Three questions come first: does the new material carry this kind of fact, does the card have an entry for it, and do they disagree. Only three yeses change the card.",
-      more_write: "The file index records each source's content fingerprint, so the same file is recognised next time.",
-      more_final: "Topics and conclusions recorded during the batches are checked against the current status card once more before it is rewritten; that rewrite waits for your confirmation.",
-      progress_line: "{lib}: batch {n}/{total} · filed {written} · duplicates {duplicates} · to review {review}",
-      progress_done: "{lib}: all {total} batches done · filed {written} · duplicates {duplicates} · to review {review}",
-      batch_card: "Batch {n} ({group}) done: {written} filed, {duplicates} duplicates, {review} to review.",
-      run_card: "Intake finished in {lib}: {written} files filed in {total} batches.",
+      stage_convert: "Convert", stage_check: "Check quotes", stage_file: "File", stage_pages: "Topic pages",
+      why_convert: "Office files and PDFs become batch files of plain text with an anchor on every paragraph; your original files are only read, never changed.",
+      why_check: "Every card carries the exact sentence it rests on; a script looks that sentence up in the source before anything is written.",
+      why_file: "Sources and cards are written; an older version of a source moves to the archive with its cards, nothing is deleted.",
+      why_pages: "The pages of the topics touched are rebuilt from the cards, newest first, each line linked to its source sentence.",
+      more_convert: "Pictures keep a placeholder; tables stay tables. The library's tier sets the size of a batch.",
+      more_check: "A card whose quote is not found is written once more from the source; one that fails twice is dropped and listed in the report.",
+      more_file: "A source's name is its version: a new version of a document lands on the same name.",
+      more_pages: "With a weak model a script builds the pages; with a strong one the model writes them and a script checks every citation.",
       auto_count: "Allowed without asking: {n}",
       check_title: "Getting started",
       check_hide: "Hide", check_show: "Show",
@@ -283,15 +221,6 @@
       move: "移动知识库",
       uninstall: "卸载",
       move_this: "移动",
-      auto_label: "自动入库",
-      auto_confirm: "放进这个知识库投放文件夹的文件会自动入库、不再询问：入库期间客户端会打开「全部允许」，并且只要有知识库开着自动入库，关掉页面后客户端也继续运行（点「退出」才停止）。无法入库的文件移到「未处理」文件夹等你处理。要打开吗？",
-      auto_drop: "投放文件夹：",
-      auto_waiting: "投放文件夹里有 {n} 个文件；文件两分钟内不再变化、助手空闲时开始入库。",
-      auto_last: "上次运行 {at}：写入 {written} 个，库里已有 {duplicate} 个，{not_filed} 个需要你处理。",
-      auto_last_stopped: "上次运行 {at} 被停止：写入 {written} 个，{waiting} 个留在投放文件夹。",
-      auto_last_cons: "整理了 {consolidated} 个。",
-      auto_manual: "{n} 个文件无法入库，在这里等你处理：",
-      intake_auto: "自动",
       graph: "关系图",
       close: "关闭",
       graph_title: "关系图：{lib}",
@@ -304,7 +233,6 @@
       graph_empty: "库里还没有可以显示的文件。",
       graph_new: "客户端启动后新增或更新",
       links_out: "链接到", links_in: "被链接",
-      view_graph: "在关系图中查看",
       welcome_title: "欢迎",
       ideas_label: "知识库背后的思路",
       idea_prev: "上一张", idea_next: "下一张", idea_more: "详情", idea_less: "收起", idea_pause: "暂停", idea_play: "播放",
@@ -319,7 +247,6 @@
       skill_upgrade_hint: "升级会用新版本替换整个技能文件夹；在这里做的修改只保留在备份里。",
       skill_latest: "已是最新：这个客户端带的是 {v}。",
       skill_wait: "{what}，等它结束再升级。",
-      skill_wait_intake: "正在入库，等这一轮结束再升级；开着自动入库的，也可以先把它关掉。",
       try_req: "{phrase}",
       modify_title: "修改 {name}",
       modify_how: "要改哪方面？",
@@ -379,45 +306,17 @@
       chat_new: "新对话",
       side_fold: "收拢左栏", side_unfold: "展开左栏",
       side_label_kb: "知识库", side_label_skills: "技能",
-      win_add: "新窗口", win_n: "对话 {n}", win_intake: "入库", win_task: "{task}\u00b7{lib}",
+      win_add: "新窗口", win_n: "对话 {n}",
       win_close: "关闭这个窗口（对话仍保存在 OpenCode 里）",
       win_close_confirm: "助手还在这个窗口里处理。停止并关闭这个窗口吗？",
       win_busy: "处理中", win_cards: "等你处理", win_unread: "有新回复",
       win_full: "已经开了 8 个窗口，先关掉一个。",
-      intake_window_hint: "这个窗口显示客户端执行的入库。入库期间可以在其他窗口对话或使用别的技能。",
-      lock_task: "「{what}」正在运行", lock_intake: "正在入库", lock_step: "管理步骤正在运行",
-      lock_note: "{what}：写知识库的任务要等它结束。", lock_view: "查看",
+      lock_step: "管理步骤正在运行",
+      lock_note: "{what}：写知识库的任务要等它结束。",
       session_open: "（已打开）",
-      task_intake: "入库",
       task_note: "随手记",
-      task_notes: "整理随手记",
-      task_lint: "体检",
-      task_archive: "归档旧版",
-      task_resume: "继续入库",
-      task_intake_hint: "选文件或文件夹，逐个写进知识库",
       task_note_hint: "记一句话，马上存进知识库",
-      task_lint_hint: "查断链、缺页和过期文件",
-      task_archive_hint: "把被新版本取代的文件移到归档文件夹",
-      task_more: "更多", task_notes_n: "整理随手记（{n} 条）",
-      intake_title: "入库到「{lib}」：{done}/{total}",
-      intake_step_scan: "正在读取 {file}", intake_step_ask: "助手正在为 {file} 修正术语、决定放置",
-      intake_step_file: "正在组装 {file}", intake_step_write: "正在把 {file} 写进知识库",
-      intake_st_waiting: "等待", intake_st_working: "处理中", intake_st_written: "已写入",
-      intake_st_duplicate: "库里已有（重复）", intake_st_manual: "需要你处理", intake_st_failed: "失败",
-      intake_stop: "停止", intake_stopping: "正在停止\u2026",
-      intake_done: "完成：写入 {written} 个，库里已有 {duplicate} 个，失败 {failed} 个，需要手动处理 {manual} 个。",
-      intake_stopped: "已停止：还有 {waiting} 个没做，点「继续」接着做。",
-      intake_stopped_cons: "已停止：整合还没做完，点「继续」接着做。",
-      intake_step_consolidate: "整合第 {round}/{rounds} 轮：已整合 {files} 个，状态卡等改动 {changes} 条，队列还剩 {queue} 个",
-      intake_cons_done: "整合完成：{files} 个文件，状态卡等汇总文件改动 {changes} 条。",
-      intake_cons_failed: "整合没有做完：{reason}",
-      intake_long: "入库和整合会运行较长时间（文件多时可能要几个小时），可以把页面留在这里不用管，做完会在这个窗口里显示结果。期间可以在其他窗口对话或使用别的技能；那边要写知识库时会先弹卡片询问，以免和入库同时改。",
-      intake_cli: "如何在命令行打开", intake_cli_copy: "复制",
-      intake_cli_hint: "在终端里进入自己的工作文件夹，运行：",
-      intake_terminal_off: "入库期间不能用：它会接到入库正在用的对话上。",
-      intake_continue: "继续", intake_where: "写入位置：{root}",
-      intake_manual_go: "把 {n} 个读不出文字的文件交给助手",
-      intake_log: "本轮日志：", log_dir: "日志文件夹：",
+      log_dir: "日志文件夹：",
       log_hint: "日志里有文件名和路径，没有文件正文。出问题时把日志发给维护者。",
       chat_one_agent: "如果终端里也开着 OpenCode，入库前请先退出它，免得两边同时写同一个知识库。",
       chat_keys: "回车发送，Shift+回车换行。",
@@ -441,7 +340,6 @@
       interim: "过程说明",
       perm_task: "派一个子助手去", agent_explore: "explore（查找）",
       chat_no_library: "本机还没有知识库，请先选「安装与建库」。",
-      pick_library: "用哪个知识库？",
       note_prompt: "要记下什么？",
       ok_cancel: "取消",
       auto: "已自动允许：{what}",
@@ -463,38 +361,16 @@
       q_skip: "跳过",
       q_own: "自己填写",
       tool_running: "进行中", tool_completed: "完成", tool_error: "失败", tool_pending: "等待中",
-      say_intake: "增量整理以下材料，放入知识库「{lib}」：\n{paths}",
       say_note: "记一下：{text}",
-      say_notes: "整理随手记（知识库「{lib}」）",
-      say_lint: "检查知识库「{lib}」",
-      say_archive: "归档旧版（知识库「{lib}」）",
-      say_resume: "继续入库（知识库「{lib}」）",
-      say_work: "工作文件夹：{path}",
-      continue_auto: "第 {n}/{total} 批已完成，{s} 秒后开新对话继续入库。",
-      continue_cancel: "取消",
-      continue_left: "知识库「{lib}」还有没入库的批次。",
-      continue_go: "继续入库",
-      simple_no_intake: "简易模式下不能用：助手无法在页面上提问，分批计划没法确认。",
-      stage_count: "清点", stage_convert: "转换", stage_dedup: "查重与命名",
-      stage_clean: "清理正文", stage_compare: "比对结论", stage_write: "写入", stage_final: "收尾",
-      why_count: "先给每个文件算内容指纹，库里已有的和材料里重复的不再读取。",
-      why_convert: "把 Office 和 PDF 转成助手能读的纯文本；原始文件只读不改。",
-      why_dedup: "名称即版本：同一份文件的新版本落在同一个名字上，旧版移入归档。",
-      why_clean: "只整理格式，不删减内容，每句话都能追溯到原文。",
-      why_compare: "状态卡的改写由脚本逐条比对，有依据才改结论。",
-      why_write: "只新增和归档，从不删除。",
-      why_final: "最后一批完成后，一次性更新状态卡、变更日志和待决事项。",
-      more_count: "分批让每一步都小到可以检查。任何一批之后都可以停下，以后用「继续入库」接着做。",
-      more_convert: "图片留占位，表格仍是表格。转换出的文本只在客户端运行期间保存在它的工作文件夹里。",
-      more_dedup: "两份不同的文件绝不共用一个名字；拿不准时宁可改名也不覆盖。这样就基本不会出现「哪个版本是现行的」这种问题。",
-      more_clean: "原文是库里每条结论的依据，所以完整保留。",
-      more_compare: "先问三个问题：新材料有没有这类事实，状态卡有没有对应条目，两者是否矛盾。三个都是「是」才改状态卡。",
-      more_write: "文件索引记下每个来源的内容指纹，下次遇到同一文件能认出来。",
-      more_final: "各批记下的主题和结论，改写前会再和当前状态卡核对一遍；这一步要等你确认。",
-      progress_line: "{lib}：第 {n}/{total} 批 · 已入库 {written} · 重复 {duplicates} · 待复核 {review}",
-      progress_done: "{lib}：{total} 批全部完成 · 已入库 {written} · 重复 {duplicates} · 待复核 {review}",
-      batch_card: "第 {n} 批（{group}）完成：入库 {written} 个，重复 {duplicates} 个，待复核 {review} 个。",
-      run_card: "知识库「{lib}」入库完成：共 {total} 批，入库 {written} 个文件。",
+      stage_convert: "转换", stage_check: "核对引文", stage_file: "写入", stage_pages: "主题页",
+      why_convert: "把 Office 和 PDF 转成分批文件，每段带锚点；原始文件只读不改。",
+      why_check: "每张卡片都带着它依据的原句；写入前由脚本到原文里逐句核对。",
+      why_file: "写入来源和卡片；同一来源的旧版本连同卡片移入归档，从不删除。",
+      why_pages: "涉及的主题页由卡片重建，新的在前，每句都链接到原句。",
+      more_convert: "图片留占位，表格仍是表格。每批的大小由知识库的档位决定。",
+      more_check: "引文找不到的卡片照原文重写一次；两次都不通过的丢弃，并在报告里列出。",
+      more_file: "名称即版本：同一份文件的新版本落在同一个名字上。",
+      more_pages: "弱模型时主题页由脚本生成；强模型时由模型撰写，脚本核对每处引用。",
       auto_count: "已自动允许 {n} 次",
       check_title: "首次使用清单",
       check_hide: "收起", check_show: "展开",
@@ -541,7 +417,7 @@
   };
 
   // The ideas the knowledge base is built on, shown in turn in the welcome area and, shorter, while an
-  // intake runs: [title, one line, a few more sentences].
+  // ingest run goes on: [title, one line, a few more sentences].
   var IDEAS = {
     en: [
       ["LLM wiki", "Reconcile when material arrives, not when a question is asked.",
@@ -560,10 +436,6 @@
        "History stays readable, every change can be traced back, and a mistake can always be undone by hand."],
       ["A spec that grows", "Each library keeps its own rules and extends them with care.",
        "Partitions, topics, terms and thresholds live in the library's spec. Material that fits no topic adds one, and every addition is reported for review."],
-      ["Entities and backlinks", "People, systems and projects get pages of their own.",
-       "Documents link to the entities they mention, so one page shows everything about a subject. Obsidian draws the graph from the same links."],
-      ["File fast, consolidate after", "Searchable in seconds, reconciled in rounds.",
-       "Filing a document is mechanical and happens one file at a time. Comparing it with the status card needs close reading and your review, so it happens later, for many files at once."],
       ["Library first", "Answers come from the library and name their file.",
        "The assistant searches the library before it answers, cites the basis file for each fact, and says plainly when the library holds no record."]
     ],
@@ -584,10 +456,6 @@
        "历史随时可查，每次变化都能追溯，出了错也总能手工恢复。"],
       ["规范随材料生长", "每个库有自己的规则，谨慎地扩充。",
        "分区、主题、术语和阈值写在库自己的规范里。材料放不进现有主题时新增一个，每次新增都报告给你审阅。"],
-      ["实体与反链", "人、系统、项目各有自己的页面。",
-       "文档链接到它提到的实体，一个页面就能看到某个主题的全部材料；Obsidian 用同样的链接画出关系图。"],
-      ["先快收，后整合", "几秒钟可查，分轮次理清。",
-       "入库是机械的，一个文件一个文件地做；和状态卡比对需要精读和你的确认，所以之后对许多文件一起做。"],
       ["先查库再回答", "回答来自知识库，并注明依据文件。",
        "助手回答前先检索知识库，每条事实注明依据文件，查不到就直说知识库里没有记录。"]
     ]
@@ -716,52 +584,6 @@
     }).catch(lost);
   }
 
-  // Automatic intake of a local library: the switch, the drop folder, the last run and the files that
-  // need a person (POST /api/auto; the client does the rest, see auto.py).
-  function autoBox(lib) {
-    var a = lib.auto || { on: false };
-    var box = el("div", { "class": "auto" + (a.manual ? " attn" : "") });
-    var label = el("label", { "class": "auto-switch" });
-    var cb = el("input", { type: "checkbox" });
-    cb.checked = !!a.on;
-    cb.addEventListener("change", function () {
-      if (cb.checked && !window.confirm(t("auto_confirm"))) { cb.checked = false; return; }
-      api("POST", "/api/auto", { library: lib.id, on: cb.checked }).then(refresh).catch(function (e) {
-        cb.checked = !cb.checked;
-        note(String(e.message), "error");
-      });
-    });
-    label.appendChild(cb);
-    label.appendChild(document.createTextNode(" " + t("auto_label")));
-    box.appendChild(label);
-    if (a.on && a.inbox) {
-      var p = el("p", { "class": "hint" }, t("auto_drop") + " ");
-      p.appendChild(el("code", {}, a.inbox));
-      var copy = el("button", { type: "button", "class": "quiet small" }, t("copy_path"));
-      copy.addEventListener("click", function () { copyText(a.inbox, copy); });
-      p.appendChild(copy);
-      box.appendChild(p);
-      if (a.waiting) box.appendChild(el("p", { "class": "hint" }, t("auto_waiting", { n: a.waiting })));
-    }
-    var l = a.last;
-    if (l) {
-      var sum = t(l.state === "stopped" ? "auto_last_stopped" : "auto_last", l);
-      if (l.consolidated) sum += " " + t("auto_last_cons", l);
-      box.appendChild(el("p", { "class": "hint" }, sum));
-      if (l.log) {
-        var lw = el("p", { "class": "hint log-where" });
-        logWhere(lw, t("intake_log"), l.log);
-        box.appendChild(lw);
-      }
-    }
-    if (a.manual) {
-      var w = el("p", { "class": "warn" }, t("auto_manual", { n: a.manual }) + " ");
-      w.appendChild(el("code", {}, a.not_filed));
-      box.appendChild(w);
-    }
-    return box;
-  }
-
   function render() {
     // A client started with --simple refuses moving, uninstalling, rolling back, changing skills and
     // forgetting permission answers; style.css hides their buttons under body.simple.
@@ -787,7 +609,6 @@
         var g = el("button", { type: "button", "class": "quiet small" }, t("graph"));
         g.addEventListener("click", function () { openGraph(lib.id); });
         li.appendChild(g);
-        li.appendChild(autoBox(lib));
       }
       libs.appendChild(li);
     });
@@ -936,14 +757,14 @@
     lockUpgrade();
   }
 
-  // Upgrade waits while a task, an intake run or a step holds the write lock (the server refuses it then).
+  // Upgrade waits while a management step holds the write lock (the server refuses it then).
   function lockUpgrade() {
     var lock = chat.lock;
     Array.prototype.forEach.call(document.querySelectorAll(".skills-box button.upgrade"), function (b) {
       if (b.classList.contains("latest")) return;  // its title says it is up to date
       if (lock) b.disabled = true;
       else if (!job) b.disabled = false;
-      b.title = !lock ? "" : lock.holder === "intake" ? t("skill_wait_intake") : t("skill_wait", { what: lockWhat(lock) });
+      b.title = lock ? t("skill_wait", { what: lockWhat(lock) }) : "";
     });
   }
 
@@ -1209,33 +1030,19 @@
                model: "", workdir: "", recent: [], models: [],
                win: "", windows: [], lock: null, unread: {} };  // the window shown, all windows, the write lock
 
-  var MAX_WINDOWS = 8;  // as agent.MAX_WINDOWS; the intake window is not counted
+  var MAX_WINDOWS = 8;  // as agent.MAX_WINDOWS
 
   function shown() {
-    return chat.windows.filter(function (w) { return w.id === chat.win; })[0] || { id: chat.win, kind: "chat", status: "idle", cards: 0 };
-  }
-
-  function libLabel(id) {
-    var l = ((state && state.libraries) || []).filter(function (x) { return x.id === id; })[0];
-    return l ? l.label : id;
+    return chat.windows.filter(function (w) { return w.id === chat.win; })[0] || { id: chat.win, status: "idle", cards: 0 };
   }
 
   function winLabel(w, i) {
-    if (w.kind === "intake") return t("win_intake");
-    if (w.kind === "task" && w.task) {
-      var task = t("task_" + w.task.name);
-      return w.task.library ? t("win_task", { task: task, lib: libLabel(w.task.library) }) : task;
-    }
     return w.title || t("win_n", { n: i + 1 });
   }
 
-  // What holds the write lock, as a short phrase; "" when nothing does.
+  // What holds the write lock (a management step), as a short phrase; "" when nothing does.
   function lockWhat(lock) {
-    if (!lock) return "";
-    if (lock.holder === "intake") return t("lock_intake");
-    if (lock.holder === "step") return t("lock_step");
-    var task = t("task_" + lock.task);
-    return t("lock_task", { what: lock.library ? t("win_task", { task: task, lib: libLabel(lock.library) }) : task });
+    return lock ? t("lock_step") : "";
   }
 
   function drawTabs() {
@@ -1243,7 +1050,7 @@
     box.textContent = "";
     var n = 0;
     chat.windows.forEach(function (w) {
-      var i = w.kind === "chat" ? n++ : n;
+      var i = n++;
       var tab = el("div", { "class": "win-tab", role: "tab" });
       tab.classList.toggle("active", w.id === chat.win);
       tab.setAttribute("aria-selected", w.id === chat.win ? "true" : "false");
@@ -1256,16 +1063,13 @@
       name.title = marks.join(" \u00b7 ");
       name.addEventListener("click", function () { showWindow(w.id); });
       tab.appendChild(name);
-      if (!(w.kind === "intake" && intakeRunning())) {
-        var x = el("button", { type: "button", "class": "win-close", "aria-label": t("win_close"), title: t("win_close") }, "\u00d7");
-        x.addEventListener("click", function () { closeWindow(w); });
-        tab.appendChild(x);
-      }
+      var x = el("button", { type: "button", "class": "win-close", "aria-label": t("win_close"), title: t("win_close") }, "\u00d7");
+      x.addEventListener("click", function () { closeWindow(w); });
+      tab.appendChild(x);
       box.appendChild(tab);
     });
     var add = el("button", { type: "button", "class": "quiet small", id: "win-add", title: t("win_add") }, "+");
-    add.disabled = !chat.ready || chat.simple ||
-      chat.windows.filter(function (w) { return w.kind !== "intake"; }).length >= MAX_WINDOWS;
+    add.disabled = !chat.ready || chat.simple || chat.windows.length >= MAX_WINDOWS;
     if (add.disabled && chat.ready && !chat.simple) add.title = t("win_full");
     add.addEventListener("click", function () {
       api("POST", "/api/chat/open", {}).then(function (r) { chatLoad(r.win); })
@@ -1298,36 +1102,23 @@
   }
 
   function chatEnable() {
-    var w = shown();
-    var inIntake = w.kind === "intake";
     var lock = chat.lock;
-    var mine = !!(lock && lock.win === chat.win);
-    $("chat-terminal").disabled = !chat.ready || inIntake;
-    $("chat-terminal").title = inIntake && intakeRunning() ? t("intake_terminal_off") : "";
+    $("chat-terminal").disabled = !chat.ready;
     $("chat-allow-all").disabled = !chat.ready || chat.simple;
     $("chat-allow-all").setAttribute("data-t", chat.allowAll ? "allow_all_on" : "allow_all");
     $("chat-allow-all").textContent = t(chat.allowAll ? "allow_all_on" : "allow_all");
     $("chat-allow-all").classList.toggle("on", chat.allowAll);
     var noLib = state !== null && !localLibs().length;
     var anyBusy = chat.windows.some(function (x) { return (x.status && x.status !== "idle") || x.cards > 0; });
-    // while the assistant works, a message waits its turn; a task window waits for the lock
-    $("chat-send").disabled = !chat.ready || inIntake || (w.kind === "task" && !!lock && !mine);
-    $("input").disabled = inIntake;
-    $("input").placeholder = inIntake ? t("intake_window_hint") : "";
+    // while the assistant works, a message waits its turn
+    $("chat-send").disabled = !chat.ready;
     Array.prototype.forEach.call(document.querySelectorAll("[data-task]"), function (b) {
-      var name = b.getAttribute("data-task");
-      var batch = name === "intake" || name === "resume";
-      var writes = name !== "note";  // every task but a quick note writes the libraries: one at a time
-      b.disabled = !chat.ready || noLib || (writes && !!lock) || (chat.simple && batch) ||
-        (!writes && (chat.busy || inIntake));
-      b.title = noLib ? t("chat_no_library") : (chat.simple && batch ? t("simple_no_intake")
-        : writes && lock ? lockWhat(lock) : "");
+      b.disabled = !chat.ready || noLib || chat.busy;
+      b.title = noLib ? t("chat_no_library") : "";
     });
-    showTasks();
-    show($("lock-note"), !!lock && !mine && chat.ready);
+    show($("lock-note"), !!lock && chat.ready);
     $("lock-text").textContent = lock ? t("lock_note", { what: lockWhat(lock) }) : "";
-    show($("lock-view"), !!(lock && lock.win));
-    $("chat-new").disabled = !chat.ready || chat.busy || inIntake;
+    $("chat-new").disabled = !chat.ready || chat.busy;
     ["workdir-change", "workdir-recent"].forEach(function (id) { $(id).disabled = !chat.ready || anyBusy || !!lock; });
     $("sessions").disabled = !chat.ready || chat.simple;
     drawTabs();
@@ -1916,7 +1707,6 @@
     else if (ev.type === "part") {
       showPart(ev);
       if (ev.kind === "tool" && ev.script) stageFrom(ev);
-      if (ev.kind === "tool" && ev.status === "error") runs.errored = true;
     }
     else if (ev.type === "delta") {
       var p = partEl({ partID: ev.partID, messageID: ev.messageID, role: ev.role, child: ev.child, kind: "text" });
@@ -1925,19 +1715,17 @@
     } else if (ev.type === "status") {
       chat.busy = ev.status !== "idle";
       chatEnable();
-      if (chat.busy) cancelContinue();
-      else { compactTurns(); stagesIdle(); loadProgress().then(maybeContinue); }
+      if (!chat.busy) { compactTurns(); stagesIdle(); }
     }
     else if (ev.type === "auto") {
       autoNote((ev.child ? t("child") : "") + t("auto", { what: permName(ev.permission) + " " + permWhat(ev).join(", ") }));
     }
-    else if (ev.type === "error") { runs.errored = true; note(ev.text, "error"); }
+    else if (ev.type === "error") note(ev.text, "error");
     else if (ev.type === "permission") permissionCard(ev);
     else if (ev.type === "question") questionCard(ev);
     else if (ev.type === "permission_done" || ev.type === "question_done") dropCard(ev.id);
     else if (ev.type === "reset") { chat.model = ""; $("model").value = ""; clearChat(); }
     else if (ev.type === "workdir") chatBar(ev);
-    else if (ev.type === "intake") { intake.run = ev.run; drawIntake(); chatEnable(); }
     else if (ev.type === "allow_all") {
       if (chat.allowAll !== ev.on) note(t(ev.on ? "allow_all_note_on" : "allow_all_note_off"), ev.on ? "error" : "auto");
       chat.allowAll = ev.on;
@@ -2282,92 +2070,17 @@
 
   function closeGraph() { show($("graph"), false); graph = null; }
 
-  // ---------- continuing a batch intake ----------
-  // The skill stops after a finished batch when its conversation grows long. When the last batch script
-  // step was "done" and nothing else is pending, a new conversation continues the run after a short
-  // countdown; after a stop, an error, or an automatic round that filed no batch, a button does it instead.
-
-  var runs = { lastPlan: "", errored: false, stopped: false, autoFrom: null, timer: null };
-
-  function openRun() {
-    var ids = Object.keys(stages.runs || {});
-    for (var i = 0; i < ids.length; i++) {
-      var p = stages.runs[ids[i]];
-      if (p.done + p.skipped < p.batches) return p;
-    }
-    return null;
-  }
-
-  function cancelContinue() {
-    clearInterval(runs.timer);
-    runs.timer = null;
-    var bar = $("continue-bar");
-    if (bar) bar.remove();
-  }
-
-  function continueRun(p, auto) {
-    cancelContinue();
-    runs.autoFrom = auto ? { id: p.id, done: p.done } : null;
-    runs.lastPlan = ""; runs.errored = false; runs.stopped = false;
-    var w = shown();
-    var win = w.kind === "task" ? w.id : "";
-    api("POST", "/api/chat/new", { win: chat.win }).then(function () {
-      return writeTask("resume", w.task ? w.task.library : "", withWork(t("say_resume", { lib: p.label })), win);
-    }).catch(function (e) { note(String(e.message), "error"); });
-  }
-
-  function continueButton(p) {
-    var bar = $("continue-bar");
-    if (!bar) { bar = el("div", { "class": "note batch", id: "continue-bar" }); $("messages").appendChild(bar); }
-    bar.textContent = t("continue_left", { lib: p.label }) + " ";
-    var go = el("button", { type: "button", "class": "quiet small" }, t("continue_go"));
-    go.addEventListener("click", function () { continueRun(p, false); });
-    bar.appendChild(go);
-    scrollChat();
-  }
-
-  function maybeContinue() {
-    var p = openRun();
-    if (!p || chat.busy || chat.simple || !chat.ready || Object.keys(chat.cards).length) return;
-    if (!runs.lastPlan && !runs.stopped && !runs.errored) return;  // nothing happened on this page yet
-    var spun = runs.autoFrom && runs.autoFrom.id === p.id && runs.autoFrom.done === p.done;
-    var auto = runs.lastPlan === "batch_plan done" && !runs.stopped && !runs.errored && !spun;
-    cancelContinue();
-    if (!auto) { continueButton(p); return; }
-    var bar = el("div", { "class": "note batch", id: "continue-bar" });
-    var text = el("span");
-    var left = 3;
-    var draw = function () {
-      text.textContent = t("continue_auto", { n: p.done + p.skipped, total: p.batches, s: left }) + " ";
-    };
-    draw();
-    bar.appendChild(text);
-    var cancel = el("button", { type: "button", "class": "quiet small" }, t("continue_cancel"));
-    cancel.addEventListener("click", function () { cancelContinue(); runs.lastPlan = ""; continueButton(p); });
-    bar.appendChild(cancel);
-    $("messages").appendChild(bar);
-    scrollChat();
-    runs.timer = setInterval(function () {
-      left -= 1;
-      if (left <= 0) continueRun(p, true); else draw();
-    }, 1000);
-  }
-
-  // ---------- intake stages and progress ----------
+  // ---------- ingest stages ----------
   // The stage comes from the skill script a tool step runs (agent.py stage_script), never from the
   // model's wording, so it costs no tokens and cannot drift.
 
-  var STAGES = ["count", "convert", "dedup", "clean", "compare", "write", "final"];
+  var STAGES = ["convert", "check", "file", "pages"];
   var SCRIPT_STAGE = {
-    "pick_materials": "count", "batch_plan plan": "count", "batch_plan next": "count",
-    "convert": "convert", "index_tool check": "dedup", "meta name": "dedup", "meta date": "dedup", "meta entities": "dedup",
-    "clean": "clean", "meta terms": "clean", "card_check": "compare", "meta yaml": "write",
-    "assemble": "write", "index_tool add": "write", "index_tool update": "write", "index_tool write": "write", "package": "write",
-    "batch_plan done": "write", "batch_plan skip": "write", "archive_plan": "write", "batch_plan finish": "final",
-    "prep scan": "convert", "prep file": "write", "consolidate list": "compare", "consolidate fill": "compare",
-    "consolidate done": "final"
+    "pick_materials": "convert", "doc2kb_core": "convert", "kb_batch split": "convert",
+    "ingest topics": "check", "quote_check check": "check", "ingest retopic": "check", "ingest add": "check",
+    "quote_check write": "file", "ingest file": "file", "ingest pages": "pages", "ingest check": "pages"
   };
-  var stages = { current: "", shown: "", hideTimer: null, poll: null, seen: null, runs: {}, announced: {} };
+  var stages = { current: "", shown: "", hideTimer: null };
 
   function drawStages() {
     var list = $("stage-list");
@@ -2392,67 +2105,16 @@
     clearTimeout(stages.hideTimer);
     show($("stages"), true);
     drawStages();
-    if (ev.script.indexOf("batch_plan") === 0 && ev.status === "completed") { runs.lastPlan = ev.script; loadProgress(); }
-    if (!stages.poll) stages.poll = setInterval(function () { if (chat.busy) loadProgress(); }, 5000);
   }
 
-  // Once the assistant has been idle for two minutes, the stages fold away until the next intake.
+  // Once the assistant has been idle for two minutes, the stages fold away until the next ingest run.
   function stagesIdle() {
     clearTimeout(stages.hideTimer);
     if (!stages.current) return;
     stages.hideTimer = setTimeout(function () {
       show($("stages"), false);
       stages.current = ""; stages.shown = "";
-      clearInterval(stages.poll); stages.poll = null;
     }, 120000);
-  }
-
-  function runCard(p) {
-    if (stages.announced[p.id]) return;
-    stages.announced[p.id] = true;
-    note(t("run_card", { lib: p.label, total: p.batches, written: p.written }), "batch");
-    var b = el("button", { type: "button", "class": "quiet small" }, t("view_graph"));
-    b.addEventListener("click", function () { openGraph(p.id, true); });
-    $("messages").lastChild.appendChild(b);
-  }
-
-  // Batch cards for batches finished since the page last looked, the run card when a run is wrapped up
-  // (its progress file is then marked done, and moved to the archive soon after), and the progress line
-  // of the run still open.
-  function loadProgress() {
-    return api("GET", "/api/progress").then(function (r) {
-      var first = stages.seen === null;
-      if (first) stages.seen = {};
-      var now = {}, line = "";
-      r.progress.forEach(function (p) {
-        now[p.id] = p;
-        var seen = stages.seen[p.id] || (stages.seen[p.id] = {});
-        p.finished.forEach(function (b) {
-          if (seen[b.n]) return;
-          seen[b.n] = true;
-          if (first) return;  // batches finished before the page looked are not announced
-          var res = b.result || {};
-          note(t("batch_card", { n: b.n, group: b.group + (b.part ? " " + b.part : ""), written: res.written || 0,
-                                 duplicates: res.duplicates || 0, review: res.review || 0 }), "batch");
-        });
-        var open = p.done + p.skipped < p.batches;
-        if (!open && p.final_step === "done") {
-          if (!first && stages.runs[p.id] && stages.runs[p.id].final_step !== "done") runCard(p);
-          return;
-        }
-        stages.announced[p.id] = false;
-        if (!line) line = t(open ? "progress_line" : "progress_done", {
-          lib: p.label, n: p.current || Math.min(p.done + p.skipped + 1, p.batches), total: p.batches,
-          written: p.written, duplicates: p.duplicates, review: p.review });
-      });
-      Object.keys(stages.runs).forEach(function (id) {  // wrapped up and archived between two looks
-        var was = stages.runs[id];
-        if (!now[id] && was.done + was.skipped >= was.batches) runCard(was);
-      });
-      stages.runs = now;
-      $("progress").textContent = line;
-      show($("progress"), !!line);
-    }).catch(function () {});
   }
 
   // Answers the client gave itself are counted on one line per stretch of conversation; the details
@@ -2485,7 +2147,6 @@
   function chatLoad(win) {
     return api("GET", "/api/chat/state" + (win ? "?win=" + encodeURIComponent(win) : "")).then(function (st) {
       clearChat();
-      cancelContinue();
       chat.win = st.agent.win || "";
       chat.windows = st.agent.windows || [];
       chat.lock = st.agent.lock || null;
@@ -2496,7 +2157,6 @@
       chatBar(st.agent);
       chat.allowAll = !!st.agent.allow_all;
       chat.busy = st.agent.status && st.agent.status !== "idle";
-      drawIntake();
       (st.agent.permissions || []).forEach(permissionCard);
       (st.agent.questions || []).forEach(questionCard);
       compactTurns();
@@ -2540,27 +2200,6 @@
     return ((state && state.libraries) || []).filter(function (l) { return l.root && l.exists; });
   }
 
-  function pickLibrary(then) {
-    var libs = localLibs();
-    if (!libs.length) { note(t("chat_no_library"), "error"); return; }
-    if (libs.length === 1) { then(libs[0]); return; }
-    var c = card("pick-library", t("pick_library"));
-    libs.forEach(function (l, i) {
-      var label = el("label", { "class": "choice" });
-      var r = el("input", { type: "radio", name: "pick-library", value: String(i) });
-      if (i === 0) r.checked = true;
-      label.appendChild(r);
-      label.appendChild(el("span", {}, l.label + "  " + l.root));
-      c.appendChild(label);
-    });
-    buttonRow(c, [[t("ok_cancel"), "quiet", function () { dropCard("pick-library"); }],
-                  [t("ok"), "primary", function () {
-                    var r = c.querySelector("input[name=pick-library]:checked");
-                    dropCard("pick-library");
-                    then(libs[r ? Number(r.value) : 0]);
-                  }]]);
-  }
-
   function noteCard() {
     var c = card("note", t("note_prompt"));
     var box = el("textarea", { rows: "3", spellcheck: "false" });
@@ -2574,167 +2213,8 @@
     box.focus();
   }
 
-  // The client's work folder goes with the skills' tasks, so that their copies and output files land
-  // where the client allows writing without a card.
-  function withWork(text) {
-    return state && state.work ? text + "\n" + t("say_work", { path: state.work }) : text;
-  }
-
-  // A write task's request, sent in a task window: win when it is the task window to go on in, else a new one.
-  function writeTask(name, lib, text, win) {
-    var body = { task: name, library: lib, text: text };
-    if (win) body.win = win;
-    return api("POST", "/api/chat/task", body).then(function (r) { if (r.win !== chat.win) chatLoad(r.win); })
-      .catch(function (e) { note(String(e.message), "error"); });
-  }
-
   function task(name) {
-    if (name === "note") { noteCard(); return; }
-    if (name === "resume" && intakeLeft()) { startIntake({ resume: true }); return; }
-    pickLibrary(function (lib) {
-      if (name !== "intake") { writeTask(name, lib.id, withWork(t("say_" + name, { lib: lib.label }))); return; }
-      openBrowser((state && state.home) || "", function (paths) {
-        startIntake({ library: lib.id, paths: paths });
-      }, true);
-    });
-  }
-
-  // Which of the extra buttons apply: Continue intake while a run stopped with files left (or a batch
-  // intake of the skill is open), File quick notes while notes wait.
-  function showTasks() {
-    show($("task-resume"), !!(intakeLeft() || openRun()));
-    var notes = localLibs().reduce(function (n, l) { return n + (l.notes || 0); }, 0);
-    $("task-notes").textContent = t("task_notes_n", { n: notes });
-    show($("task-notes"), notes > 0);
-  }
-
-  // ---------- intake run by the client ----------
-  // The client runs the skill's scripts for each file and asks the assistant only to fix terms and place it
-  // (intake.py), then works through the consolidation queue; the page shows each file's state, the
-  // consolidation round, and what was written where once the run ends.
-
-  var intake = { run: null, closed: "" };
-
-  function intakeRunning() {
-    return !!(intake.run && (intake.run.state === "running" || intake.run.state === "stopping"));
-  }
-
-  function intakeLeft() {
-    var r = intake.run;
-    return !!(r && r.state === "stopped" && ((r.counts.waiting || 0) > 0 || consLeft(r)));
-  }
-
-  function consLeft(r) {
-    var s = (r.consolidation || {}).state || "";
-    return s !== "done" && s !== "failed";
-  }
-
-  // The run takes Allow everything from the window it is started in, then shows in the intake window.
-  function startIntake(body) {
-    body.win = chat.win;
-    api("POST", "/api/intake", body).then(function (r) {
-      intake.run = r.run;
-      intake.closed = "";
-      if (r.run.win && r.run.win !== chat.win) { chatLoad(r.run.win); return; }
-      drawIntake();
-      chatEnable();
-    }).catch(function (e) { note(String(e.message), "error"); });
-  }
-
-  function loadIntake() {
-    return api("GET", "/api/intake").then(function (r) {
-      intake.run = r.run;
-      drawIntake();
-      chatEnable();
-    }).catch(function () {});
-  }
-
-  var INTAKE_MARK = { waiting: "\u2022", working: "\u2026", written: "\u2713", duplicate: "=", manual: "!", failed: "\u2717" };
-
-  function drawIntake() {
-    var r = intake.run, box = $("intake");
-    var here = shown().kind === "intake" || (r && r.win === chat.win);  // the run shows in its own window
-    // while a run goes on: it takes long, the page can be left alone, the other windows can be used
-    show($("intake-long"), intakeRunning() && here);
-    if (!r || !here || intake.closed === r.id + r.state) { show(box, false); return; }
-    show(box, true);
-    box.textContent = "";
-    var c = r.counts || {};
-    var done = (c.written || 0) + (c.duplicate || 0) + (c.manual || 0) + (c.failed || 0);
-    var head = el("div", { "class": "intake-head" });
-    head.appendChild(el("strong", {}, t("intake_title", { lib: r.label, done: done, total: r.total })));
-    if (r.auto) head.appendChild(el("span", { "class": "badge" }, t("intake_auto")));
-    var cur = r.items.filter(function (it) { return it.status === "working"; })[0];
-    var cons = r.consolidation || {};
-    var step = el("span", { "class": "intake-step" },
-      r.state === "stopping" ? t("intake_stopping")
-        : r.step === "consolidate" && cons.state === "running" ? t("intake_step_consolidate", cons)
-        : cur && r.step ? t("intake_step_" + r.step, { file: cur.file }) : "");
-    head.appendChild(step);
-    if (r.state === "running") {
-      var stop = el("button", { type: "button", "class": "quiet small" }, t("intake_stop"));
-      stop.addEventListener("click", function () { api("POST", "/api/intake/stop", {}).catch(function () {}); });
-      head.appendChild(stop);
-    } else if (r.state !== "stopping") {
-      var close = el("button", { type: "button", "class": "quiet small" }, t("close"));
-      close.addEventListener("click", function () { intake.closed = r.id + r.state; drawIntake(); });
-      head.appendChild(close);
-    }
-    box.appendChild(head);
-    var bar = el("div", { "class": "intake-bar" });
-    var fill = el("span");
-    fill.style.width = (r.total ? Math.round(100 * done / r.total) : 0) + "%";
-    bar.appendChild(fill);
-    box.appendChild(bar);
-    var ul = el("ul", { "class": "intake-items" });
-    r.items.forEach(function (it) {
-      var li = el("li", { "class": "st-" + it.status });
-      li.appendChild(el("span", { "class": "mark", "aria-hidden": "true" }, INTAKE_MARK[it.status] || ""));
-      li.appendChild(el("span", { "class": "file" }, it.file));
-      var what = t("intake_st_" + it.status) + (it.name ? " \u2192 " + it.name : "") + (it.reason ? ": " + it.reason : "");
-      li.appendChild(el("span", { "class": "what" }, what));
-      ul.appendChild(li);
-    });
-    box.appendChild(ul);
-    if (cur) {
-      var at = ul.children[r.items.indexOf(cur)];
-      if (at) ul.scrollTop = Math.max(0, at.offsetTop - ul.offsetTop - 40);
-    }
-    if (r.state === "done" || r.state === "stopped") {
-      var sum = el("p", { "class": "intake-sum" }, r.state === "done"
-        ? t("intake_done", { written: c.written || 0, duplicate: c.duplicate || 0, failed: c.failed || 0, manual: c.manual || 0 })
-        : c.waiting ? t("intake_stopped", { waiting: c.waiting }) : t("intake_stopped_cons"));
-      box.appendChild(sum);
-      if (cons.state === "done" && cons.files) box.appendChild(el("p", { "class": "intake-sum" }, t("intake_cons_done", cons)));
-      if (cons.state === "failed") box.appendChild(el("p", { "class": "intake-sum" }, t("intake_cons_failed", cons)));
-      if (c.written) box.appendChild(el("p", { "class": "hint" }, t("intake_where", { root: r.root })));
-      var row = el("div", { "class": "buttons" });
-      if (r.state === "stopped" && (c.waiting || consLeft(r))) {
-        var go = el("button", { type: "button", "class": "primary small" }, t("intake_continue"));
-        go.addEventListener("click", function () { startIntake({ resume: true }); });
-        row.appendChild(go);
-      }
-      var manual = r.items.filter(function (it) { return it.status === "manual"; });
-      if (manual.length) {
-        var hand = el("button", { type: "button", "class": "small" }, t("intake_manual_go", { n: manual.length }));
-        hand.addEventListener("click", function () {
-          var paths = manual.map(function (it) { return it.source; });
-          say(withWork(t("say_intake", { lib: r.label, paths: paths.join("\n") })), paths);
-        });
-        row.appendChild(hand);
-      }
-      if (c.written) {
-        var g = el("button", { type: "button", "class": "quiet small" }, t("view_graph"));
-        g.addEventListener("click", function () { openGraph(r.library, true); });
-        row.appendChild(g);
-      }
-      if (row.children.length) box.appendChild(row);
-    }
-    if (r.log) {
-      var lw = el("p", { "class": "hint log-where" });
-      logWhere(lw, t("intake_log"), r.log);
-      box.appendChild(lw);
-    }
+    if (name === "note") noteCard();
   }
 
   // Where a log is, with Copy path and what the log holds.
@@ -2966,7 +2446,6 @@
   // ---------- start ----------
 
   translate();
-  loadProgress();  // what is already finished is known, so only new batches get a card
   $("check-toggle").addEventListener("click", foldChecklist);
   $("kb-toggle").addEventListener("click", toggleKb);
   $("side-fold").addEventListener("click", function () { setSide(true); });
@@ -3061,10 +2540,8 @@
     }
   });
   $("chat-stop").addEventListener("click", function () {
-    runs.stopped = true;
     api("POST", "/api/chat/stop", { win: chat.win }).catch(function () {});
   });
-  $("intake-cli-copy").addEventListener("click", function () { copyText("opencode", $("intake-cli-copy")); });
   $("chat-terminal").addEventListener("click", function () {
     if (!window.confirm(t("terminal_confirm"))) return;
     api("POST", "/api/chat/terminal", { win: chat.win }).then(function (r) {
@@ -3078,9 +2555,8 @@
   $("chat-new").addEventListener("click", function () {
     api("POST", "/api/chat/new", { win: chat.win }).catch(function (e) { note(String(e.message), "error"); });
   });
-  $("lock-view").addEventListener("click", function () { if (chat.lock && chat.lock.win) showWindow(chat.lock.win); });
   chatEnable();
   if (!token) { result("error", t("no_token")); return; }
-  refresh().then(function () { if (state) { chatStart(); loadSkills(); loadIntake(); } });
+  refresh().then(function () { if (state) { chatStart(); loadSkills(); } });
   setInterval(function () { if (!job) refresh(); else api("GET", "/api/state").catch(function () {}); }, 20000);
 })();

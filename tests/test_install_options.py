@@ -1,4 +1,4 @@
-"""Tests for install.py: registering an existing library, --agent, --preset and --descriptions."""
+"""Tests for install.py: new and existing libraries, the tier by agent, --agent and --descriptions."""
 import json
 import os
 import shutil
@@ -32,7 +32,7 @@ class InstallOptionsTest(unittest.TestCase):
                         XDG_CONFIG_HOME=self.p("home", ".config"), PYTHONIOENCODING="utf-8")
         self.env.pop("KB_LIBRARIES", None)
         self.existing = self.p("home", "atlas")
-        write(os.path.join(self.existing, "_kb.json"), json.dumps({"schema": 1, "label": "Atlas"}))
+        write(os.path.join(self.existing, "_kb.json"), json.dumps({"schema": 2, "label": "Atlas"}))
         write(os.path.join(self.existing, "00_Spec.md"), "# Spec\n")
 
     def p(self, *parts):
@@ -51,11 +51,11 @@ class InstallOptionsTest(unittest.TestCase):
     def test_existing_library_is_registered_as_it_is(self):
         before = sorted(os.listdir(self.existing))
         # language, install, set up, folder, confirm the registration, write the line
-        p = self.install(["--wizard", "--agent", "claude-code", "--preset", "work"],
+        p = self.install(["--wizard", "--agent", "claude-code"],
                          ["2", "", "", self.existing, "", ""])
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         self.assertIn("already holds a library", p.stdout)
-        self.assertIn('"init Atlas"', p.stdout)
+        self.assertNotIn('"init Atlas"', p.stdout)
         self.assertNotIn("Which agent", p.stdout)
         self.assertNotIn("Which kind of library", p.stdout)
         libs = self.registry()["libraries"]
@@ -67,7 +67,7 @@ class InstallOptionsTest(unittest.TestCase):
     def test_existing_library_choose_another_folder(self):
         new = self.p("home", "kb", "fresh")
         # language, install, set up, existing folder, "1" for another folder, new folder, scope, confirm, line
-        p = self.install(["--wizard", "--agent", "claude-code", "--preset", "work"],
+        p = self.install(["--wizard", "--agent", "claude-code"],
                          ["2", "", "", self.existing, "1", new, "team projects", "", ""])
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         self.assertTrue(os.path.isfile(os.path.join(new, "_kb.json")))
@@ -77,7 +77,7 @@ class InstallOptionsTest(unittest.TestCase):
         loose = self.p("home", "notes")
         write(os.path.join(loose, "a.md"), "x\n")
         new = self.p("home", "kb", "fresh")
-        p = self.install(["--wizard", "--agent", "claude-code", "--preset", "life"],
+        p = self.install(["--wizard", "--agent", "claude-code"],
                          ["2", "", "", loose, new, "", "", ""])
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         self.assertIn("Not valid", p.stdout)
@@ -88,7 +88,7 @@ class InstallOptionsTest(unittest.TestCase):
         os.makedirs(self.p("home", "Documents"))
         new = self.p("home", "kb", "fresh")
         # language, install, set up; the home folder, the folder holding the installed skills, a new folder
-        p = self.install(["--wizard", "--agent", "claude-code", "--preset", "life"],
+        p = self.install(["--wizard", "--agent", "claude-code"],
                          ["2", "", "", self.home, self.p("home", ".claude"), new, "", "", ""])
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         self.assertEqual(p.stdout.count("Not valid"), 2, p.stdout)
@@ -99,8 +99,33 @@ class InstallOptionsTest(unittest.TestCase):
                  for lib in self.registry()["libraries"]]
         self.assertEqual(roots, [os.path.normpath(new)])
 
+    def test_new_library_tier_follows_the_agent(self):
+        for agent, tier in (("opencode", "weak"), ("claude-code", "strong")):
+            new = self.p("home", "kb", agent)
+            # language, install, set up, folder, scope, confirm, line
+            p = self.install(["--wizard", "--agent", agent], ["2", "", "", new, "team projects", "", ""])
+            self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+            kb = json.loads(read(os.path.join(new, "_kb.json")))
+            self.assertEqual((kb["schema"], kb["tier"]), (2, tier), agent)
+            self.assertIn("Tier: " + tier, p.stdout)
+            self.assertNotIn("Which kind of library", p.stdout)
+            self.assertEqual(sorted(n for n in os.listdir(new) if not os.path.isdir(os.path.join(new, n))),
+                             ["00_Spec.md", "00_Status-Card.md", "_kb.json"])
+
+    def test_1x_library_is_refused(self):
+        old = self.p("home", "old")
+        write(os.path.join(old, "_kb.json"), json.dumps({"schema": 1, "label": "Old"}))
+        write(os.path.join(old, "00_Spec.md"), "# Spec\n")
+        new = self.p("home", "kb", "fresh")
+        # language, install, set up, the 1.x folder, a new folder, scope, confirm, line
+        p = self.install(["--wizard", "--agent", "claude-code"], ["2", "", "", old, new, "team projects", "", ""])
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertIn("1.x", p.stdout)
+        self.assertEqual([lib["label"] for lib in self.registry()["libraries"]], ["Work"])
+        self.assertTrue(os.path.isfile(os.path.join(new, "_kb.json")))
+
     def test_descriptions_file(self):
-        desc = {"kb-note": "Notes one line.", "kb-query": "Query one line.", "kb-incremental": "Intake one line."}
+        desc = {"kb-note": "Notes one line.", "kb-query": "Query one line.", "kb-ingest": "Intake one line."}
         path = self.p("desc.json")
         write(path, json.dumps(desc))
         dest = self.p("skills")
@@ -115,7 +140,7 @@ class InstallOptionsTest(unittest.TestCase):
         self.assertFalse(os.path.exists(self.p("other")))
 
     def test_option_conflicts(self):
-        for args in (["--target", "agents", "--agent", "opencode"], ["--dest", self.p("x"), "--preset", "work"],
+        for args in (["--target", "agents", "--agent", "opencode"], ["--wizard", "--preset", "work"],
                      ["--dest", self.p("x"), "--descriptions", "d.json", "--locale", "zh"]):
             p = self.install(args)
             self.assertEqual(p.returncode, 2, args)
