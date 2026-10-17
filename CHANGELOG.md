@@ -2,6 +2,10 @@
 
 All three skills share one version number. To release, update this file, the "Version:" line of every SKILL.md and the plugin manifests together and merge to main; the release workflow then publishes v<version>.
 
+## Unreleased
+
+- The release workflow, run by hand with refresh_notes on, rewrites the notes of the version's existing release from CHANGELOG.md and the download guide; its zips and tag stay as they are.
+
 ## 2.0.0
 
 2.0 is a major version for work material: every answer quotes the source sentence it rests on. Documents are converted into batch files, the model takes cards from them (a conclusion with the exact sentence it rests on), a script checks every quote before a card is written, and topic pages and the status card are built from the cards. kb-ingest replaces kb-incremental; kb-query answers with a quote line after every fact; kb-note saves a note as a source with cards. Libraries are weak or strong tier; ChatGPT versions of the skills are attached to the release; nothing is written without a code environment. The 1.x line is frozen at 1.22.1, and 1.x libraries are not migrated.
