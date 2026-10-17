@@ -1,6 +1,6 @@
 # kb-ingest for ChatGPT
 
-Version: 1.22.1
+Version: 2.0.0
 
 Ingest documents into an evergreen 2.0 knowledge base and set up new libraries. Use when the user says "ingest", "file these", "add to the knowledge base" or hands over batch files, and for "set up a knowledge base" or "new library". Every conclusion becomes a card with its exact source sentence, checked by a script before anything is written. Not for questions (kb-query) or one note (kb-note).
 

@@ -5,7 +5,7 @@ description: Ingests documents into an evergreen 2.0 knowledge base (Google Driv
 
 # Knowledge base ingest
 
-Version: 1.22.1
+Version: 2.0.0
 
 This skill files material into a 2.0 library. Every conclusion it writes carries the source sentence it rests on, and a script checks that sentence before anything is written. The rules of a library (partitions, topics, folder names, tier) live in the library's own spec and _kb.json; read them each time, never from memory or from this file.
 

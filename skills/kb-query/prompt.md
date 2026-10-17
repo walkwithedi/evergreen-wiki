@@ -1,6 +1,6 @@
 # kb-query for ChatGPT
 
-Version: 1.22.1
+Version: 2.0.0
 
 Answer questions from the user's own knowledge base, an evergreen 2.0 library, by searching it first, never from memory. Every fact is followed by the exact source sentence it rests on, with its link. Use it whenever a question may be recorded in a registered library (what was decided, current values, owners, dates, status, open issues, terms, how something changed), even when the user does not say "check my knowledge base". Not for unrelated questions.
 

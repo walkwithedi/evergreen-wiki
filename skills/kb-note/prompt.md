@@ -1,6 +1,6 @@
 # kb-note for ChatGPT
 
-Version: 1.22.1
+Version: 2.0.0
 
 Save a small piece of information from the conversation into the user's knowledge base (an evergreen 2.0 library) at once, as a source with checked cards, so it can be found right away. Use when the user says "note this", "save this", "add this to my knowledge base" or similar. Not for the assistant's own memory ("remember that"). Ingesting documents and setting up libraries belong to kb-ingest; questions to kb-query.
 
