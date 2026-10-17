@@ -312,5 +312,112 @@ class EndToEndTest(Tmp):
         self.assertIn("- 2026-05-06 · Menu shown", read(self.p("lib", "Topics", "Interface.md")))
 
 
+
+SPEC_FILE = """00_Spec
+Version: v1
+Last updated: 2026-01-01
+Note: read by the skills.
+
+1. Table A: partitions and topics
+
+02 Goals and plans: annual and phase goals; work plans.
+09 Reference and templates: reference material; templates.
+
+2. Table B: term fixes
+"""
+SPEC_FILE_ZH = """00_Spec
+版本：v5.2
+最后更新：2026-01-01
+修订：v5.2（2026-01-01）分区 02 增加主题「预算」，未新增分区号。
+
+1. 表A：分区与主题
+
+02 目标与计划：年度目标；预算。
+09 参考与模板：参考资料。
+"""
+
+
+class LibraryCommandsTest(Tmp):
+    def library(self, spec=SPEC_FILE, **kb):
+        os.makedirs(self.p("lib"), exist_ok=True)
+        with open(self.p("lib", "_kb.json"), "w", encoding="utf-8") as f:
+            json.dump(dict({"schema": 1, "partitions": {"max": 9, "topic_start": 2, "fallback": "09"}}, **kb), f)
+        with open(self.p("lib", "00_Spec.md"), "w", encoding="utf-8") as f:
+            f.write(spec)
+
+    def test_topics(self):
+        self.library()
+        p = cli("topics", "--library", self.p("lib"))
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(p.stdout.splitlines(), ["annual and phase goals", "work plans", "reference material", "templates"])
+        p = cli("topics", "--library", self.p("lib"), "--out", self.p("topics.txt"))
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(read(self.p("topics.txt")).splitlines(), ["annual and phase goals", "work plans",
+                                                                   "reference material", "templates"])
+
+    def test_add_topic_to_fallback_partition(self):
+        self.library()
+        p = cli("add-topic", "--library", self.p("lib"), "--topic", "Risks", "--topic", "work  Plans", "--topic", "Vendors")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        spec = read(self.p("lib", "00_Spec.md"))
+        self.assertIn("09 Reference and templates: reference material; templates; Risks; Vendors.\n", spec)
+        self.assertIn("02 Goals and plans: annual and phase goals; work plans.\n", spec)     # known: not added
+        self.assertIn("Version: v1.1\n", spec)
+        self.assertNotIn("2026-01-01", spec)
+        self.assertRegex(spec, r'Version: v1\.1\nRevision: v1\.1 \(\d{4}-\d{2}-\d{2}\) partition 09 gets topic "Risks"; '
+                               r'no partition number added\.\nRevision: v1\.1 \(\d{4}-\d{2}-\d{2}\) partition 09 gets topic "Vendors"')
+        self.assertEqual(p.stdout.splitlines(), ["added: Risks", "added: Vendors", "known: work plans"])
+
+    def test_add_topic_chinese_named_partition_and_nothing_new(self):
+        self.library(SPEC_FILE_ZH, language="zh")
+        p = cli("add-topic", "--library", self.p("lib"), "--topic", "风险", "--partition", "02")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        spec = read(self.p("lib", "00_Spec.md"))
+        self.assertIn("02 目标与计划：年度目标；预算；风险。\n", spec)
+        self.assertIn("版本：v5.3\n", spec)
+        self.assertRegex(spec, r"修订：v5\.2（2026-01-01）[^\n]*\n修订：v5\.3（\d{4}-\d{2}-\d{2}）分区 02 增加主题「风险」，未新增分区号。\n")
+        before = read(self.p("lib", "00_Spec.md"))
+        p = cli("add-topic", "--library", self.p("lib"), "--topic", "风险")
+        self.assertEqual((p.returncode, p.stdout), (0, "known: 风险\n"))
+        self.assertEqual(read(self.p("lib", "00_Spec.md")), before)              # nothing new: spec unchanged
+        p = cli("add-topic", "--library", self.p("lib"), "--topic", "x", "--partition", "05")
+        self.assertEqual(p.returncode, 2)
+        self.assertIn("partition 05", p.stderr)
+
+    def test_retopic(self):
+        path = self.p("acc.jsonl")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(json.dumps({"source": "S01", "topic": "Risk"}) + "\n" + json.dumps({"source": "S02", "topic": "Plans"}) + "\n")
+        p = cli("retopic", path, "--from", "risk", "--to", "work plans")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual([json.loads(ln)["topic"] for ln in read(path).splitlines()], ["work plans", "Plans"])
+        self.assertIn("1 card", p.stdout)
+
+
+class CheckPageTest(LibraryCase):
+    def test_strong_page_must_cite_exactly_the_cards(self):
+        self.first_run()
+        os.makedirs(self.p("work"))
+        good = ("# Pilot\n\nThe pilot starts in April [[Sources/plan#^p1]], hosted by Riverside "
+                "[[Sources/plan#^p2]].\n")
+        bad = "# Pilot\n\nThe pilot starts in April [[Sources/plan#^p1]] in all regions [[Sources/plan#^p7]].\n"
+        with open(self.p("work", "good.md"), "w", encoding="utf-8") as f:
+            f.write(good)
+        with open(self.p("work", "bad.md"), "w", encoding="utf-8") as f:
+            f.write(bad)
+        res = ingest.check_page(self.p("lib"), self.cfg, "pilot", bad)
+        self.assertEqual(res, {"unknown": ["Sources/plan#^p7"], "missing": ["Sources/plan#^p2"]})
+        self.assertEqual(ingest.check_page(self.p("lib"), self.cfg, "Pilot", good), {"unknown": [], "missing": []})
+        with open(self.p("lib", "_kb.json"), "w", encoding="utf-8") as f:
+            json.dump({"schema": 1}, f)
+        p = cli("check-page", "--library", self.p("lib"), "--topic", "Pilot", "--page", self.p("work", "bad.md"), "--write")
+        self.assertEqual(p.returncode, 3)
+        self.assertFalse(os.path.exists(self.p("lib", "Topics", "Pilot.md")))
+        self.assertEqual(json.loads(p.stdout)["unknown"], ["Sources/plan#^p7"])
+        p = cli("check-page", "--library", self.p("lib"), "--topic", "Pilot", "--page", self.p("work", "good.md"), "--write")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(read(self.p("lib", "Topics", "Pilot.md")), good)
+
+
 if __name__ == "__main__":
     unittest.main()

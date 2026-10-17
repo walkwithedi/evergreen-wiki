@@ -22,7 +22,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "shared", "scripts"))
 import kbconf  # noqa: E402
 
-SKILLS = ["kb-note", "kb-query", "kb-incremental"]
+SKILLS = ["kb-note", "kb-query", "kb-incremental", "kb-ingest"]
 ENV_WORDS = ["search_files", "read_file_content", "download_file_content", "create_file", "update_file",
              "get_file_metadata", "present_files", "/home/claude", "/mnt/user-data", "application/vnd.google-apps"]
 ENV_ALLOWED = {"backend-gdrive.md", "backend-local.md", "environment.md"}
