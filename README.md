@@ -1,6 +1,6 @@
 # evergreen-wiki
 
-A knowledge base for an offline Kylin workstation, kept by OpenCode with a privately deployed model. Three agent skills keep a folder of Markdown files in order (an Obsidian vault works as is), and scripts do every step that can be decided mechanically, so a model of modest ability is enough:
+An offline, privately deployed knowledge base for intranet workstations (Kylin + OpenCode), kept by a local model such as DeepSeek or Qwen. Three agent skills keep a folder of Markdown files in order (an Obsidian vault works as is), and scripts do every step that can be decided mechanically, so a model of modest ability is enough. Every answer quotes a source sentence a script has checked; only the Python standard library is needed, and nothing goes online:
 
 | Skill | You say | It does |
 | --- | --- | --- |
