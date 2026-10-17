@@ -378,6 +378,7 @@ class LibraryCommandsTest(Tmp):
         self.assertRegex(spec, r"修订：v5\.2（2026-01-01）[^\n]*\n修订：v5\.3（\d{4}-\d{2}-\d{2}）分区 02 增加主题「风险」，未新增分区号。\n")
         before = read(self.p("lib", "00_Spec.md"))
         p = cli("add-topic", "--library", self.p("lib"), "--topic", "风险")
+        self.assertEqual((p.returncode, p.stdout), (0, "known: 风险\n"))
         self.assertEqual(read(self.p("lib", "00_Spec.md")), before)              # nothing new: spec unchanged
         p = cli("add-topic", "--library", self.p("lib"), "--topic", "x", "--partition", "05")
         self.assertEqual(p.returncode, 2)
