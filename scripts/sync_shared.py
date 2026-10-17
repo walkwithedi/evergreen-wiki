@@ -30,6 +30,8 @@ PLAN.append(("scripts/kbconf.py", ["skills/kb-incremental/scripts", "skills/kb-q
 PLAN.append(("scripts/doc2kb_core.py", ["skills/kb-incremental/scripts", "tools/doc2kb"]))
 # knowledge-base batch files: written by doc2kb_core, split back by the skills
 PLAN.append(("scripts/kb_batch.py", ["skills/kb-incremental/scripts", "tools/doc2kb"]))
+# checking cards against their batch file and writing them
+PLAN.append(("scripts/quote_check.py", ["skills/kb-incremental/scripts", "tools/doc2kb"]))
 
 
 def copies():

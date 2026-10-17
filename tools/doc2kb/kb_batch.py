@@ -305,6 +305,22 @@ def parse(text):
     return out
 
 
+def sources_table(text):
+    """The header table of a batch file: {sid: {'name', 'path', 'modified'}}. Read by
+    position, so either language's labels work."""
+    out = {}
+    for ln in text.split('\n'):
+        if SECTION_RE.match(ln):
+            break
+        if not re.match(r'^\| S\d{2,} \|', ln):
+            continue
+        cells = [c.strip().replace('\\|', '|') for c in re.split(r'(?<!\\)\|', ln.strip())[1:-1]]
+        if len(cells) >= 4:
+            out[cells[0]] = {'name': cells[1], 'path': cells[2],
+                             'modified': '' if cells[3] == '-' else cells[3]}
+    return out
+
+
 def split_back(texts):
     """Join the sections of one run's batch files back into one text per source.
     Returns {sid: {'name', 'text', 'missing'}} in source order; missing lists part numbers
