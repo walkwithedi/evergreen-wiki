@@ -3294,7 +3294,7 @@ def _run_batch(args, cache):
                             filtered=filtered, since=since,
                             dup_groups=dup_groups, moved=moved)
     written = sum(1 for e in entries if e['stat']['status'] in (OK, SKIPPED))
-    kb_files = {}
+    kb_files, kb_written, oversized = {}, [], []
     if getattr(args, 'kb_batch', False):
         out_name = args.merge_name or safe_name(os.path.basename(src_root))
         kb_written, kb_files, oversized = write_kb_batches(entries, md_dir, ts_end, out_name, args)
@@ -3495,7 +3495,7 @@ def _run_files(args, cache):
     rp = write_batch_report(entries, md_dir, ts_end, src_root, [], [],
                             filtered=filtered, since=since,
                             dup_groups=dup_groups)
-    kb_written = None
+    kb_written, oversized = None, []
     if getattr(args, 'kb_batch', False):
         out_name = args.merge_name or safe_name(os.path.basename(src_root))
         kb_written, _, oversized = write_kb_batches(entries, md_dir, ts_end, out_name, args)

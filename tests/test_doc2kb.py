@@ -596,10 +596,10 @@ class KbBatchTest(Tmp):
         self.assertIn("missing", p.stderr)
 
     def test_names_map(self):
-        p, out, names = self.batches()
+        _, out, names = self.batches()
         with open(self.p("names.json"), "w", encoding="utf-8") as f:
             json.dump({"S01": "first.md", "mail-en.eml": "mail.md"}, f)
-        p = run([sys.executable, KB_BATCH, "split", os.path.join(out, names[0]), "-o", self.p("s"),
+        run([sys.executable, KB_BATCH, "split", os.path.join(out, names[0]), "-o", self.p("s"),
                  "--names", self.p("names.json")])
         self.assertIn("first.md", os.listdir(self.p("s")))
         self.assertIn("mail.md", os.listdir(self.p("s")))
@@ -664,7 +664,7 @@ exit 0
         z = os.path.join(bindir, "zenity")
         with open(z, "w", encoding="utf-8") as f:
             f.write(fake)
-        os.chmod(z, 0o755)
+        os.chmod(z, 0o700)
         env = {"PATH": bindir + os.pathsep + os.environ["PATH"], "DOC2KB_LANG": "en"}
         p = run(["bash", os.path.join(TOOL, "doc2kb.sh")], check=False, env=env)
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr + read(self.p("calls.log")))
