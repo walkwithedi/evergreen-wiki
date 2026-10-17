@@ -145,6 +145,11 @@ class CheckTest(Tmp):
         _, rep = self.check(self.card(topic="预算"))
         self.assertEqual(rep["new_topics"], [])            # no list given: no topic check
 
+    def test_known_topic_ignores_case_and_space(self):
+        acc, rep = self.check(self.card(topic="work  Plans", entities=[]), topics={"Work plans"})
+        self.assertEqual(rep["new_topics"], [])
+        self.assertEqual(acc[0]["topic"], "Work plans")      # the library's spelling
+
 
 class WriteTest(Tmp):
     def test_cards_file(self):
@@ -168,6 +173,37 @@ class WriteTest(Tmp):
         text = read(qc.write(acc, self.table, self.p("Cards"))[0])
         self.assertIn("# Cards: [[plan]]", text)
         self.assertIn("Document last modified: unknown", text)
+
+
+class FolderLinkTest(Tmp):
+    def test_links_name_their_folders(self):
+        acc, _ = self.check(self.card(topic="Work/plans: Q3", entities=["河畔诊所"]))
+        text = read(qc.write(acc, self.table, self.p("Cards"), sources_dir="Sources", topics_dir="Topics")[0])
+        self.assertIn("# Cards: [[Sources/进度]]", text)
+        self.assertIn("> 试点于三月三日启动 [[Sources/进度#^p1]]", text)
+        self.assertIn("- Topic: [[Topics/Work-plans- Q3|Work/plans: Q3]]", text)
+        self.assertIn("- Entities: [[河畔诊所]]", text)
+        self.assertEqual(qc.page_name("试点"), "试点")
+        self.assertEqual(qc.page_name(" .a?b* "), "a-b-")
+
+
+class ReadBackTest(Tmp):
+    def test_cards_file_reads_back(self):
+        acc, _ = self.check(self.card(event_date="2026-03-03", entities=["河畔诊所", "Atlas"]),
+                            self.card(anchor="s01-p5", quote="下次例会定在周五", conclusion="例会改在周五",
+                                      topic="Work/plans: Q3", entities=[]))
+        for lang in ("en", "zh"):
+            path = qc.write(acc, self.table, self.p(lang), lang=lang, sources_dir="Sources", topics_dir="Topics")[0]
+            got = qc.read_cards(read(path))
+            self.assertEqual(got["source"], "Sources/进度", lang)
+            self.assertEqual([(c["conclusion"], c["quote"], c["anchor"], c["topic"], c["entities"], c["date"],
+                               c.get("event_date")) for c in got["cards"]],
+                             [("试点三月三日启动", "试点于三月三日启动", "p1", "试点", ["河畔诊所", "Atlas"],
+                               "2026-03-04 05:06", "2026-03-03"),
+                              ("例会改在周五", "下次例会定在周五", "p5", "Work/plans: Q3", [], "2026-03-04 05:06", None)])
+        got = qc.read_cards(read(qc.write(acc[:1], self.table, self.p("bare"))[0]))
+        self.assertEqual((got["source"], got["cards"][0]["topic"]), ("进度", "试点"))
+        self.assertEqual(qc.read_cards("# just a note\n\ntext"), {"source": "", "cards": []})
 
 
 class CommandLineTest(unittest.TestCase):

@@ -47,6 +47,8 @@ DEFAULT_NAMES = {
     "archive_dir": "Archive",
     "entities_dir": "Entities",
     "sources_dir": "Sources",
+    "cards_dir": "Cards",
+    "topics_dir": "Topics",
     "notes_dir": "Quick-Notes",
     "notes_done_dir": "Filed",
     "old_suffix": "_old",
@@ -102,7 +104,11 @@ DEFAULTS = {
     "sources": SOURCES_DEFAULTS,
     "names": {},
 }
-KNOWN_KEYS = set(DEFAULTS) | {"backend", "inbox", "notes"}
+# 2.0 intake (kb-ingest): tier (weak: scripts assemble the topic pages; strong: the model writes
+# them), characters per batch file, and the quote length a card's quote must keep to.
+TIERS = ("weak", "strong")
+INGEST_KEYS = ("tier", "batch_chars", "quote_min", "quote_max")
+KNOWN_KEYS = set(DEFAULTS) | {"backend", "inbox", "notes"} | set(INGEST_KEYS)
 
 
 def utf8_stdio():
@@ -276,12 +282,65 @@ def validate(raw):
     fb = part.get("fallback", "")
     if fb and not (re.fullmatch(r"\d{2}", str(fb)) and ts <= int(fb) <= mx):
         problems.append("partitions.fallback must be a two-digit topic partition inside the range")
+    problems += check_ingest(raw)
     problems += check_timezone(raw.get("timezone", "UTC"))
     names = raw.get("names", {})
     for k in names:
         if not (k in DEFAULT_NAMES or (k.endswith("_key") and k[:-4] in SUMMARY_KEYS)):
             problems.append(f"unknown names key {k!r}")
     return problems
+
+
+def _whole(v):
+    return isinstance(v, int) and not isinstance(v, bool)
+
+
+def check_ingest(raw):
+    problems = []
+    if "tier" in raw and raw["tier"] not in TIERS:
+        problems.append("tier must be %s" % " or ".join(TIERS))
+    if "batch_chars" in raw and not (_whole(raw["batch_chars"]) and raw["batch_chars"] >= 1000):
+        problems.append("batch_chars must be a whole number of 1000 or more")
+    qmin, qmax = raw.get("quote_min", 1), raw.get("quote_max", 1)
+    if "quote_min" in raw and not (_whole(qmin) and qmin >= 1):
+        problems.append("quote_min must be a whole number of 1 or more")
+    elif "quote_max" in raw and not (_whole(qmax) and _whole(qmin) and qmax >= qmin):
+        problems.append("quote_max must be a whole number not below quote_min")
+    return problems
+
+
+TABLE_LABEL = re.compile(r"(?:Table|表)\s*([A-F])(?![A-Za-z])")
+PARTITION_LINE = re.compile(r"^\s*(\d{2})\s+[^:：]+[:：]\s*(.+?)\s*$")
+
+
+def topics(spec, cfg):
+    """Topics of the spec's Table A: each partition from partitions.topic_start on lists its topics
+    after the colon, separated by semicolons. [] when the spec has no Table A."""
+    start = cfg["partitions"]["topic_start"]
+    out, inside = [], False
+    for line in spec.split("\n"):
+        m = TABLE_LABEL.search(line)
+        if m:
+            inside = m.group(1) == "A"
+            continue
+        m = PARTITION_LINE.match(line) if inside else None
+        if not m or int(m.group(1)) < start:
+            continue
+        for t in re.split(r"[;；]", m.group(2)):
+            t = t.strip().rstrip(".。").strip()
+            if t and t not in out:
+                out.append(t)
+    return out
+
+
+def topic_key(name):
+    return re.sub(r"\s+", " ", name).strip().casefold()
+
+
+def match_topic(name, known):
+    """The known topic a card's topic names, ignoring case and spacing; None for a new topic."""
+    key = topic_key(name)
+    return next((t for t in known if topic_key(t) == key), None)
 
 
 def check_convert(conv):
