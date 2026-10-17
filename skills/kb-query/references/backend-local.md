@@ -22,7 +22,7 @@ The library is a folder on disk; backend.root in the registry is its path (~ all
 1. Stay inside the library root. Never touch files outside it.
 2. Searches cover the root folder only, not subfolders, so the archive folder is excluded; read the entities or notes folder only when a step says so.
 3. Never delete a file. Older versions are moved to the archive folder.
-4. Before any write or move that is not a brand-new file, show a preview and wait for the user to confirm. An ingest run is confirmed once, for everything it writes, before the scripts that write run (kb-ingest, step 7).
+4. Before any write or move that is not a brand-new file, show a preview and wait for the user to confirm. An ingest run is confirmed once, for everything it writes, before the scripts that write run (kb-ingest, step 8).
 5. Keep line endings as LF and encoding as UTF-8.
 
 ## Writing an ingest run

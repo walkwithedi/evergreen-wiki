@@ -80,47 +80,60 @@ python3 scripts/ingest.py versions <batch files> --library <library>
   - Weak tier: list each pair in the preview; the user picks the ones that are new versions.
   - Strong tier: read both sources of each pair and decide, giving one sentence of each, quoted exactly, that the decision rests on. Add a pair the script did not list only when a library source's name or content shows it is the older version, with the same two quotes. Every pair still waits for the user's confirmation in the preview.
 
-Each confirmed pair is passed to step 8 as --replaces "<new>=<old>": the old source and its cards file go to the archive folder, and the new source keeps its own name.
+Each confirmed pair is passed to step 9 as --replaces "<new>=<old>": the old source and its cards file go to the archive folder, and the new source keeps its own name.
 
-## Step 7: preview and confirm
+## Step 7: conflicts
+
+python3 scripts/ingest.py conflicts <batch files> --cards <work>/accepted.jsonl --library <library>, with --replaces "<new>=<old>" for each pair proposed in step 6. In the preview, the conflicts of a pair the user does not confirm are dropped.
+
+For each source the run replaces, it compares the old version's cards with the new version and the run's cards, and lists:
+- changed: the old quote is gone and a new card's conclusion is close to the old one (both are listed);
+- removed: the old quote is gone and no new card is close;
+- not_carried: the old quote is still in the new version, but no card of this run quotes it.
+
+Each goes into the preview with its id; by default the change is accepted. Write the entries the user restores, as the script printed them, to <work>/restore.json (a JSON list). A restored not_carried card becomes a current card of the new version again; any other restored card stays, citing the archived old version and marked as from an earlier version.
+
+## Step 8: preview and confirm
 
 Show one preview and wait for the user to confirm before anything is written:
 
 - Sources to file, from the batch files' source tables; new versions (same name, and the pairs of step 6 with their scores or quotes).
+- Conflicts of step 7: for each, the old conclusion with its quote and, for changed, the new one; the user accepts or restores each.
+- Status-card items that will be marked for review: the items citing a source that gets a new version.
 - Number of cards per source, and cards dropped.
 - New entities: each name with its type and the closest names of Table E; the user may put a name under an existing entity or change its type.
 - Topic pages that will be rebuilt (the accepted cards' topics, plus the topics of the cards files being archived).
 
 A local library writes straight into the library after the confirmation. For a library in Google Drive, see "Libraries in Google Drive" below before writing.
 
-## Step 8: file
+## Step 9: file
 
 1. When step 5 found new names or merged ones: python3 scripts/ingest.py entities <work>/accepted.jsonl --library <library> --apply, adding --map <work>/entity-map.json when the user changed anything. It rewrites the cards with the table's names and adds the new entities and aliases to Table E, raising the spec's version once.
-2. python3 scripts/ingest.py file <batch files> --cards <work>/accepted.jsonl --library <library>, adding --replaces "<new>=<old>" for each pair confirmed in step 6.
+2. python3 scripts/ingest.py file <batch files> --cards <work>/accepted.jsonl --library <library>, adding --replaces "<new>=<old>" for each pair confirmed in step 6 and --restore <work>/restore.json when the user restored any conflict.
 
-It writes the sources and cards files, archives older versions and prints a JSON record: sources written, files archived, topics touched. Exit 2 with "parts missing": a batch file of the run is not among those given; find it and run again, nothing was written. Exit 2 naming a --replaces source: that source is not in the library or not in the run; nothing was written.
+It writes the sources and cards files, archives older versions, marks the status-card items that cite an archived source for review, and prints a JSON record: sources written, files archived, topics touched, conflicts restored, status-card items marked. Exit 2 with "parts missing": a batch file of the run is not among those given; find it and run again, nothing was written. Exit 2 naming a --replaces source: that source is not in the library or not in the run; nothing was written.
 
-## Step 9: topic pages
+## Step 10: topic pages
 
-Take the topics from the record of step 8.
+Take the topics from the record of step 9.
 
 - Weak tier: python3 scripts/ingest.py pages --library <library> --topic "<topic>" (repeat --topic for each). The pages are built by the script from the cards; do not write or edit them.
 - Strong tier: for each topic, read every cards file holding a card of that topic, then write the page as references/pages-strong.md says, to <work>/pages/<topic>.md. Then python3 scripts/ingest.py check-page --library <library> --topic "<topic>" --page <work>/pages/<topic>.md --write. Exit 3: the output lists unknown links (passages no card holds) and missing ones (cards the page does not cite); rewrite the page once to fix exactly those and check again. Still failing: build that page with ingest.py pages --topic "<topic>" instead and say so in the report.
 
-## Step 10: ingest report
+## Step 11: ingest report
 
-Reply with: sources filed (new and new versions), files archived, cards written per source, cards dropped with their reasons, topics added or merged, entities added or recorded as aliases, topic pages rebuilt and how (script or written and checked). Name the work folder only when a file there is useful to the user.
+Reply with: sources filed (new and new versions), files archived, cards written per source, cards dropped with their reasons, topics added or merged, entities added or recorded as aliases, conflicts accepted and restored, status-card items marked for review, topic pages rebuilt and how (script or written and checked). Name the work folder only when a file there is useful to the user.
 
 ## Libraries in Google Drive
 
 The scripts run on a staging folder in the work folder that is laid out like the library:
 
-1. Before step 3: make <work>/stage. read _kb.json and the spec into it. list the cards folder and read every cards file into <work>/stage/<cards_dir>/. For each source of the run, find_exact its name in the sources folder and, when present, read it into <work>/stage/<sources_dir>/.
-2. Run steps 3 to 9 with --library <work>/stage. add-topic and entities --apply change the staged spec. For step 6, list the sources folder and write the names to <work>/sources.txt, one per line, and add --known <work>/sources.txt: a candidate marked "read": true is a library source not yet staged; read it into <work>/stage/<sources_dir>/ and run versions again.
-3. After the user confirms (step 7) and the scripts have run, deliver what changed, folder by folder:
+1. Before step 3: make <work>/stage. read _kb.json, the spec and the status card into it. list the cards folder and read every cards file into <work>/stage/<cards_dir>/. For each source of the run, find_exact its name in the sources folder and, when present, read it into <work>/stage/<sources_dir>/.
+2. Run steps 3 to 10 with --library <work>/stage. add-topic and entities --apply change the staged spec. For step 6, list the sources folder and write the names to <work>/sources.txt, one per line, and add --known <work>/sources.txt: a candidate marked "read": true is a library source not yet staged; read it into <work>/stage/<sources_dir>/ and run versions again.
+3. After the user confirms (step 8) and the scripts have run, deliver what changed, folder by folder:
    - For each file the record lists under archived: move_rename its Drive copy into the archive folder's subfolder of the same name (ensure_folder first), under the name the script gave it in <work>/stage/<archive_dir>/.
    - write_new each source and cards file the run wrote.
-   - For each topic page rebuilt and the spec when add-topic or entities --apply changed it: move_rename the Drive copy into the archive folder under <name><old_suffix><YYYYMMDDHHMMSS>.md, then write_new the new one.
+   - For each topic page rebuilt, the spec when add-topic or entities --apply changed it, and the status card when the record lists items marked for review: move_rename the Drive copy into the archive folder under <name><old_suffix><YYYYMMDDHHMMSS>.md, then write_new the new one.
    - find_exact each written name once more: exactly one copy must remain.
 4. Report written and failed files. A permission error stops the delivery at once: the connected account needs edit rights on the folder.
 
@@ -132,3 +145,4 @@ The scripts run on a staging folder in the work folder that is laid out like the
 4. Never write a topic page by hand in the weak tier; a strong-tier page is written only through check-page.
 5. Material is not searchable until its run is finished. Do not answer questions from a run that has not been filed.
 6. Replies follow the library language and preferences.output (references/environment.md).
+7. Never rewrite the status card without ingest.py status-check (references/config.md, section 2); review marks are added only by the filing script.
