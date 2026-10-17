@@ -12,6 +12,7 @@ Python 3 standard library only: no pandoc, LibreOffice, python-docx, openpyxl or
 | --- | --- |
 | `doc2kb_core.py` | the converter: parsing, extraction, picture export and output. Command line with options for everything, no interface code. A copy of `shared/scripts/doc2kb_core.py`; edit it there. |
 | `kb_batch.py` | the batch file format: writes batch files for `doc2kb_core.py` and splits them back into one file per source. A copy of `shared/scripts/kb_batch.py`; edit it there. |
+| `quote_check.py` | checks the cards an assistant took from batch files (each quote must occur in its anchor's paragraph) and writes the ones that pass, one Markdown file per source. A copy of `shared/scripts/quote_check.py`; edit it there. |
 | `doc2kb.sh` | entry script: without arguments a dialog (folder batch, chosen files, incremental tasks); with arguments the incremental command-line mode for cron |
 | `doc2kb_dedup.py` | removes sections from a merged or incremental file whose text is already in other output files, after a folder was moved or renamed |
 | `SPEC.md` | the behaviour contract: inputs, outputs and edge cases, for rebuilding or understanding the design |

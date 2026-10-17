@@ -4,11 +4,14 @@ All three skills share one version number. To release, update this file, the "Ve
 
 ## Unreleased
 
-doc2kb writes knowledge-base batch files, the intake format of the 2.0 design (docs/design-2.0.md, section 3.1). The skills are unchanged.
+doc2kb writes knowledge-base batch files, the intake format of the 2.0 design (docs/design-2.0.md, section 3.1), and a script checks cards against them (section 3.2). The skills are unchanged.
 - tools/doc2kb --kb-batch: the documents go into batch files `<source folder>_YYYYMMDD_b01.md`, ... (a second run on the same day adds the time). Each starts with a source table; sources are numbered S01, S02, ... over the run, oldest document first, each a section `# Snn <file name>`; paragraphs and list items end with an anchor `^snn-pN`, a table has one on the line below it. A batch holds at most `--batch-chars`, else the tier's limit (`--tier weak` 20,000, `strong` 100,000 characters), else `batch_chars` and `tier` from the `_kb.json` of `--library`, else weak. A longer document is cut at headings into parts that keep its number (`· 1/3`); a single paragraph or table over the limit is a batch of its own and is named in the output and the report. No pictures are exported. Date filter, duplicate removal and `--fp-db` work as in merged mode.
 - tools/doc2kb/doc2kb.sh: the options dialog has "KB batch files", which asks for the tier.
 - shared/scripts/kb_batch.py (copies in tools/doc2kb and kb-incremental's scripts): the batch file format, and `split`, which joins each source's parts back into one file, restores heading levels and rewrites `^snn-pN` to `^pN`; a source with a part missing is not written.
-- docs/design-2.0.md: the batch file sketch uses end-of-paragraph anchors.
+- shared/scripts/kb_batch.py: sources_table reads a batch file's source table.
+- shared/scripts/quote_check.py (copies in tools/doc2kb and kb-incremental's scripts): `check` takes cards (one JSON object per line: source, anchor, quote, conclusion, topic, entities, optional event_date) and the run's batch files. A card passes when its quote has 6 to 300 characters (`--quote-min`, `--quote-max`) and occurs in its anchor's paragraph, list item or table, ignoring white space, full- and half-width punctuation and Markdown emphasis; a quote found in exactly one other paragraph of the source passes with its anchor corrected. With `--topics`, unknown topics pass and are listed as new. Repeated cards are dropped; each card gets the source's last-modified time as its date. Accepted cards go to a JSON lines file, rejected ones with their reason to the report; exit code 3 when any was rejected. `write` puts the accepted cards into one Markdown file per source (`--names` as for kb_batch.py split, `--lang en|zh`): quote linked as `[[source#^pN]]`, topic and entities as wiki links.
+- tools/doc2kb README: lists quote_check.py.
+- docs/design-2.0.md: the batch file sketch uses end-of-paragraph anchors; card format, quote check and cards file written out.
 
 ## 1.22.1
 

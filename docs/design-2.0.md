@@ -36,12 +36,16 @@ Both backends (local folder and Google Drive) use the same pipeline.
 
 kb-ingest reads one batch file and processes it according to the tier.
 
-1. Card extraction, both tiers: the model extracts cards for each source. A card holds a conclusion, the anchor, the quoted sentence, a topic and the entities it mentions.
-2. Quote check, both tiers: a script checks that each quote occurs in its source at the given anchor. Cards that fail are not written and are listed in the run report.
+1. Card extraction, both tiers: the model extracts cards for each source, one JSON object per line. A card holds the source number, the anchor, the quoted sentence, a conclusion, a topic, the entities it mentions and, when the quote states one, an event date. The card's date is not the model's to give: the script takes it from the source's last-modified time.
+2. Quote check, both tiers (quote_check.py check): a script checks every card against the batch files of its run.
+   - The quote has 6 to 300 characters and occurs in the paragraph, list item or table of its anchor. The comparison ignores white space, full- and half-width punctuation and Markdown emphasis; any other difference fails, so a reworded quote never passes.
+   - A quote found in exactly one other paragraph of the same source passes with its anchor corrected; one found in several paragraphs, across paragraphs or nowhere fails.
+   - A topic not among the library's topics passes and is listed for the owner to confirm (section 4.2 works the same way for entities). A repeated card (same source, quote and conclusion) is dropped.
+   - Cards that fail are not written; the report lists each with its reason, together with the corrected anchors and new topics.
 3. Topic pages:
    - Weak tier: a script assembles topic pages from the cards, entries ordered by date. The model writes no page text.
    - Strong tier: the model rewrites each affected topic page from its cards.
-4. Split and file: the batch file is split back into one file per source; the originals are kept flat as the source archive. Card references are rewritten as `[[source#anchor]]`. Cards are stored under `Cards/`, one file per source.
+4. Split and file: the batch file is split back into one file per source; the originals are kept flat as the source archive. Cards are stored under `Cards/`, one file per source with the source's name, rewritten as a whole when the source is ingested again (quote_check.py write); each card is a section with its quote linked as `[[source#^pN]]` and its topic and entities as wiki links.
 5. Material is not searchable before its ingest run has finished. There is no fast lane that files material first and reconciles it later.
 
 ### 3.3 Notes (kb-note)
@@ -133,14 +137,26 @@ Riverside Clinic will host the pilot. ^s01-p2
 ^s02-p1
 ```
 
-Card:
+Card as the model writes it (one line per card):
+
+```json
+{"source": "S01", "anchor": "s01-p2", "quote": "Riverside Clinic will host the pilot.", "conclusion": "Riverside Clinic hosts the Project Atlas pilot.", "topic": "Pilot", "entities": ["Riverside Clinic", "Project Atlas"], "event_date": "2026-03-03"}
+```
+
+Cards file (Cards/Project Atlas kickoff minutes.md):
 
 ```markdown
-- conclusion: Riverside Clinic hosts the Project Atlas pilot.
-  anchor: s01-p2
-  quote: "Riverside Clinic will host the pilot."
-  topic: Pilot
-  entities: [Riverside Clinic, Project Atlas]
+# Cards: [[Project Atlas kickoff minutes]]
+
+Source: [[Project Atlas kickoff minutes]] · Document last modified: 2026-03-04 05:06
+
+## Riverside Clinic hosts the Project Atlas pilot.
+
+> Riverside Clinic will host the pilot. [[Project Atlas kickoff minutes#^p2]]
+
+- Topic: [[Pilot]]
+- Entities: [[Riverside Clinic]], [[Project Atlas]]
+- Date: 2026-03-04 05:06 (event: 2026-03-03)
 ```
 
 _kb.json additions:
