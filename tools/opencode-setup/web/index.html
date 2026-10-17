@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenCode 配置</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <h1>OpenCode 配置</h1>
+  <span class="conn" id="conn"></span>
+  <button type="button" class="quiet" id="quit">退出</button>
+</header>
+
+<main class="layout">
+  <aside class="side">
+    <div class="side-head">
+      <h2>本机现状</h2>
+      <button type="button" class="link" id="refresh">刷新</button>
+    </div>
+    <ul class="cards" id="cards">
+      <li class="card wait"><span class="dot"></span><div><b>正在读取……</b></div></li>
+    </ul>
+  </aside>
+
+  <section class="work">
+    <div class="panel" id="wizard">
+      <h2>首次设置</h2>
+
+      <div class="step">
+        <span class="num">1</span>
+        <div class="step-body">
+          <h3>环境检查</h3>
+          <p class="hint">检查 Node 版本、opencode 和现有配置。结果显示在下方，左侧现状同时刷新。</p>
+          <button type="button" data-action="check">开始检查</button>
+        </div>
+      </div>
+
+      <div class="step">
+        <span class="num">2</span>
+        <div class="step-body">
+          <h3>粘贴个人 AK</h3>
+          <p class="hint"><span id="ak-hint">个人 AK（API Key）向模型服务的管理方申请</span>。复制后粘贴到下面。</p>
+          <div class="ak-row">
+            <input type="password" id="ak" autocomplete="off" spellcheck="false" placeholder="在这里粘贴 AK">
+            <button type="button" class="quiet" id="ak-show">显示</button>
+          </div>
+          <p class="hint small" id="ak-info"></p>
+        </div>
+      </div>
+
+      <div class="step">
+        <span class="num">3</span>
+        <div class="step-body">
+          <h3>一键配置</h3>
+          <p class="hint">依次完成：把 AK 替换进本机已有的 OpenCode 配置（接口地址、模型等其他设置不变）→ 连通测试 → 关闭 opencode 启动时的联网下载 → 首次启动自检（最长约 3 分钟）。连通测试不通过时不写入任何文件；写入前自动备份。</p>
+          <button type="button" class="primary" data-action="setup" id="setup-btn">一键配置</button>
+        </div>
+      </div>
+
+      <div class="more">
+        <h3>其他操作</h3>
+        <div class="buttons">
+          <button type="button" data-action="test" title="用当前配置测一次接口，再做一次首次启动自检">连通测试与自检</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" id="run" hidden>
+      <div class="run-head">
+        <h2 id="run-title">运行中</h2>
+        <span class="elapsed" id="elapsed"></span>
+        <button type="button" class="quiet" id="cancel">取消这一步</button>
+      </div>
+      <p class="result" id="result" hidden></p>
+      <pre class="log" id="log"></pre>
+    </div>
+  </section>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=启动OpenCode工作台
+Comment=在浏览器中打开 OpenCode 工作台向导：环境检查、填写个人 AK 并自检，然后进入以对话为主的 OpenCode 工作台（知识库收在页面里）
+Exec=bash -c "f=\\"\\$(readlink -f \\"\\$1\\")\\"; d=\\"\\$(dirname \\"\\$f\\")\\"; for w in \\"\\$d\\" \\"\\$d/evergreen-wiki/tools/workbench\\" \\"\\$(cat \\"\\${XDG_CONFIG_HOME:-\\$HOME/.config}/work-kb/location\\" 2>/dev/null)\\"; do if [ -n \\"\\$w\\" ] && [ -f \\"\\$w/wk_web.py\\" ]; then cd \\"\\$w\\" && exec python3 wk_web.py; fi; done; echo \\"没有找到 OpenCode 工作台：请先在解压后的文件夹里双击一次「启动OpenCode工作台」，之后桌面快捷方式才能用。\\"; read -r -p \\"按回车关闭窗口\\" _" wk-web %k
+Terminal=true
+Icon=accessories-dictionary
+Categories=Utility;

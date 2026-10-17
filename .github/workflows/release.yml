@@ -76,6 +76,8 @@ jobs:
           python scripts/build_skill.py
           python scripts/build_skill.py --locale zh
           git archive --format=zip --prefix=evergreen-wiki/ -o "dist/evergreen-wiki-${TAG}.zip" HEAD
+          # the offline workbench: its entry at the top, the repository beside it
+          python scripts/build_workbench.py "dist/evergreen-wiki-${TAG}.zip" "dist/workbench-bundle-${TAG}.zip"
           # the stand-alone converter, for machines that only need tools/doc2kb
           git archive --format=zip --prefix=doc2kb/ -o "dist/doc2kb-${TAG}.zip" HEAD:tools/doc2kb
       - name: Notes
