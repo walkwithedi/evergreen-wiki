@@ -73,10 +73,10 @@ PAGE_UNSAFE_RE = re.compile(r'[\\/:*?"<>|#^\[\]]')
 LABELS = {
     'en': {'title': '# Cards: [[%s]]', 'source': 'Source: [[%s]] · Document last modified: %s',
            'topic': '- Topic: %s', 'entities': '- Entities: %s', 'date': '- Date: %s',
-           'event': ' (event: %s)', 'unknown': 'unknown'},
+           'event': ' (event: %s)', 'unknown': 'unknown', 'earlier': ' · from an earlier version'},
     'zh': {'title': '# 卡片：[[%s]]', 'source': '来源：[[%s]] · 文档最后修改：%s',
            'topic': '- 主题：%s', 'entities': '- 实体：%s', 'date': '- 日期：%s',
-           'event': '（事件日期：%s）', 'unknown': '未知'},
+           'event': '（事件日期：%s）', 'unknown': '未知', 'earlier': ' · 来自旧版本'},
 }
 
 REASONS = {
@@ -265,6 +265,7 @@ def topic_link(topic, topics_dir=''):
 
 
 def render_cards(stem, cards, date, lang='en', sources_dir='', topics_dir=''):
+    """A card with 'link' (a restored card of an earlier version) cites that source file instead."""
     lb = LABELS[lang]
     src = '%s/%s' % (sources_dir, stem) if sources_dir else stem
     w = [lb['title'] % src, '', lb['source'] % (src, date or lb['unknown']), '']
@@ -272,13 +273,13 @@ def render_cards(stem, cards, date, lang='en', sources_dir='', topics_dir=''):
         n = _anchor_n(c['anchor'])
         w.append('## ' + ' '.join(c['conclusion'].split()).lstrip('#').strip())
         w.append('')
-        w.append('> %s [[%s#^p%d]]' % (' '.join(c['quote'].split()), src, n))
+        w.append('> %s [[%s#^p%d]]' % (' '.join(c['quote'].split()), c.get('link') or src, n))
         w.append('')
         w.append(lb['topic'] % topic_link(c['topic'], topics_dir))
         if c.get('entities'):
             w.append(lb['entities'] % ', '.join('[[%s]]' % link_text(e) for e in c['entities']))
         d = (c.get('date') or lb['unknown']) + (lb['event'] % c['event_date'] if c.get('event_date') else '')
-        w.append(lb['date'] % d)
+        w.append(lb['date'] % d + (lb['earlier'] if c.get('link') else ''))
         w.append('')
     return '\n'.join(w)
 
@@ -314,7 +315,8 @@ def _shown(link):
 
 def read_cards(text):
     """A cards file written by write(), back as {'source': link target, 'cards': [...]}; each card
-    has conclusion, quote, anchor (pN), topic, entities, date and, when given, event_date.
+    has conclusion, quote, anchor (pN), topic, entities, date and, when given, event_date, and
+    link when its quote cites another source file than the file's own (an earlier version).
     Read by structure, so either label language works."""
     lines = text.replace('\r\n', '\n').split('\n')
     m = LINK_RE.search(lines[0]) if lines and lines[0].startswith('# ') else None
@@ -331,6 +333,8 @@ def read_cards(text):
         q = CARD_QUOTE_RE.match(ln)
         if q:
             card['quote'], card['anchor'] = q.group(1).strip(), q.group(3)
+            if q.group(2) != out['source']:
+                card['link'] = q.group(2)
         elif ln.startswith('- '):
             links = [_shown(x) for x in LINK_RE.findall(ln)]
             if card['_bullets'] == 0:

@@ -57,6 +57,10 @@ A 2.0 library holds, in its root, _kb.json (settings; its name starts with an un
 
 The spec is the source of every rule about partitions, topics, terms and entities. Read it from the library each time; never fill it in from memory or from these instructions.
 
+The status card holds numbered items ("1. ..."), each citing the source passage it rests on ([[Sources/<source>#^pN]]). Two rules keep it honest:
+- When a source it cites gets a new version, kb-ingest's filing script appends a review mark to the item: "⏳ review: <source> has a new version (<date>)" ("⏳ 待复核：<source> 有新版本（<date>）"). A marked item is not to be relied on until it is checked against the current sources; its mark is removed only when the item is rewritten.
+- The status card is never rewritten freely. Write the rewrite to a work file and run python3 scripts/ingest.py status-check --old <status card> --new <rewrite> (kb-ingest's scripts). Exit 3 lists removed items, changed items and source links no longer cited: show each to the user, who accepts it or has it restored in the rewrite; run the check again. Only a rewrite that passes is written (--write --library <library>, or the backend's way of replacing a file).
+
 ### _kb.json
 
 ```json

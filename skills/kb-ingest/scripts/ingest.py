@@ -14,8 +14,23 @@ file: the run's batch files are split back into one file per source, Sources/<or
   --replaces NEW=OLD (repeatable) archives OLD the same way: the owner confirmed that the run's
   source NEW is a new version of the library's source OLD under another name. A run with a part
   missing from the batch files, or naming an OLD that is not in the library, writes nothing.
+  --restore FILE keeps conflicts (from the conflicts command) the owner chose to restore: a quote
+  still in the new version becomes a current card of it again; any other old card is kept in the
+  new version's cards file, citing the archived old source and marked as from an earlier version.
+  Items of the status card that cite a source being archived get a review mark, once.
   Prints a JSON record: sources written, files archived, topics touched (of the new cards and of
-  the archived ones).
+  the archived ones), conflicts restored, status-card items marked for review.
+
+conflicts: for each library source the run replaces (same name, or --replaces), its current cards
+  against the new version and the run's cards. An old card whose quote is in the new version and
+  quoted by a new card is unchanged and not listed; "not_carried": the quote is in the new version
+  but no new card quotes it; "changed": the quote is gone and a new card's conclusion is close to
+  the old one (SIMILAR_MIN); "removed": the quote is gone and no new card is close. Prints JSON.
+
+status-check: the numbered items of a rewritten status card against the current one. Items pair
+  by their text (review marks left out), else by a source link they share. Lists removed and
+  changed items, source links no longer cited and added items; exit 3 when anything was removed,
+  changed or lost. --write puts a rewrite with none of these in the library.
 
 versions: for each source of the run whose name is not in the library yet, the library's sources
   that may be its older version. A pair is a candidate when the names are close once dates,
@@ -55,10 +70,13 @@ check-page: a topic page the model wrote (strong tier) must cite every current c
 
 Python 3 standard library only.
 
-Exit codes: 0 done; 3 check-page found problems; 2 bad arguments, unreadable input or a part missing.
+Exit codes: 0 done; 3 check-page or status-check found problems; 2 bad arguments, unreadable input or a part missing.
 Usage:
   ingest.py file BATCH.md [BATCH.md ...] --cards ACCEPTED.jsonl --library DIR [--target DIR]
-                 [--names NAMES.json] [--replaces NEW.md=OLD.md ...]
+                 [--names NAMES.json] [--replaces NEW.md=OLD.md ...] [--restore RESTORE.json]
+  ingest.py conflicts BATCH.md [BATCH.md ...] --cards ACCEPTED.jsonl --library DIR [--target DIR]
+                 [--replaces NEW.md=OLD.md ...]
+  ingest.py status-check --old CURRENT.md --new REWRITE.md [--write --library DIR]
   ingest.py versions BATCH.md [BATCH.md ...] --library DIR [--target DIR] [--known NAMES.txt]
   ingest.py entities ACCEPTED.jsonl --library DIR [--apply [--map MAP.json]]
   ingest.py pages --library DIR [--target DIR] (--topic NAME ... | --all)
@@ -133,6 +151,73 @@ def paragraphs(text):
     return out
 
 
+SIMILAR_MIN = 0.6   # conclusion similarity for a changed card
+ANCHORED_RE = re.compile(r'^(.*?)\s*\^(p\d+)\s*$', re.S)
+MARK_RE = re.compile(r'\s*⏳[^⏳\n]*')
+ITEM_RE = re.compile(r'^\s*\d+[.、．]\s+\S')
+CITE_RE = re.compile(r'\[\[([^\]|#]+#\^p\d+)(?:\|[^\]]*)?\]\]')
+
+
+def anchored(text):
+    """{pN: paragraph text} of a source file (anchors at the end, a table's on the line below)."""
+    out, prev = {}, ''
+    for block in re.split(r'\n\s*\n', text):
+        block = block.strip()
+        m = ANCHORED_RE.match(block)
+        if m:
+            out[m.group(2)] = m.group(1).strip() or prev
+        prev = block
+    return out
+
+
+def _find_anchor(quote, paras):
+    q = quote_check.norm(quote)
+    return next((a for a, t in paras.items() if q in quote_check.norm(t)), None)
+
+
+def _replaced(fnames, target, cfg, replaces):
+    """{new file name: library file name it replaces} for a run: same names and confirmed pairs."""
+    src_dir = os.path.join(target, cfg['names']['sources_dir'])
+    out = {f: f for f in fnames.values() if os.path.isfile(os.path.join(src_dir, f))}
+    out.update(replaces or {})
+    return out
+
+
+def conflicts(batches, cards, target, cfg, names=None, replaces=None):
+    """Old cards of the sources the run replaces that the new version changes, drops or does not
+    carry over: [{id, kind, source, old_source, old, new, new_anchor}]."""
+    table, split = _read_run(batches)
+    fnames = source_names({sid: table[sid] for sid in split}, names)
+    sid_of = {f: sid for sid, f in fnames.items()}
+    card_dir = os.path.join(target, cfg['names']['cards_dir'])
+    out = []
+    for new, old in _replaced(fnames, target, cfg, replaces).items():
+        path = os.path.join(card_dir, old)
+        if new not in sid_of or not os.path.isfile(path):
+            continue
+        with open(path, encoding='utf-8') as f:
+            old_cards = quote_check.read_cards(f.read())['cards']
+        paras = anchored(split[sid_of[new]]['text'])
+        mine = [c for c in cards if c['source'] == sid_of[new]]
+        for oc in old_cards:
+            q = quote_check.norm(oc['quote'])
+            at = _find_anchor(oc['quote'], paras)
+            if at and any(quote_check.norm(c['quote']) == q for c in mine):
+                continue
+            entry = {'kind': 'not_carried', 'source': new, 'old_source': old, 'old': oc, 'new': None}
+            if at:
+                entry['new_anchor'] = at
+            else:
+                key = quote_check.norm(oc['conclusion'])
+                best = max(mine, default=None, key=lambda c: difflib.SequenceMatcher(
+                    None, key, quote_check.norm(c['conclusion'])).ratio())
+                close = best is not None and difflib.SequenceMatcher(
+                    None, key, quote_check.norm(best['conclusion'])).ratio() >= SIMILAR_MIN
+                entry['kind'], entry['new'] = ('changed', best) if close else ('removed', None)
+            out.append(entry)
+    return [dict(id='c%d' % i, **e) for i, e in enumerate(out, 1)]
+
+
 def _read_run(batches):
     """(source table, split sources) of a run's batch files."""
     texts = []
@@ -194,9 +279,10 @@ def _archive_path(folder, fname, old_suffix, stamp0):
         k += 1
 
 
-def file_run(batches, cards, target, cfg, names=None, replaces=None):
+def file_run(batches, cards, target, cfg, names=None, replaces=None, restore=None):
     """File one run into target (a library or a staging folder); returns the run record.
-    replaces: {new source file name: library source it is a new version of}."""
+    replaces: {new source file name: library source it is a new version of}; restore: conflicts
+    (from conflicts()) to keep."""
     table, split = _read_run(batches)
     missing = ['%s %s (parts %s)' % (sid, e['name'], ', '.join(map(str, e['missing'])))
                for sid, e in split.items() if e['missing']]
@@ -213,7 +299,7 @@ def file_run(batches, cards, target, cfg, names=None, replaces=None):
         if not os.path.isfile(os.path.join(src_dir, old)):
             raise ValueError('--replaces names %s, which is not in the library; nothing written' % old)
     stamp0 = kbconf.now(cfg['timezone']).replace(microsecond=0)
-    topics, archived = set(), []
+    topics, archived, moved = set(), [], {}
     for fname in list(dict.fromkeys([fnames[sid] for sid in split] + list(replaces.values()))):
         for folder, sub in ((src_dir, n['sources_dir']), (card_dir, n['cards_dir'])):
             old = os.path.join(folder, fname)
@@ -224,8 +310,12 @@ def file_run(batches, cards, target, cfg, names=None, replaces=None):
                     topics.update(c['topic'] for c in quote_check.read_cards(f.read())['cards'] if c['topic'])
             dest_dir = os.path.join(target, n['archive_dir'], sub)
             os.makedirs(dest_dir, exist_ok=True)
-            shutil.move(old, _archive_path(dest_dir, fname, n['old_suffix'], stamp0))
+            dest = _archive_path(dest_dir, fname, n['old_suffix'], stamp0)
+            shutil.move(old, dest)
             archived.append('%s/%s' % (sub, fname))
+            if folder == src_dir:
+                moved[fname] = '%s/%s/%s' % (n['archive_dir'], sub, os.path.splitext(os.path.basename(dest))[0])
+    cards = list(cards) + _restored(restore or [], fnames, split, table, moved)
 
     os.makedirs(src_dir, exist_ok=True)
     for sid, e in split.items():
@@ -234,14 +324,68 @@ def file_run(batches, cards, target, cfg, names=None, replaces=None):
     quote_check.write([c for c in cards if c['source'] in split], table, card_dir, fnames, lang_of(cfg),
                       n['sources_dir'], n['topics_dir'])
     topics.update(c['topic'] for c in cards if c['source'] in split)
-    return {'sources': [fnames[sid] for sid in split], 'archived': archived, 'topics': sorted(topics)}
+    review = mark_review(target, cfg, [os.path.splitext(f)[0] for f in moved], stamp0.strftime('%Y-%m-%d'))
+    return {'sources': [fnames[sid] for sid in split], 'archived': archived, 'topics': sorted(topics),
+            'restored': [e['id'] for e in restore or []], 'review': review}
+
+
+def _restored(restore, fnames, split, table, moved):
+    """Cards for the conflicts the owner restores: back on the new version where its text still holds
+    the quote, else citing the archived old version."""
+    sid_of = {f: sid for sid, f in fnames.items()}
+    out = []
+    for e in restore:
+        sid = sid_of.get(e.get('source'))
+        if sid is None:
+            raise ValueError('a conflict to restore names %s, which is not a source of this run' % e.get('source'))
+        oc = e['old']
+        c = {'source': sid, 'quote': oc['quote'], 'conclusion': oc['conclusion'], 'topic': oc['topic'],
+             'entities': oc.get('entities', [])}
+        if oc.get('event_date'):
+            c['event_date'] = oc['event_date']
+        at = _find_anchor(oc['quote'], anchored(split[sid]['text']))
+        if at:
+            c.update(anchor=at, date=table.get(sid, {}).get('modified', ''))
+        else:
+            link = oc.get('link') or moved.get(e['old_source'])
+            if not link:
+                raise ValueError('the old version of %s is not being archived; cannot restore %s'
+                                 % (e['old_source'], e.get('id')))
+            c.update(anchor=oc['anchor'], date=oc.get('date', ''), link=link)
+        out.append(c)
+    return out
+
+
+REVIEW_MARKS = {'en': '⏳ review: %s has a new version (%s)', 'zh': '⏳ 待复核：%s 有新版本（%s）'}
+
+
+def mark_review(target, cfg, stems, day):
+    """Mark the status card's items that cite one of the source stems; returns the items marked."""
+    path = os.path.join(target, cfg['names']['status_card'])
+    if not stems or not os.path.isfile(path):
+        return []
+    with open(path, encoding='utf-8') as f:
+        lines = f.read().split('\n')
+    src = cfg['names']['sources_dir']
+    marked = []
+    for i, line in enumerate(lines):
+        for stem in stems:
+            cite = re.compile(r'\[\[%s(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]' % re.escape('%s/%s' % (src, stem)))
+            if cite.search(line) and not re.search(r'⏳[^⏳]*%s' % re.escape(stem), lines[i]):
+                lines[i] = lines[i].rstrip() + ' ' + REVIEW_MARKS[lang_of(cfg)] % (stem, day)
+        if lines[i] != line:
+            marked.append(line)
+    if marked:
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(lines))
+    return marked
 
 
 PAGE_LABELS = {
     'en': {'note': '> This page is generated from the cards by a script; edits here are overwritten.',
-           'empty': 'No current cards.', 'card': 'card', 'undated': 'undated'},
+           'empty': 'No current cards.', 'card': 'card', 'undated': 'undated', 'earlier': 'earlier version'},
     'zh': {'note': '> 本页由脚本根据卡片生成，在此修改会被覆盖。',
-           'empty': '暂无现行卡片。', 'card': '卡片', 'undated': '无日期'},
+           'empty': '暂无现行卡片。', 'card': '卡片', 'undated': '无日期', 'earlier': '旧版本'},
 }
 
 
@@ -266,7 +410,8 @@ def render_page(topic, entries, cfg):
         w += [lb['empty'], '']
     for day, stem, src, c in entries:
         w.append('- %s · %s' % (day or lb['undated'], c['conclusion']))
-        w.append('  > %s [[%s#^%s]] · [[%s/%s|%s]]' % (c['quote'], src, c['anchor'], cards_dir, stem, lb['card']))
+        w.append('  > %s [[%s#^%s]] · [[%s/%s|%s]]%s' % (c['quote'], c.get('link') or src, c['anchor'], cards_dir, stem,
+                                                       lb['card'], ' · ' + lb['earlier'] if c.get('link') else ''))
     return '\n'.join(w) + '\n'
 
 
@@ -517,10 +662,39 @@ def check_page(target, cfg, topic, page):
     """Links of a topic page written by the model against the topic's current cards:
     unknown = cited passages no card holds; missing = cards the page does not cite."""
     key = kbconf.topic_key(topic)
-    have = {'%s#^%s' % (src, c['anchor']) for _, src, c in _all_cards(target, cfg)
+    have = {'%s#^%s' % (c.get('link') or src, c['anchor']) for _, src, c in _all_cards(target, cfg)
             if kbconf.topic_key(c['topic']) == key}
     cited = {'%s#^%s' % m for m in LINK_ANCHOR_RE.findall(page)}
     return {'unknown': sorted(cited - have), 'missing': sorted(have - cited)}
+
+
+def status_items(text):
+    return [ln.strip() for ln in text.replace('\r\n', '\n').split('\n') if ITEM_RE.match(ln)]
+
+
+def status_check(old_text, new_text):
+    """{removed, changed: [{old, new}], lost, added} between two versions of the status card."""
+    def key(item):
+        return quote_check.norm(re.sub(r'^\s*\d+[.、．]\s*', '', MARK_RE.sub('', item)))
+
+    old, new = status_items(old_text), status_items(new_text)
+    free = list(new)
+    removed, changed = [], []
+    for item in old:
+        same = next((x for x in free if key(x) == key(item)), None)
+        if same is not None:
+            free.remove(same)
+            continue
+        cites = set(CITE_RE.findall(item))
+        near = next((x for x in free if cites & set(CITE_RE.findall(x))), None)
+        if near is not None:
+            free.remove(near)
+            changed.append({'old': MARK_RE.sub('', item), 'new': near})
+        else:
+            removed.append(MARK_RE.sub('', item))
+    kept = set(CITE_RE.findall('\n'.join(new)))
+    lost = sorted(dict.fromkeys(c for item in old for c in CITE_RE.findall(item) if c not in kept))
+    return {'removed': removed, 'changed': changed, 'lost': lost, 'added': free}
 
 
 def replace_pair(text):
@@ -539,8 +713,18 @@ def main(argv=None):
     f.add_argument('--cards', required=True, help='accepted cards (quote_check.py check --accepted)')
     f.add_argument('--names', default=None,
                    help='JSON file mapping a source number or original file name to a file name')
-    f.add_argument('--replaces', action='append', type=replace_pair, default=[],
-                   help='NEW.md=OLD.md: the run\'s source NEW is a new version of the library\'s OLD (repeatable)')
+    cf = sub.add_parser('conflicts', help='old cards that a new version changes, drops or does not carry over')
+    cf.add_argument('batches', nargs='+', help='batch files of the run')
+    cf.add_argument('--cards', required=True, help='accepted cards (quote_check.py check --accepted)')
+    for p in (f, cf):
+        p.add_argument('--replaces', action='append', type=replace_pair, default=[],
+                       help='NEW.md=OLD.md: the run\'s source NEW is a new version of the library\'s OLD (repeatable)')
+    f.add_argument('--restore', default=None, help='JSON file with the conflicts to restore')
+    sc = sub.add_parser('status-check', help='a rewritten status card against the current one')
+    sc.add_argument('--old', required=True, help='the current status card')
+    sc.add_argument('--new', required=True, help='the rewrite')
+    sc.add_argument('--write', action='store_true', help='when nothing was removed, changed or lost, put it in the library')
+    sc.add_argument('--library', default=None, help='library root, for --write')
     vs = sub.add_parser('versions', help='library sources that may be older versions of the run\'s sources')
     vs.add_argument('batches', nargs='+', help='batch files of the run')
     vs.add_argument('--known', default=None, help='file listing the library\'s source names, one per line')
@@ -561,9 +745,9 @@ def main(argv=None):
     cp.add_argument('--topic', required=True)
     cp.add_argument('--page', required=True, help='the page as written')
     cp.add_argument('--write', action='store_true', help='when it passes, write it to the topics folder')
-    for p in (f, pg, tp, at, cp, vs, en):
+    for p in (f, pg, tp, at, cp, vs, en, cf):
         p.add_argument('--library', required=True, help='library root (its _kb.json gives the names)')
-    for p in (f, pg, cp, vs):
+    for p in (f, pg, cp, vs, cf):
         p.add_argument('--target', default=None, help='write here instead of the library (a staging folder)')
     rt = sub.add_parser('retopic', help="change accepted cards' topic")
     rt.add_argument('cards', help='accepted cards (JSON lines), rewritten in place')
@@ -573,6 +757,22 @@ def main(argv=None):
     kbconf.setup_logging(a.log_level)
 
     try:
+        if a.cmd == 'status-check':
+            with open(a.old, encoding='utf-8') as fh:
+                old = fh.read()
+            with open(a.new, encoding='utf-8') as fh:
+                new = fh.read()
+            res = status_check(old, new)
+            print(json.dumps(res, ensure_ascii=False))
+            if res['removed'] or res['changed'] or res['lost']:
+                return 3
+            if a.write:
+                if not a.library:
+                    raise ValueError('--write needs --library')
+                cfg = kbconf.load_library(a.library)
+                with open(os.path.join(a.library, cfg['names']['status_card']), 'w', encoding='utf-8') as fh:
+                    fh.write(new)
+            return 0
         if a.cmd == 'retopic':
             n = retopic(a.cards, a.old, a.new)
             print('%d card%s now under %s' % (n, '' if n == 1 else 's', a.new))
@@ -606,6 +806,11 @@ def main(argv=None):
             print(json.dumps(apply_entities(a.cards, a.library, cfg, decisions), ensure_ascii=False))
             return 0
         target = a.target or a.library
+        if a.cmd == 'conflicts':
+            with open(a.cards, encoding='utf-8') as fh:
+                cards = [json.loads(ln) for ln in fh if ln.strip()]
+            print(json.dumps(conflicts(a.batches, cards, target, cfg, None, dict(a.replaces)), ensure_ascii=False))
+            return 0
         if a.cmd == 'versions':
             print(json.dumps(version_candidates(a.batches, target, cfg, a.known), ensure_ascii=False))
             return 0
@@ -632,7 +837,11 @@ def main(argv=None):
                 names = json.load(fh)
         with open(a.cards, encoding='utf-8') as fh:
             cards = [json.loads(ln) for ln in fh if ln.strip()]
-        print(json.dumps(file_run(a.batches, cards, target, cfg, names, dict(a.replaces)), ensure_ascii=False))
+        restore = None
+        if a.restore:
+            with open(a.restore, encoding='utf-8') as fh:
+                restore = json.load(fh)
+        print(json.dumps(file_run(a.batches, cards, target, cfg, names, dict(a.replaces), restore), ensure_ascii=False))
         return 0
     except (kbconf.ConfigError, OSError, ValueError) as e:
         log.error('%s', e)

@@ -254,7 +254,8 @@ class CommandLineTest(Tmp):
             json.dump({"S01": "Atlas plan.md"}, f)
         p = cli("file", *b, "--cards", self.p("acc.jsonl"), "--library", self.p("lib"), "--names", self.p("names.json"))
         self.assertEqual(p.returncode, 0, p.stderr)
-        self.assertEqual(json.loads(p.stdout), {"sources": ["Atlas plan.md"], "archived": [], "topics": ["Pilot"]})
+        self.assertEqual(json.loads(p.stdout), {"sources": ["Atlas plan.md"], "archived": [], "topics": ["Pilot"],
+                                                 "restored": [], "review": []})
         self.assertIn("[[Subjects/Pilot|Pilot]]", read(self.p("lib", "Cards", "Atlas plan.md")))
         p = cli("pages", "--library", self.p("lib"), "--topic", "Pilot")
         self.assertEqual(p.returncode, 0, p.stderr)
@@ -628,6 +629,160 @@ class EntityTypesTest(unittest.TestCase):
                      entity_types={"Riverside Clinic": "organisation", "Elsewhere": "project", "X": "planet"})
             acc = accepted(b, dict(c, entities=["Riverside Clinic", "Y"], entity_types=dict(c["entity_types"], Y="planet")))
         self.assertEqual(acc[0]["entity_types"], {"Riverside Clinic": "organisation"})
+
+
+STATUS = """# Status card
+Last updated: 2026-01-01
+
+## Items
+
+1. The pilot starts in April. [[Sources/plan#^p1]]
+2. The budget stays as planned. [[Sources/minutes#^p1]]
+3. Riverside Clinic hosts the pilot. [[Sources/plan#^p2|plan]] and [[Sources/minutes#^p1]]
+"""
+MINUTES_V2 = "The review moved to Monday.\n\n- Next review on Friday"
+
+
+class ConflictsTest(LibraryCase):
+    def second_run(self):
+        b = make_run(self.p("run2"), [("plan.docx", "Atlas/plan.docx", "2026-04-01 09:00", PLAN_V2),
+                                      ("minutes.docx", "Atlas/minutes.docx", "2026-04-02 10:00", MINUTES_V2)])
+        cards = accepted(b, card("S01", "p1", "The pilot starts in May.", "Pilot starts in May", "Pilot"),
+                         card("S02", "p1", "The review moved to Monday.", "Review moved to Monday", "Budget"))
+        return b, cards
+
+    def test_old_cards_are_compared_with_the_new_version(self):
+        self.first_run()
+        b, cards = self.second_run()
+        got = ingest.conflicts(b, cards, self.p("lib"), self.cfg)
+        kinds = [(c["id"], c["kind"], c["source"], c["old_source"], c["old"]["conclusion"]) for c in got]
+        self.assertEqual(kinds, [("c1", "changed", "plan.md", "plan.md", "Pilot starts in April"),
+                                 ("c2", "not_carried", "plan.md", "plan.md", "Riverside hosts"),
+                                 ("c3", "removed", "minutes.md", "minutes.md", "Budget unchanged")])
+        self.assertEqual(got[0]["new"]["conclusion"], "Pilot starts in May")
+        self.assertEqual(got[1]["new_anchor"], "p2")
+        self.assertIsNone(got[2]["new"])
+
+    def test_replaced_pair_and_unchanged_cards(self):
+        self.first_run()
+        b = make_run(self.p("run2"), [("plan final.docx", "Atlas/plan final.docx", "2026-04-01 09:00", PLAN_V1)])
+        cards = accepted(b, card("S01", "p1", "The pilot starts in April.", "Pilot starts in April", "Pilot"),
+                         card("S01", "p2", "Riverside Clinic hosts the pilot.", "Riverside hosts", "Pilot"))
+        self.assertEqual(ingest.conflicts(b, cards, self.p("lib"), self.cfg, replaces={"plan final.md": "plan.md"}), [])
+        self.assertEqual(ingest.conflicts(b, cards, self.p("lib"), self.cfg), [])   # nothing replaced
+
+    def test_restore_keeps_old_cards(self):
+        self.first_run()
+        b, cards = self.second_run()
+        got = ingest.conflicts(b, cards, self.p("lib"), self.cfg)
+        rec = ingest.file_run(b, cards, self.p("lib"), self.cfg, restore=[got[0], got[1]])
+        old = os.listdir(self.p("lib", "Archive", "Sources"))
+        plan_old = [n for n in old if n.startswith("plan_old")][0][:-3]
+        text = read(self.p("lib", "Cards", "plan.md"))
+        self.assertIn("> The pilot starts in April. [[Archive/Sources/%s#^p1]]" % plan_old, text)
+        self.assertIn("from an earlier version", text)
+        self.assertIn("> Riverside Clinic hosts the pilot. [[Sources/plan#^p2]]", text)
+        self.assertIn("> The pilot starts in May. [[Sources/plan#^p1]]", text)
+        self.assertEqual(rec["restored"], ["c1", "c2"])
+        back = quote_check.read_cards(text)["cards"]
+        self.assertEqual(sorted(c.get("link", "") for c in back), ["", "", "Archive/Sources/" + plan_old])
+        ingest.pages_run(self.p("lib"), self.cfg, ["Pilot"])
+        page = read(self.p("lib", "Topics", "Pilot.md"))
+        self.assertIn("[[Archive/Sources/%s#^p1]] · [[Cards/plan|card]] · earlier version" % plan_old, page)
+        self.assertIn("Pilot starts in May", page)
+        cited = "".join("[[%s#^%s]]" % (c.get("link") or "Sources/plan", c["anchor"]) for c in back)
+        self.assertEqual(ingest.check_page(self.p("lib"), self.cfg, "Pilot", cited), {"unknown": [], "missing": []})
+
+    def test_command_line(self):
+        self.first_run()
+        with open(self.p("lib", "_kb.json"), "w", encoding="utf-8") as f:
+            json.dump({"schema": 2}, f)
+        b, cards = self.second_run()
+        with open(self.p("acc.jsonl"), "w", encoding="utf-8") as f:
+            f.write("".join(json.dumps(c) + "\n" for c in cards))
+        p = cli("conflicts", *b, "--cards", self.p("acc.jsonl"), "--library", self.p("lib"))
+        self.assertEqual(p.returncode, 0, p.stderr)
+        found = json.loads(p.stdout)
+        self.assertEqual([c["kind"] for c in found], ["changed", "not_carried", "removed"])
+        with open(self.p("restore.json"), "w", encoding="utf-8") as f:
+            json.dump([found[2]], f)
+        p = cli("file", *b, "--cards", self.p("acc.jsonl"), "--library", self.p("lib"), "--restore", self.p("restore.json"))
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(json.loads(p.stdout)["restored"], ["c3"])
+        self.assertIn("Budget unchanged", read(self.p("lib", "Cards", "minutes.md")))
+
+
+class ReviewMarkTest(LibraryCase):
+    def test_items_citing_a_replaced_source_are_marked_once(self):
+        self.first_run()
+        with open(self.p("lib", "00_Status-Card.md"), "w", encoding="utf-8") as f:
+            f.write(STATUS)
+        b = make_run(self.p("run2"), [("plan.docx", "Atlas/plan.docx", "2026-04-01 09:00", PLAN_V2)])
+        rec = ingest.file_run(b, [], self.p("lib"), self.cfg)
+        self.assertEqual(rec["review"], ["1. The pilot starts in April. [[Sources/plan#^p1]]",
+                                         "3. Riverside Clinic hosts the pilot. [[Sources/plan#^p2|plan]] and [[Sources/minutes#^p1]]"])
+        text = read(self.p("lib", "00_Status-Card.md"))
+        self.assertRegex(text, r"1\. The pilot starts in April\. \[\[Sources/plan#\^p1\]\] ⏳ review: plan has a new version "
+                               r"\(\d{4}-\d{2}-\d{2}\)\n2\. The budget stays as planned\. \[\[Sources/minutes#\^p1\]\]\n")
+        b = make_run(self.p("run3"), [("plan.docx", "Atlas/plan.docx", "2026-05-01 09:00", PLAN_V1)])
+        rec = ingest.file_run(b, [], self.p("lib"), self.cfg)
+        self.assertEqual(rec["review"], [])
+        self.assertEqual(read(self.p("lib", "00_Status-Card.md")).count("⏳"), 2)
+
+    def test_replaced_pair_marks_too_chinese(self):
+        self.first_run()
+        self.cfg["language"] = "zh"
+        with open(self.p("lib", "00_Status-Card.md"), "w", encoding="utf-8") as f:
+            f.write(STATUS)
+        b = make_run(self.p("run2"), [("minutes v2.docx", "minutes v2.docx", "2026-04-02 10:00", MINUTES)])
+        rec = ingest.file_run(b, [], self.p("lib"), self.cfg, replaces={"minutes v2.md": "minutes.md"})
+        self.assertEqual(len(rec["review"]), 2)
+        self.assertRegex(read(self.p("lib", "00_Status-Card.md")), r"⏳ 待复核：minutes 有新版本（\d{4}-\d{2}-\d{2}）")
+
+    def test_no_status_card_no_marks(self):
+        self.first_run()
+        b = make_run(self.p("run2"), [("plan.docx", "Atlas/plan.docx", "2026-04-01 09:00", PLAN_V2)])
+        self.assertEqual(ingest.file_run(b, [], self.p("lib"), self.cfg)["review"], [])
+
+
+class StatusCheckTest(LibraryCommandsTest):
+    NEW = """# Status card
+Last updated: 2026-05-01
+
+## Items
+
+1. The pilot starts in April. [[Sources/plan#^p1]]
+2. The budget is cut by a tenth. [[Sources/minutes#^p1]]
+3. A new review board meets monthly. [[Sources/board#^p4]]
+"""
+
+    def test_removed_changed_lost_and_added(self):
+        old = STATUS.replace("[[Sources/plan#^p1]]\n", "[[Sources/plan#^p1]] ⏳ review: plan has a new version (2026-04-01)\n")
+        got = ingest.status_check(old, self.NEW)
+        self.assertEqual(got["changed"], [{"old": "2. The budget stays as planned. [[Sources/minutes#^p1]]",
+                                           "new": "2. The budget is cut by a tenth. [[Sources/minutes#^p1]]"}])
+        self.assertEqual(got["removed"], ["3. Riverside Clinic hosts the pilot. [[Sources/plan#^p2|plan]] and [[Sources/minutes#^p1]]"])
+        self.assertEqual(got["lost"], ["Sources/plan#^p2"])
+        self.assertEqual(got["added"], ["3. A new review board meets monthly. [[Sources/board#^p4]]"])
+
+    def test_command_line_writes_only_a_clean_rewrite(self):
+        self.library(SPEC_FILE)
+        with open(self.p("lib", "00_Status-Card.md"), "w", encoding="utf-8") as f:
+            f.write(STATUS)
+        with open(self.p("new.md"), "w", encoding="utf-8") as f:
+            f.write(self.NEW)
+        p = cli("status-check", "--old", self.p("lib", "00_Status-Card.md"), "--new", self.p("new.md"),
+                "--write", "--library", self.p("lib"))
+        self.assertEqual(p.returncode, 3)
+        self.assertEqual(read(self.p("lib", "00_Status-Card.md")), STATUS)
+        grown = STATUS + "4. A new review board meets monthly. [[Sources/board#^p4]]\n"
+        with open(self.p("new.md"), "w", encoding="utf-8") as f:
+            f.write(grown)
+        p = cli("status-check", "--old", self.p("lib", "00_Status-Card.md"), "--new", self.p("new.md"),
+                "--write", "--library", self.p("lib"))
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(json.loads(p.stdout)["added"], ["4. A new review board meets monthly. [[Sources/board#^p4]]"])
+        self.assertEqual(read(self.p("lib", "00_Status-Card.md")), grown)
 
 
 INGEST_SCRIPTS = os.path.join(ROOT, "skills", "kb-ingest", "scripts")

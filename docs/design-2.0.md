@@ -87,11 +87,13 @@ Scripts prepare each decision; the owner confirms. Nothing in this section is wr
 
 - When new material contradicts a topic page or the status card, the page is rewritten directly.
 - A script lists every conclusion that was removed or changed; the owner accepts or restores each one.
+- Topic pages: when a source is replaced (same name or a confirmed pair), ingest.py conflicts compares the old version's cards with the new version and the run's cards before the preview. An old card whose quote is still in the new version and quoted by a new card is unchanged. The others are listed: not_carried (the quote is still there but no new card quotes it), changed (the quote is gone and a new card's conclusion is close, difflib ratio 0.6 or more) and removed. By default each change is accepted; ingest.py file --restore keeps the ones the owner restores: a not_carried card becomes a current card of the new version again; any other card stays in the new version's cards file, citing the archived old source and marked as from an earlier version, and topic pages show it so.
+- Status card: a rewrite is checked by ingest.py status-check against the current card: items pair by their text, else by a source link they share; removed and changed items and source links no longer cited are listed for the owner, and only a rewrite without them is written.
 
 ### 4.4 Status card
 
 - The status card is the wiki's home page and overview.
-- When a source is replaced by a new version, the status-card entries that cite it are marked for review.
+- When a source is replaced by a new version, the status-card entries that cite it are marked for review: ingest.py file appends "⏳ review: <source> has a new version (<date>)" to each, once, and lists them in the run record.
 - When a question touches an entry marked for review, or an entry that is missing, the answer is first built from the sources; the assistant then proposes an update to that entry, written only after the owner confirms.
 - Entries of the status card can be used to answer directly, but the answer still quotes the source.
 
@@ -167,6 +169,25 @@ Version candidates (ingest.py versions):
  "candidates": [{"new": "Project Atlas plan final.md", "old": "Project Atlas plan.md", "name_score": 1.0, "overlap": 0.75, "read": false}]}
 ```
 
+Conflict (ingest.py conflicts; the entries to restore go to file --restore as a JSON list):
+
+```json
+{"id": "c1", "kind": "changed", "source": "Project Atlas plan.md", "old_source": "Project Atlas plan.md",
+ "old": {"conclusion": "The pilot starts in April.", "quote": "The pilot starts in April.", "anchor": "p1", "topic": "Pilot"},
+ "new": {"conclusion": "The pilot starts in May.", "quote": "The pilot starts in May.", "anchor": "s01-p1", "topic": "Pilot"}}
+```
+
+Restored card in a cards file:
+
+```markdown
+## The pilot starts in April.
+
+> The pilot starts in April. [[Archive/Sources/Project Atlas plan_old20260401090000#^p1]]
+
+- Topic: [[Topics/Pilot|Pilot]]
+- Date: 2026-03-01 09:00 · from an earlier version
+```
+
 Entity report (ingest.py entities) and the owner's decisions (--map):
 
 ```json
@@ -230,7 +251,7 @@ Each step is a pull request; the 2.0 release comes after the last one.
    - 3c. kb-incremental and the life preset removed; installer, kb-client, tests and documents updated; schema 2.
 4. Owner decisions, in two pull requests:
    - 4a. Version candidates and the alias table: ingest.py versions, file --replaces and entities; the kb-ingest steps and preview that use them.
-   - 4b. Conflict lists and status-card review marks.
+   - 4b. Conflict lists with restore, status-card review marks and the status-card rewrite check (ingest.py conflicts, file --restore, status-check); the kb-ingest step and preview that use them.
 5. kb-query: weak-tier card selection and quoted answers; kb-note on the new pipeline.
 6. prompt.md versions for ChatGPT; Drive libraries without a code environment refuse writes.
 7. kb-client pages "Build batch file" and "Waiting for confirmation".

@@ -4,7 +4,7 @@ A topic page tells what the library knows about one topic, newest first, and eve
 
 ## Input
 
-Every card of the topic, from the cards files (names.cards_dir) that hold one. Each card gives the conclusion, the quote with its link [[<sources_dir>/<source>#^pN]], the date and, when there is one, the event date. Cards of archived versions are not in the cards folder and must not appear.
+Every card of the topic, from the cards files (names.cards_dir) that hold one. Each card gives the conclusion, the quote with its link [[<sources_dir>/<source>#^pN]], the date and, when there is one, the event date. Cards of archived versions are not in the cards folder and must not appear, except cards the owner restored: they cite the archived source ([[<archive_dir>/<sources_dir>/<name>#^pN]]) and say they are from an earlier version. Cite them with that link and say in the statement that it comes from an earlier version.
 
 ## Shape
 
