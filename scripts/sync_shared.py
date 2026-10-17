@@ -28,6 +28,8 @@ PLAN = [(f"references/{r}", [f"skills/{s}/references" for s in ("kb-note", "kb-q
 PLAN.append(("scripts/kbconf.py", ["skills/kb-incremental/scripts", "skills/kb-query/scripts"]))
 # the converter: used by kb-incremental (scripts/convert.py) and by the stand-alone tool
 PLAN.append(("scripts/doc2kb_core.py", ["skills/kb-incremental/scripts", "tools/doc2kb"]))
+# knowledge-base batch files: written by doc2kb_core, split back by the skills
+PLAN.append(("scripts/kb_batch.py", ["skills/kb-incremental/scripts", "tools/doc2kb"]))
 
 
 def copies():

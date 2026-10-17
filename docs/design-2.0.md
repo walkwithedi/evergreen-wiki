@@ -27,8 +27,10 @@ Both backends (local folder and Google Drive) use the same pipeline.
 ### 3.1 Batch file (doc2kb)
 
 - doc2kb turns a set of files into one batch file. Batch files are always built locally, never by the assistant.
-- Each source is a section of its own, numbered S01, S02, …, with its original file name; every paragraph carries an anchor.
-- The batch size limit comes from the tier in _kb.json (characters per batch). doc2kb starts a new batch when the next source would exceed it, and splits a single source longer than the limit at chapter boundaries into consecutive parts.
+- Each source is a section of its own, numbered S01, S02, … over the run, oldest document first, with its original file name. Paragraphs and list items end with an anchor (`^s01-p2`); a table has one anchor on the line below it. Headings carry none.
+- The batch size limit comes from the tier (characters per batch: weak 20,000, strong 100,000), given on the command line or read from _kb.json. doc2kb starts a new batch when the next source would exceed it, and cuts a single source longer than the limit at headings into consecutive parts that keep its number. A single paragraph or table longer than the limit is not cut; it becomes a batch of its own.
+- Pictures are not exported; their placeholders stay in the text.
+- tools/doc2kb/SPEC.md (section 5.6) holds the exact format; kb_batch.py writes it and splits it back.
 
 ### 3.2 Ingest (kb-ingest)
 
@@ -114,22 +116,28 @@ These sketches fix the shape; exact field names are settled in the step that imp
 Batch file:
 
 ```markdown
-## S01 Project Atlas kickoff minutes.docx
+# S01 Project Atlas kickoff minutes.docx
+> Original path: Atlas/kickoff minutes.docx
 
-^S01-p1 The kickoff took place on 3 March.
+The kickoff took place on 3 March. ^s01-p1
 
-^S01-p2 Riverside Clinic will host the pilot.
+Riverside Clinic will host the pilot. ^s01-p2
 
-## S02 Project Atlas schedule.xlsx
+# S02 Project Atlas schedule.xlsx · 1/2
+> Original path: Atlas/schedule.xlsx
 
-^S02-p1 ...
+| Phase | Start |
+| --- | --- |
+| Pilot | April |
+
+^s02-p1
 ```
 
 Card:
 
 ```markdown
 - conclusion: Riverside Clinic hosts the Project Atlas pilot.
-  anchor: S01-p2
+  anchor: s01-p2
   quote: "Riverside Clinic will host the pilot."
   topic: Pilot
   entities: [Riverside Clinic, Project Atlas]
@@ -141,7 +149,7 @@ _kb.json additions:
 {
   "schema": 2,
   "tier": "weak",
-  "batch_chars": 30000
+  "batch_chars": 20000
 }
 ```
 

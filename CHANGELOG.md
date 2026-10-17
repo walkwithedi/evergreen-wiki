@@ -2,6 +2,14 @@
 
 All three skills share one version number. To release, update this file, the "Version:" line of every SKILL.md and the plugin manifests together and merge to main; the release workflow then publishes v<version>.
 
+## Unreleased
+
+doc2kb writes knowledge-base batch files, the intake format of the 2.0 design (docs/design-2.0.md, section 3.1). The skills are unchanged.
+- tools/doc2kb --kb-batch: the documents go into batch files `<source folder>_YYYYMMDD_b01.md`, ... (a second run on the same day adds the time). Each starts with a source table; sources are numbered S01, S02, ... over the run, oldest document first, each a section `# Snn <file name>`; paragraphs and list items end with an anchor `^snn-pN`, a table has one on the line below it. A batch holds at most `--batch-chars`, else the tier's limit (`--tier weak` 20,000, `strong` 100,000 characters), else `batch_chars` and `tier` from the `_kb.json` of `--library`, else weak. A longer document is cut at headings into parts that keep its number (`· 1/3`); a single paragraph or table over the limit is a batch of its own and is named in the output and the report. No pictures are exported. Date filter, duplicate removal and `--fp-db` work as in merged mode.
+- tools/doc2kb/doc2kb.sh: the options dialog has "KB batch files", which asks for the tier.
+- shared/scripts/kb_batch.py (copies in tools/doc2kb and kb-incremental's scripts): the batch file format, and `split`, which joins each source's parts back into one file, restores heading levels and rewrites `^snn-pN` to `^pN`; a source with a part missing is not written.
+- docs/design-2.0.md: the batch file sketch uses end-of-paragraph anchors.
+
 ## 1.22.1
 
 Upgrading the knowledge-base skills from the browser client is a step of its own and asks no setup questions, and a repository check is fixed. The skills are unchanged.
