@@ -27,10 +27,17 @@ conflicts: for each library source the run replaces (same name, or --replaces), 
   but no new card quotes it; "changed": the quote is gone and a new card's conclusion is close to
   the old one (SIMILAR_MIN); "removed": the quote is gone and no new card is close. Prints JSON.
 
+note: a quick note (the user's words, in a text file) as the batch file of a run with one source,
+  "Note <YYYYMMDD-HHMM> <title>.md" ("随手记 ..." in a Chinese library). The words are the source
+  text, one anchor per paragraph; where it came from, when it was recorded and --context go into
+  note lines (">"), which cards cannot quote. Prints the batch file paths; the run then goes on as
+  any other (quote_check.py check, file, pages).
+
 status-check: the numbered items of a rewritten status card against the current one. Items pair
   by their text (review marks left out), else by a source link they share. Lists removed and
   changed items, source links no longer cited and added items; exit 3 when anything was removed,
-  changed or lost. --write puts a rewrite with none of these in the library.
+  changed or lost. --write puts a rewrite with none of these in the library; with --confirmed (the
+  owner has seen the list and accepted it) it is written anyway.
 
 versions: for each source of the run whose name is not in the library yet, the library's sources
   that may be its older version. A pair is a candidate when the names are close once dates,
@@ -76,7 +83,8 @@ Usage:
                  [--names NAMES.json] [--replaces NEW.md=OLD.md ...] [--restore RESTORE.json]
   ingest.py conflicts BATCH.md [BATCH.md ...] --cards ACCEPTED.jsonl --library DIR [--target DIR]
                  [--replaces NEW.md=OLD.md ...]
-  ingest.py status-check --old CURRENT.md --new REWRITE.md [--write --library DIR]
+  ingest.py status-check --old CURRENT.md --new REWRITE.md [--write [--confirmed] --library DIR]
+  ingest.py note --library DIR --title TITLE --text WORDS.txt [--context TEXT] -o DIR
   ingest.py versions BATCH.md [BATCH.md ...] --library DIR [--target DIR] [--known NAMES.txt]
   ingest.py entities ACCEPTED.jsonl --library DIR [--apply [--map MAP.json]]
   ingest.py pages --library DIR [--target DIR] (--topic NAME ... | --all)
@@ -668,6 +676,43 @@ def check_page(target, cfg, topic, page):
     return {'unknown': sorted(cited - have), 'missing': sorted(have - cited)}
 
 
+NOTE_LABELS = {
+    'en': {'name': 'Note', 'origin': 'assistant conversation', 'path': 'Original path', 'recorded': 'Recorded',
+           'context': 'Context', 'colon': ': '},
+    'zh': {'name': '随手记', 'origin': '助手对话', 'path': '原始路径', 'recorded': '记录时间',
+           'context': '背景', 'colon': '：'},
+}
+TITLE_UNSAFE_RE = re.compile(r'[\\/:*?"<>|#^\[\]\n\r]+')
+
+
+def note_batch(cfg, title, text, outdir, context=None):
+    """Write a quick note as a run's batch files with one source (one file unless the words are very
+    long); returns their paths."""
+    lb = NOTE_LABELS[lang_of(cfg)]
+    title = ' '.join(TITLE_UNSAFE_RE.sub(' ', title).split())
+    words = text.replace('\r\n', '\n').strip()
+    if not title or not words:
+        raise ValueError('a note needs a title and some words')
+    t = kbconf.now(cfg['timezone'])
+    stamp, when = t.strftime('%Y%m%d-%H%M'), t.strftime('%Y-%m-%d %H:%M')
+    meta = ''.join('> %s%s%s\n' % (k, lb['colon'], v) for k, v in (
+        (lb['path'], lb['origin']), (lb['recorded'], '%s (%s)' % (when, cfg['timezone']))) + (
+        ((lb['context'], ' '.join(context.split())),) if context and context.strip() else ()))
+    limit, tier = kb_batch.batch_limit(cfg.get('tier'), cfg.get('batch_chars'))
+    units, _ = kb_batch.build_units([{'name': '%s %s %s.md' % (lb['name'], stamp, title), 'path': lb['origin'],
+                                      'modified': when, 'meta': meta, 'body': words}], limit)
+    batches = kb_batch.pack(units, limit)
+    os.makedirs(outdir, exist_ok=True)
+    paths = []
+    for i, b in enumerate(batches, 1):
+        stem = 'note_%s_b%02d' % (stamp, i)
+        path = os.path.join(outdir, stem + '.md')
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(kb_batch.render(b, i, len(batches), stem, tier, limit))
+        paths.append(path)
+    return paths
+
+
 def status_items(text):
     return [ln.strip() for ln in text.replace('\r\n', '\n').split('\n') if ITEM_RE.match(ln)]
 
@@ -724,7 +769,13 @@ def main(argv=None):
     sc.add_argument('--old', required=True, help='the current status card')
     sc.add_argument('--new', required=True, help='the rewrite')
     sc.add_argument('--write', action='store_true', help='when nothing was removed, changed or lost, put it in the library')
+    sc.add_argument('--confirmed', action='store_true', help='write even with changes: the owner accepted the list')
     sc.add_argument('--library', default=None, help='library root, for --write')
+    nt = sub.add_parser('note', help='a quick note as the batch file of a one-source run')
+    nt.add_argument('--title', required=True, help='a few words naming the note')
+    nt.add_argument('--text', required=True, help="text file with the user's words")
+    nt.add_argument('--context', default=None, help='one sentence on where the note came up')
+    nt.add_argument('-o', '--outdir', required=True, help='work folder for the batch file')
     vs = sub.add_parser('versions', help='library sources that may be older versions of the run\'s sources')
     vs.add_argument('batches', nargs='+', help='batch files of the run')
     vs.add_argument('--known', default=None, help='file listing the library\'s source names, one per line')
@@ -745,7 +796,7 @@ def main(argv=None):
     cp.add_argument('--topic', required=True)
     cp.add_argument('--page', required=True, help='the page as written')
     cp.add_argument('--write', action='store_true', help='when it passes, write it to the topics folder')
-    for p in (f, pg, tp, at, cp, vs, en, cf):
+    for p in (f, pg, tp, at, cp, vs, en, cf, nt):
         p.add_argument('--library', required=True, help='library root (its _kb.json gives the names)')
     for p in (f, pg, cp, vs, cf):
         p.add_argument('--target', default=None, help='write here instead of the library (a staging folder)')
@@ -764,7 +815,7 @@ def main(argv=None):
                 new = fh.read()
             res = status_check(old, new)
             print(json.dumps(res, ensure_ascii=False))
-            if res['removed'] or res['changed'] or res['lost']:
+            if (res['removed'] or res['changed'] or res['lost']) and not (a.write and a.confirmed):
                 return 3
             if a.write:
                 if not a.library:
@@ -785,6 +836,12 @@ def main(argv=None):
             if a.out:
                 with open(a.out, 'w', encoding='utf-8') as fh:
                     fh.write(''.join(t + '\n' for t in found))
+            return 0
+        if a.cmd == 'note':
+            with open(a.text, encoding='utf-8') as fh:
+                words = fh.read()
+            for path in note_batch(cfg, a.title, words, a.outdir, a.context):
+                print(path)
             return 0
         if a.cmd == 'add-topic':
             added, known = add_topics(a.library, cfg, a.topic, a.partition)

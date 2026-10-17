@@ -28,8 +28,8 @@ The library is a Drive folder; backend.root in the registry is its folder ID. Th
 
 ## Writing an ingest run
 
-The scripts cannot write to Drive, so kb-ingest runs them on a staging folder laid out like the library and then writes the changed files back after the user confirms the preview (kb-ingest, "Libraries in Google Drive"): each old copy is moved into the archive folder with move_rename, under <stem><old_suffix><YYYYMMDDHHMMSS>.md, before write_new writes the new file (contentMimeType text/markdown, disableConversionToGoogleType true); find_exact afterwards finds exactly one copy of each name. A permission error stops the writing at once: the connected account needs edit rights on the folder.
+The scripts cannot write to Drive, so kb-ingest and kb-note run them on a staging folder laid out like the library and then writes the changed files back after the user confirms the preview (kb-ingest, "Libraries in Google Drive"): each old copy is moved into the archive folder with move_rename, under <stem><old_suffix><YYYYMMDDHHMMSS>.md, before write_new writes the new file (contentMimeType text/markdown, disableConversionToGoogleType true); find_exact afterwards finds exactly one copy of each name. A permission error stops the writing at once: the connected account needs edit rights on the folder.
 
 Many files make many connector calls. Above about 30 files, say so in the preview and suggest splitting the material into two runs.
 
-Quick notes (kb-note) and init always write to Drive directly, after a preview the user confirms (kb-note writes without a preview because it only ever creates one new file).
+kb-note stages the same way as kb-ingest (_kb.json, the spec, the status card and the cards folder), runs its scripts there and writes the new source and cards file and the rebuilt topic pages back. Init writes to Drive directly, after a preview the user confirms; kb-query replaces only the status card, after the user confirmed the change.
