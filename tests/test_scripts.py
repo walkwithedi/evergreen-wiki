@@ -96,7 +96,6 @@ class KbconfTest(Tmp):
         self.assertIn("scope", problems)
 
 
-@unittest.skipIf(os.name == "nt", "fake zenity is a shell script")
 class PickMaterialsTest(Tmp):
     """pick_materials.py against a fake zenity that replays scripted answers."""
 
@@ -257,8 +256,7 @@ class InitLibraryTest(Tmp):
 
 class WizardTest(Tmp):
     def wizard(self, answers):
-        env = dict(os.environ, HOME=self.p("home"), USERPROFILE=self.p("home"), APPDATA=self.p("home", "appdata"),
-                   XDG_CONFIG_HOME=self.p("home", ".config"), PYTHONIOENCODING="utf-8")
+        env = dict(os.environ, HOME=self.p("home"), XDG_CONFIG_HOME=self.p("home", ".config"), PYTHONIOENCODING="utf-8")
         env.pop("KB_LIBRARIES", None)
         return subprocess.run([sys.executable, os.path.join(ROOT, "install.py"), "--wizard"],
                               input="\n".join(answers) + "\n", capture_output=True, text=True,
@@ -268,8 +266,7 @@ class WizardTest(Tmp):
         sys.path.insert(0, SCRIPTS)
         import init_library as il
         old = dict(os.environ)
-        os.environ.update(HOME=self.p("home"), USERPROFILE=self.p("home"), APPDATA=self.p("home", "appdata"),
-                          XDG_CONFIG_HOME=self.p("home", ".config"))
+        os.environ.update(HOME=self.p("home"), XDG_CONFIG_HOME=self.p("home", ".config"))
         os.environ.pop("KB_LIBRARIES", None)
         try:
             return kbconf.load_registry(il.registry_path())

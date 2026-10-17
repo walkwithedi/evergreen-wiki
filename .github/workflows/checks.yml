@@ -11,8 +11,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Ubuntu stands in for Kylin; 3.8 is the Python Kylin V10 ships
           - {os: ubuntu-latest, python: "3.8"}
-          - {os: ubuntu-latest, python: "3.12"}
     runs-on: ${{ matrix.os }}
     env:
       PYTHONIOENCODING: utf-8

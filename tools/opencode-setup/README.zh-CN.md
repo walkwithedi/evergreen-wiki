@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-在麒麟或 Ubuntu 工作站上只输入个人 AK 就能用上 OpenCode：把 AK 替换进本机已有的 OpenCode 配置，先发一条测试请求，通过才写入；再关闭 opencode 启动时的联网下载，并做一次首次启动自检。写入前自动备份，随时可以回滚。
+在麒麟工作站上只输入个人 AK 就能用上 OpenCode：把 AK 替换进本机已有的 OpenCode 配置，先发一条测试请求，通过才写入；再关闭 opencode 启动时的联网下载，并做一次首次启动自检。写入前自动备份，随时可以回滚。
 
 接口地址、模型等其他设置取自本机已有的配置，本工具不保存、不生成这些内容，只替换配置里的 AK。
 
@@ -20,7 +20,7 @@
 
 ## 运行环境要求
 
-- 麒麟或 Ubuntu，bash 4.4 及以上、python3（系统自带即可，不需要安装第三方包）。
+- 麒麟，bash 4.4 及以上、python3（系统自带即可，不需要安装第三方包）。
 - Node 主版本 22 及以上。版本不对时脚本会提示切换。
 - 已安装 opencode。没装也能替换 AK，只是无法做首次启动自检。
 - 本机已有 OpenCode 配置：`~/.config/opencode/opencode.jsonc`（或 `opencode.json`），其中服务商的 `options` 里有 `baseURL` 和 `apiKey`（`apiKey` 可先填任意占位），并列出模型。没有配置时一键配置直接提示并退出，不写任何文件。

@@ -14,7 +14,7 @@
 
 ## 运行环境要求
 
-- 与 opencode-setup 相同：麒麟或 Ubuntu，bash 4.4 及以上，python3（系统自带即可，Python 3.8 及以上），Node 主版本 22 及以上，已安装 opencode，本机已有 OpenCode 配置（接口地址、模型和 AK 字段）。
+- 与 opencode-setup 相同：麒麟，bash 4.4 及以上，python3（系统自带即可，Python 3.8 及以上），Node 主版本 22 及以上，已安装 opencode，本机已有 OpenCode 配置（接口地址、模型和 AK 字段）。
 - 支持 `fetch` 与 `EventSource` 的浏览器（较新的 Firefox 或 Chromium）。
 - 可选：`pdftotext`（poppler-utils）。没有时助手会整份读取 PDF，速度更慢。
 - 不需要联网，不需要安装第三方包。

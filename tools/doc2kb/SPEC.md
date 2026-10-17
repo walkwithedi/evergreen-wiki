@@ -22,7 +22,7 @@ batch files it ingests instead of reading the binary files.
 | No dependencies | Nothing beyond the language's standard library: no document converters, no office suite on the command line, no third-party parsing libraries | Office formats are parsed from their zip packages and XML directly |
 | Plain-text output | The output is read by an AI assistant | Markdown, no HTML; pictures are separate files |
 | Non-ASCII everywhere | File names, folder names and content are often Chinese; paths contain spaces and brackets | Every step must handle non-ASCII text and special characters |
-| Linux desktop | Ubuntu and similar | The dialog mode uses what such a desktop has (zenity); the command-line mode needs only bash and Python |
+| Linux desktop | Kylin | The dialog mode uses what such a desktop has (zenity); the command-line mode needs only bash and Python |
 
 > The dependency rule is the strongest one. If the environment happens to have better tools, the
 > implementation may use them (poppler-utils for PDF, ImageMagick for contact sheets), but it must not

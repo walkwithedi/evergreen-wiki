@@ -2,7 +2,7 @@
 
 [中文](README.zh-CN.md)
 
-Sets up OpenCode on a Kylin or Ubuntu workstation from one personal API key (AK): the key is put into the OpenCode configuration already on the computer, a test request must pass before anything is written, OpenCode's network downloads at start-up are switched off, and a first start is checked. Every write is backed up first and can be rolled back.
+Sets up OpenCode on a Kylin workstation from one personal API key (AK): the key is put into the OpenCode configuration already on the computer, a test request must pass before anything is written, OpenCode's network downloads at start-up are switched off, and a first start is checked. Every write is backed up first and can be rolled back.
 
 The endpoint, models and every other setting come from the existing configuration; this tool only replaces the key. Steps 1 and 2 of the [workbench wizard](../workbench/README.md) are this page. The page and the terminal menu are in Chinese.
 
@@ -18,7 +18,7 @@ The endpoint, models and every other setting come from the existing configuratio
 
 ## Requirements
 
-- Kylin or Ubuntu, bash 4.4+, python3 (the system one; no packages to install).
+- Kylin, bash 4.4+, python3 (the system one; no packages to install).
 - Node 22 or later; the script says how to switch otherwise.
 - opencode installed (without it the key is still replaced, but the first start cannot be checked).
 - An existing OpenCode configuration: `~/.config/opencode/opencode.jsonc` (or `opencode.json`) whose provider `options` hold `baseURL` and `apiKey` (any placeholder) and that lists the models. Without it, setup stops and writes nothing.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# codeagent-setup.sh — 麒麟/Ubuntu 工作站 OpenCode 配置：输入个人 AK，配好 OpenCode
+# codeagent-setup.sh — 麒麟工作站 OpenCode 配置：输入个人 AK，配好 OpenCode
 #
 # 用法：
 #   双击「启动OpenCode配置」     在浏览器页面里操作（ca_web.py，推荐）

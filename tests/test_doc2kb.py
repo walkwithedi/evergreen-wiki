@@ -21,7 +21,6 @@ import kb_batch  # noqa: E402
 import doc2kb_fixtures as fx  # noqa: E402
 
 HAS_PDF = shutil.which("pdftotext") is not None
-HAS_BASH = os.name != "nt" and shutil.which("bash") is not None
 
 
 def run(args, check=True, env=None, cwd=None):
@@ -357,7 +356,6 @@ class ConfigTest(Tmp):
         self.assertEqual(copies["skills/kb-ingest/scripts/doc2kb_core.py"], "shared/scripts/doc2kb_core.py")
 
 
-@unittest.skipUnless(HAS_BASH, "needs bash")
 class ShellTest(Tmp):
     def sh(self, *args, lang="en"):
         return run(["bash", os.path.join(TOOL, "doc2kb.sh"), *args], check=False, env={"DOC2KB_LANG": lang})
@@ -520,7 +518,6 @@ class KbBatchTest(Tmp):
         self.assertEqual(len(names), 2)
         self.assertRegex(sorted(set(names) - set(first))[0], r"^src_\d{8}-\d{4}_b01\.md$")
 
-    @unittest.skipUnless(sys.platform.startswith("linux") and HAS_BASH, "Linux desktops with bash")
     def test_dialog_kb_batch(self):
         fx.build_all(self.p("src"), english=True)
         out = self.p("out")
