@@ -1,10 +1,35 @@
 # Changelog
 
-All three skills share one version number. To release, update this file, the "Version:" line of every SKILL.md and the plugin manifests together and merge to main; the release workflow then publishes v<version>.
+All three skills share one version number. To release, update this file and the "Version:" line of every SKILL.md together and merge to main; the release workflow then publishes v<version>.
 
-## Unreleased
+## 3.0.0
 
+3.0 serves one setting: an offline Kylin workstation where OpenCode runs a privately deployed model. Libraries are local folders, and every step that can be decided mechanically is done by a script. Libraries made by 2.0 work unchanged. Google Drive libraries and the ChatGPT versions of the skills stay with 2.0.0, which is not developed further. The design is in docs/design-3.0.md.
+
+Removed and incompatible
+- The Google Drive backend: backend-gdrive.md, the staging-folder procedure, `init_library.py --drive-folder` and render, and docs/backends.md. A registry entry of type gdrive is refused with a message naming 2.0.x.
+- The ChatGPT versions of the skills (every prompt.md, `build_skill.py --chatgpt`) and the Claude Code plugin manifests (.claude-plugin).
+- The strong tier: pages-strong.md, `ingest.py check-page` and `init_library.py --tier`. A library's tier is read and ignored; topic pages are always built by `ingest.py pages`, and the batch size is batch_chars (default 20,000 characters).
+- kb-query's kbfind.py and `--known`: answer.py select gives the material and answer.py check checks the quote lines.
+- Windows and macOS: the Windows registry and state locations, the Windows link handling, the platform checks in the tests and the macOS and Windows CI jobs. Handling of file names and archives made on other systems stays.
+- Releases no longer attach the skill zips; scripts/build_skill.py stays for private builds.
+
+Agent and installer
+- install.py offers OpenCode's skills folder (~/.config/opencode/skills) first, then ~/.agents/skills and ~/.claude/skills, and writes the instructions line into OpenCode's AGENTS.md (or ~/.claude/CLAUDE.md, which OpenCode reads when it has no AGENTS.md).
+- doc2kb no longer asks for a tier in its dialog; `--tier` stays on the command line and picks its limit.
+
+Offline workbench
+- tools/opencode-setup: sets OpenCode up from one personal key, switches off its start-up downloads and checks a first start, as a page (ca_web.py) or a terminal menu (codeagent-setup.sh). The key is shown only as 「已设置（共 N 位）」. The hints on where a key is issued and how Node is switched are general and can be reworded in ~/.config/opencode-setup/hints.conf (keys AK_HINT and NODE_HINT, read as text and never run; CA_HINTS points elsewhere).
+- tools/workbench: the three-step wizard (check Node, opencode and the configuration; key and self-check; open the workbench), which ends in this repository's kb-client with --simple --chat-first. The ~/.bashrc block and the files under ~/.config/work-kb/ keep their names, so a workstation set up before needs nothing redone.
+- scripts/build_workbench.py builds workbench-bundle-<version>.zip from the repository zip: the workbench entry at the top (mode 755) and evergreen-wiki/ beside it; it stops when a tool is missing.
+
+Releases and checks
+- Each release attaches three files: workbench-bundle-v<version>.zip, evergreen-wiki-v<version>.zip and doc2kb-v<version>.zip. docs/release-downloads.md lists them.
 - The release workflow, run by hand with refresh_notes on, rewrites the notes of the version's existing release from CHANGELOG.md and the download guide; its zips and tag stay as they are.
+- CI runs the checks on Ubuntu with Python 3.8, standing in for Kylin. tests/test_workbench.py tests the workbench, the setup page and the bundle against a fake model endpoint.
+
+Documentation
+- README and README.zh-CN describe the workstation setting, the three downloads, the workbench quick start, "Coming from earlier releases" and the compatibility table. docs/manual-setup, the methodology, examples/README and the kb-client and doc2kb READMEs are updated for 3.0.
 
 ## 2.0.0
 

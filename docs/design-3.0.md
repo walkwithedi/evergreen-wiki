@@ -1,6 +1,6 @@
 # Design: 3.0, offline and script-led
 
-Status: in progress. Each step below is its own pull request and refines this document in the same pull request.
+Status: implemented in 3.0.0. Each step below was its own pull request.
 
 ## 1. Scope
 

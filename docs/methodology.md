@@ -1,6 +1,6 @@
 # Methodology
 
-Why the skills work the way they do. Each rule below closes a way in which answers drift from what the documents say, go stale, or lose facts. The exact procedures are in the skills; [design-2.0.md](design-2.0.md) holds the design and its implementation steps. [中文](methodology.zh-CN.md)
+Why the skills work the way they do. Each rule below closes a way in which answers drift from what the documents say, go stale, or lose facts. The exact procedures are in the skills; [design-2.0.md](design-2.0.md) and [design-3.0.md](design-3.0.md) hold the design and its implementation steps. [中文](methodology.zh-CN.md)
 
 ## The problem
 
@@ -24,7 +24,7 @@ The spec holds the library's own rules beside them: partitions and topics (Table
 - Name equals version. Source names carry no date, so the next version of a document arrives under the same name and replaces the previous one. Versions under different names are found as candidates (close names and shared paragraphs) and confirmed before they replace anything. Two different documents must never share a name.
 - Archive, never delete. A replaced source and its cards move to Archive/ with a time stamp. Cards of the old version that the new one no longer carries are listed, and the owner can restore them; a restored card cites the archived source and says it is from an earlier version.
 - The owner decides what changes. New topics, new entities, version pairs and lost cards are put to the owner before anything is written, together with one preview of the run; nothing grows silently. Status-card items that cite a replaced source get a review mark (⏳) and are not relied on until checked.
-- Two tiers. A library's tier says how much the model does. Weak (models with limited reasoning, such as local models run through OpenCode): small batches, one source at a time, topic pages and answer material assembled by scripts, every answer checked before the reply. Strong (Claude, ChatGPT): larger batches, topic pages written by the model and checked by check-page.
+- Scripts do the mechanics. Everything that can be decided by a rule is done by a script, so a model of modest ability, run offline, is enough: batches of at most 20,000 characters read one source at a time, topic pages and answer material assembled by scripts, every answer checked before the reply. The model extracts cards and words the replies.
 - Answers quote. Every statement of fact in an answer is followed by the exact source sentence it rests on and its link. Reading order is fixed (status card, then topic pages and cards, then sources) and the number of searches is capped; what the library does not record is said to be not recorded.
 - No code, no writes. Every write goes through the scripts. Without a code environment (Python) the skills still read and answer, and write nothing to the library.
 
