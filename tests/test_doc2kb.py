@@ -638,7 +638,7 @@ class KbBatchTest(Tmp):
         self.assertEqual(len(names), 2)
         self.assertRegex(sorted(set(names) - set(first))[0], r"^src_\d{8}-\d{4}_b01\.md$")
 
-    @unittest.skipUnless(HAS_BASH, "needs bash")
+    @unittest.skipUnless(sys.platform.startswith("linux") and HAS_BASH, "Linux desktops with bash")
     def test_dialog_kb_batch(self):
         fx.build_all(self.p("src"), english=True)
         out = self.p("out")
