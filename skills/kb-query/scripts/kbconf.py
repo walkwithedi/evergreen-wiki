@@ -305,6 +305,29 @@ def topic_key(name):
     return re.sub(r"\s+", " ", name).strip().casefold()
 
 
+def entities(spec):
+    """Rows of the spec's Table E (Name | Type | Aliases | Core | Note): [{name, type, aliases}].
+    [] when the spec has no Table E or the table has no rows yet."""
+    out, inside, header = [], False, False
+    for line in spec.split("\n"):
+        m = TABLE_LABEL.search(line)
+        if m and "|" not in line:
+            inside, header = m.group(1) == "E", False
+            continue
+        if not inside or line.count("|") < 2:
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|")] if line.strip().startswith("|") \
+            else [c.strip() for c in line.split("|")]
+        if not header:
+            header = True  # the column names
+            continue
+        if not cells[0] or set(cells[0]) <= set("-: "):
+            continue
+        aliases = [a.strip() for a in re.split(r"[;；]", cells[2] if len(cells) > 2 else "") if a.strip()]
+        out.append({"name": cells[0], "type": cells[1] if len(cells) > 1 else "", "aliases": aliases})
+    return out
+
+
 def match_topic(name, known):
     """The known topic a card's topic names, ignoring case and spacing; None for a new topic."""
     key = topic_key(name)

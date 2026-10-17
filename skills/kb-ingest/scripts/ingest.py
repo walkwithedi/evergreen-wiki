@@ -11,8 +11,29 @@ file: the run's batch files are split back into one file per source, Sources/<or
   accepted cards (quote_check.py check) go to Cards/<same name>.md. A source whose name is
   already in the library is a new version: the old source file and its cards file move to
   Archive/Sources and Archive/Cards as <name><old_suffix><YYYYMMDDHHMMSS>.md; nothing is deleted.
-  A run with a part missing from the batch files writes nothing. Prints a JSON record: sources
-  written, files archived, topics touched (of the new cards and of the archived ones).
+  --replaces NEW=OLD (repeatable) archives OLD the same way: the owner confirmed that the run's
+  source NEW is a new version of the library's source OLD under another name. A run with a part
+  missing from the batch files, or naming an OLD that is not in the library, writes nothing.
+  Prints a JSON record: sources written, files archived, topics touched (of the new cards and of
+  the archived ones).
+
+versions: for each source of the run whose name is not in the library yet, the library's sources
+  that may be its older version. A pair is a candidate when the names are close once dates,
+  version marks (v2, rev, final, draft, copy, (1), 副本, 终稿, 定稿, 修订版) and punctuation are
+  dropped (equal, or a similarity of NAME_MIN or more) and at least OVERLAP_MIN of the shorter
+  source's paragraphs (PARA_MIN characters or more, compared as quote_check does) are in the other.
+  --known FILE lists the library's source names (a Drive listing for a staging folder): a close
+  name whose file is not in the folder is listed with "read": true, to be read in and run again.
+  Same-named sources are new versions anyway and are listed apart. Prints JSON.
+
+entities: the cards' entity names against the spec's Table E. Names or aliases of the table
+  (compared without regard to case and spacing) are merged into the table's name; the other names
+  are listed with the type the assistant suggested (entity_types on the card, else other), the
+  number of cards naming them and the closest names of the table. --apply writes the owner's
+  decisions (--map FILE: {"name": "table name"} records it as an alias, {"name": {"type": T}}
+  adds it with that type; names left out are added with the suggested type): the cards file is
+  rewritten with the table's names, and Table E gets the new rows and aliases, with one version
+  step for the lot and a revision line each.
 
 pages: Topics/<topic>.md is rebuilt from every cards file: the topic's cards, newest first by
   event date or else the source's date, each with its conclusion, quote, source link and cards
@@ -37,7 +58,9 @@ Python 3 standard library only.
 Exit codes: 0 done; 3 check-page found problems; 2 bad arguments, unreadable input or a part missing.
 Usage:
   ingest.py file BATCH.md [BATCH.md ...] --cards ACCEPTED.jsonl --library DIR [--target DIR]
-                 [--names NAMES.json]
+                 [--names NAMES.json] [--replaces NEW.md=OLD.md ...]
+  ingest.py versions BATCH.md [BATCH.md ...] --library DIR [--target DIR] [--known NAMES.txt]
+  ingest.py entities ACCEPTED.jsonl --library DIR [--apply [--map MAP.json]]
   ingest.py pages --library DIR [--target DIR] (--topic NAME ... | --all)
   ingest.py topics --library DIR [--out FILE]
   ingest.py add-topic --library DIR --topic NAME [--topic NAME ...] [--partition NN]
@@ -45,6 +68,7 @@ Usage:
   ingest.py check-page --library DIR [--target DIR] --topic NAME --page FILE [--write]
 """
 import argparse
+import difflib
 import json
 import logging
 import os
@@ -80,6 +104,86 @@ def source_names(table, names=None):
     return out
 
 
+NAME_MIN = 0.8      # name similarity for a version candidate (difflib ratio of the name keys)
+OVERLAP_MIN = 0.5   # share of the shorter source's paragraphs found in the other
+PARA_MIN = 20       # shorter paragraphs (headings, dates, signatures) are not compared
+NAME_DATE_RE = re.compile(r'\d{4}[-_./年]?\d{1,2}[-_./月]?\d{1,2}日?')
+NAME_MARK_RE = re.compile(r'(?<![a-z])(?:v\d+(?:\.\d+)*|rev\d*|ver\d*|version\d*|final|draft|copy)(?![a-z])'
+                          r'|副本|终稿|定稿|修订版|最终版|草稿|[(（]\d+[)）]')
+PARA_ANCHOR_RE = re.compile(r'\s*\^(?:s\d{2,}-)?p\d+\s*$')
+
+
+def name_key(fname):
+    """A file name without extension, dates, version marks, punctuation and case, for comparing names."""
+    stem = os.path.splitext(os.path.basename(fname))[0].casefold()
+    stem = NAME_MARK_RE.sub(' ', NAME_DATE_RE.sub(' ', stem))
+    return re.sub(r'[\W_]+', '', stem)
+
+
+def paragraphs(text):
+    """The comparable paragraphs of a source: normalised, without anchors, notes and short lines."""
+    out = set()
+    for block in re.split(r'\n\s*\n', text):
+        block = block.strip()
+        if not block or block.startswith(('>', '#')):
+            continue
+        p = quote_check.norm(PARA_ANCHOR_RE.sub('', block))
+        if len(p) >= PARA_MIN:
+            out.add(p)
+    return out
+
+
+def _read_run(batches):
+    """(source table, split sources) of a run's batch files."""
+    texts = []
+    for p in batches:
+        with open(p, encoding='utf-8') as f:
+            texts.append(f.read().replace('\r\n', '\n'))
+    table = {}
+    for t in texts:
+        table.update(kb_batch.sources_table(t))
+    split = kb_batch.split_back(texts)
+    for sid, e in split.items():
+        table.setdefault(sid, {'name': e['name'], 'path': '', 'modified': ''})
+    return table, split
+
+
+def version_candidates(batches, target, cfg, known=None, names=None):
+    """{"same_name": [...], "candidates": [{new, old, name_score, overlap, read}]} for a run."""
+    table, split = _read_run(batches)
+    fnames = source_names({sid: table[sid] for sid in split}, names)
+    src_dir = os.path.join(target, cfg['names']['sources_dir'])
+    present = {f for f in os.listdir(src_dir) if f.endswith('.md')} if os.path.isdir(src_dir) else set()
+    listed = set(present)
+    if known:
+        with open(known, encoding='utf-8') as f:
+            listed.update(ln.strip() for ln in f if ln.strip())
+    same, found, cache = [], [], {}
+    for sid, e in split.items():
+        new = fnames[sid]
+        if new in listed:
+            same.append(new)
+            continue
+        key = name_key(new)
+        for old in sorted(listed - set(fnames.values())):
+            okey = name_key(old)
+            score = 1.0 if key == okey else round(difflib.SequenceMatcher(None, key, okey).ratio(), 2)
+            if not key or score < NAME_MIN:
+                continue
+            if old not in present:
+                found.append({'new': new, 'old': old, 'name_score': score, 'overlap': None, 'read': True})
+                continue
+            if old not in cache:
+                with open(os.path.join(src_dir, old), encoding='utf-8') as f:
+                    cache[old] = paragraphs(f.read())
+            mine, theirs = paragraphs(e['text']), cache[old]
+            overlap = round(len(mine & theirs) / min(len(mine), len(theirs)), 2) if mine and theirs else 0.0
+            if overlap >= OVERLAP_MIN:
+                found.append({'new': new, 'old': old, 'name_score': score, 'overlap': overlap, 'read': False})
+    found.sort(key=lambda c: (c['new'], -c['name_score'], c['old']))
+    return {'same_name': sorted(same), 'candidates': found}
+
+
 def _archive_path(folder, fname, old_suffix, stamp0):
     stem, ext = os.path.splitext(fname)
     k = 0
@@ -90,30 +194,27 @@ def _archive_path(folder, fname, old_suffix, stamp0):
         k += 1
 
 
-def file_run(batches, cards, target, cfg, names=None):
-    """File one run into target (a library or a staging folder); returns the run record."""
-    texts = []
-    for p in batches:
-        with open(p, encoding='utf-8') as f:
-            texts.append(f.read().replace('\r\n', '\n'))
-    table = {}
-    for t in texts:
-        table.update(kb_batch.sources_table(t))
-    split = kb_batch.split_back(texts)
+def file_run(batches, cards, target, cfg, names=None, replaces=None):
+    """File one run into target (a library or a staging folder); returns the run record.
+    replaces: {new source file name: library source it is a new version of}."""
+    table, split = _read_run(batches)
     missing = ['%s %s (parts %s)' % (sid, e['name'], ', '.join(map(str, e['missing'])))
                for sid, e in split.items() if e['missing']]
     if missing:
         raise ValueError('parts missing from the batch files, nothing written: ' + '; '.join(missing))
-    for sid, e in split.items():
-        table.setdefault(sid, {'name': e['name'], 'path': '', 'modified': ''})
     fnames = source_names({sid: table[sid] for sid in split}, names)
 
     n = cfg['names']
     src_dir, card_dir = os.path.join(target, n['sources_dir']), os.path.join(target, n['cards_dir'])
+    replaces = replaces or {}
+    for new, old in replaces.items():
+        if new not in fnames.values():
+            raise ValueError('--replaces names %s, which is not a source of this run; nothing written' % new)
+        if not os.path.isfile(os.path.join(src_dir, old)):
+            raise ValueError('--replaces names %s, which is not in the library; nothing written' % old)
     stamp0 = kbconf.now(cfg['timezone']).replace(microsecond=0)
     topics, archived = set(), []
-    for sid in split:
-        fname = fnames[sid]
+    for fname in list(dict.fromkeys([fnames[sid] for sid in split] + list(replaces.values()))):
         for folder, sub in ((src_dir, n['sources_dir']), (card_dir, n['cards_dir'])):
             old = os.path.join(folder, fname)
             if not os.path.isfile(old):
@@ -193,9 +294,18 @@ def pages_run(target, cfg, topics=None):
 
 
 SPEC_LABELS = {
-    'en': {'revision': 'Revision: v%s (%s) partition %s gets topic "%s"; no partition number added.'},
-    'zh': {'revision': '修订：v%s（%s）分区 %s 增加主题「%s」，未新增分区号。'},
+    'en': {'revision': 'Revision: v%s (%s) partition %s gets topic "%s"; no partition number added.',
+           'entity': 'Revision: v%s (%s) entity "%s" added to Table E.',
+           'alias': 'Revision: v%s (%s) "%s" recorded as an alias of "%s".',
+           'types': {'project': 'project', 'team': 'department or team', 'organisation': 'organisation',
+                     'system': 'system or product', 'other': 'other'}},
+    'zh': {'revision': '修订：v%s（%s）分区 %s 增加主题「%s」，未新增分区号。',
+           'entity': '修订：v%s（%s）表 E 增加实体「%s」。',
+           'alias': '修订：v%s（%s）「%s」登记为「%s」的别名。',
+           'types': {'project': '项目', 'team': '部门或团队', 'organisation': '单位',
+                     'system': '系统或产品', 'other': '其他'}},
 }
+EMPTY_TABLE_RE = re.compile(r'^\s*(?:No entries yet|暂无条目)')
 VERSION_RE = re.compile(r'^((?:Version|版本)\s*[:：]\s*v)(\d+)(?:\.(\d+))?\s*$')
 UPDATED_RE = re.compile(r'^((?:Last updated|最后更新)\s*[:：]\s*).*$')
 REVISION_RE = re.compile(r'^(?:Revision|修订)\s*[:：]')
@@ -245,8 +355,16 @@ def add_topics(library, cfg, new_topics, partition=None):
     end = body[-1] if body[-1] in '.。' else ''
     body = body[:-1] if end else body
     lines[row] = body + ''.join(('；' if zh else '; ') + t for t in added) + end
-    today = kbconf.now(cfg['timezone']).strftime('%Y-%m-%d')
     lang = 'zh' if zh else 'en'
+    revise_spec(library, cfg, lines,
+                lambda version, today: [SPEC_LABELS[lang]['revision'] % (version, today, part, t) for t in added])
+    return added, known
+
+
+def revise_spec(library, cfg, lines, notes):
+    """Write the spec's lines back after a change: the version up one minor step, today's date as last
+    updated, and the revision lines notes(version, today) after the header's last revision line."""
+    today = kbconf.now(cfg['timezone']).strftime('%Y-%m-%d')
     version, vline = None, None
     for i, line in enumerate(lines):
         m = VERSION_RE.match(line)
@@ -263,11 +381,9 @@ def add_topics(library, cfg, new_topics, partition=None):
                 break
             if REVISION_RE.match(lines[i]):
                 at = i + 1
-        notes = [SPEC_LABELS[lang]['revision'] % (version, today, part, t) for t in added]
-        lines[at:at] = notes
+        lines[at:at] = notes(version, today)
     with open(spec_path(library, cfg), 'w', encoding='utf-8') as f:
         f.write('\n'.join(lines))
-    return added, known
 
 
 def retopic(path, old, new):
@@ -285,6 +401,118 @@ def retopic(path, old, new):
     return n
 
 
+def _entity_index(table):
+    """{name key: table name} for every name and alias of Table E."""
+    index = {}
+    for row in table:
+        for name in [row['name']] + row['aliases']:
+            index.setdefault(kbconf.topic_key(name), row['name'])
+    return index
+
+
+def entity_report(cards, spec):
+    """{"merged": {name as written: table name}, "new": [{name, type, cards, closest}]} for the
+    cards' entities against the spec's Table E."""
+    table = kbconf.entities(spec)
+    index = _entity_index(table)
+    merged, new = {}, {}
+    for c in cards:
+        types = c.get('entity_types') or {}
+        for name in c.get('entities') or []:
+            hit = index.get(kbconf.topic_key(name))
+            if hit:
+                if name != hit:
+                    merged[name] = hit
+                continue
+            e = new.setdefault(kbconf.topic_key(name), {'name': name, 'type': 'other', 'cards': 0, 'closest': []})
+            e['cards'] += 1
+            if e['type'] == 'other' and types.get(name) in quote_check.ENTITY_TYPES:
+                e['type'] = types[name]
+    for key, e in new.items():
+        scored = sorted(((difflib.SequenceMatcher(None, key, k).ratio(), name) for k, name in index.items()),
+                        reverse=True)
+        e['closest'] = list(dict.fromkeys(name for r, name in scored if r >= 0.6))[:3]
+    return {'merged': merged, 'new': list(new.values())}
+
+
+def apply_entities(cards_path, library, cfg, decisions=None):
+    """Write the owner's entity decisions: the cards file with the table's names, Table E with the new
+    rows and aliases (one version step, a revision line each). Returns {merged, added, aliases}."""
+    with open(cards_path, encoding='utf-8') as f:
+        cards = [json.loads(ln) for ln in f if ln.strip()]
+    spec = read_spec(library, cfg)
+    table = kbconf.entities(spec)
+    index = _entity_index(table)
+    report = entity_report(cards, spec)
+    decisions = decisions or {}
+    added, aliases = [], {}
+    for e in report['new']:
+        d = decisions.get(e['name'])
+        if isinstance(d, str):
+            target = index.get(kbconf.topic_key(d))
+            if not target:
+                raise ValueError('%s is to become an alias of %s, which is not in Table E; nothing written' % (e['name'], d))
+            aliases[e['name']] = target
+            continue
+        kind = (d or {}).get('type') or e['type']
+        if kind not in quote_check.ENTITY_TYPES:
+            raise ValueError('unknown entity type %s for %s (one of %s); nothing written'
+                             % (kind, e['name'], ', '.join(quote_check.ENTITY_TYPES)))
+        added.append((e['name'], kind))
+    for name, target in aliases.items():
+        index[kbconf.topic_key(name)] = target
+    for name, _ in added:
+        index[kbconf.topic_key(name)] = name
+    for c in cards:
+        c['entities'] = list(dict.fromkeys(index.get(kbconf.topic_key(x), x) for x in c.get('entities') or []))
+    if added or aliases:
+        _write_table_e(library, cfg, spec, added, aliases)
+    with open(cards_path, 'w', encoding='utf-8') as f:
+        for c in cards:
+            f.write(json.dumps(c, ensure_ascii=False) + '\n')
+    return {'merged': report['merged'], 'added': [n for n, _ in added], 'aliases': aliases}
+
+
+def _write_table_e(library, cfg, spec, added, aliases):
+    lines = spec.split('\n')
+    start = None
+    for i, ln in enumerate(lines):
+        m = kbconf.TABLE_LABEL.search(ln)
+        if m and '|' not in ln and m.group(1) == 'E':
+            start = i
+            break
+    if start is None:
+        raise ValueError('the spec has no Table E; nothing written')
+    lang = 'zh' if '表' in lines[start] else 'en'
+    lb = SPEC_LABELS[lang]
+    header, last = None, None
+    for i in range(start + 1, len(lines)):
+        ln = lines[i]
+        if kbconf.TABLE_LABEL.search(ln) and '|' not in ln:
+            break
+        if ln.count('|') >= 2:
+            if header is None:
+                header = i
+            last = i
+            cells = ln.split('|')
+            name = cells[0].strip()
+            for alias, target in aliases.items():
+                if name == target and len(cells) > 2:
+                    have = cells[2].strip()
+                    cells[2] = ' %s ' % (have + ('；' if lang == 'zh' else '; ') + alias if have else alias)
+            lines[i] = '|'.join(cells)
+        elif header is not None and EMPTY_TABLE_RE.match(ln):
+            lines[i] = None
+    if header is None:
+        raise ValueError('Table E has no column line; nothing written')
+    rows = ['%s | %s |  |  | ' % (name, lb['types'][kind]) for name, kind in added]
+    lines[last + 1:last + 1] = rows
+    lines = [ln for ln in lines if ln is not None]
+    revise_spec(library, cfg, lines, lambda version, today:
+                [lb['alias'] % (version, today, a, t) for a, t in aliases.items()]
+                + [lb['entity'] % (version, today, name) for name, _ in added])
+
+
 def check_page(target, cfg, topic, page):
     """Links of a topic page written by the model against the topic's current cards:
     unknown = cited passages no card holds; missing = cards the page does not cite."""
@@ -293,6 +521,13 @@ def check_page(target, cfg, topic, page):
             if kbconf.topic_key(c['topic']) == key}
     cited = {'%s#^%s' % m for m in LINK_ANCHOR_RE.findall(page)}
     return {'unknown': sorted(cited - have), 'missing': sorted(have - cited)}
+
+
+def replace_pair(text):
+    new, sep, old = text.partition('=')
+    if not (sep and new.strip() and old.strip()):
+        raise argparse.ArgumentTypeError('expected NEW.md=OLD.md, got %r' % text)
+    return new.strip(), old.strip()
 
 
 def main(argv=None):
@@ -304,6 +539,15 @@ def main(argv=None):
     f.add_argument('--cards', required=True, help='accepted cards (quote_check.py check --accepted)')
     f.add_argument('--names', default=None,
                    help='JSON file mapping a source number or original file name to a file name')
+    f.add_argument('--replaces', action='append', type=replace_pair, default=[],
+                   help='NEW.md=OLD.md: the run\'s source NEW is a new version of the library\'s OLD (repeatable)')
+    vs = sub.add_parser('versions', help='library sources that may be older versions of the run\'s sources')
+    vs.add_argument('batches', nargs='+', help='batch files of the run')
+    vs.add_argument('--known', default=None, help='file listing the library\'s source names, one per line')
+    en = sub.add_parser('entities', help='the cards\' entities against Table E; --apply writes the decisions')
+    en.add_argument('cards', help='accepted cards (JSON lines); rewritten in place with --apply')
+    en.add_argument('--apply', action='store_true', help='rewrite the cards and add to Table E')
+    en.add_argument('--map', default=None, help='JSON file with the owner\'s decisions (see above)')
     pg = sub.add_parser('pages', help='rebuild topic pages from the cards')
     group = pg.add_mutually_exclusive_group(required=True)
     group.add_argument('--topic', action='append', help='a topic to rebuild (repeatable)')
@@ -317,9 +561,9 @@ def main(argv=None):
     cp.add_argument('--topic', required=True)
     cp.add_argument('--page', required=True, help='the page as written')
     cp.add_argument('--write', action='store_true', help='when it passes, write it to the topics folder')
-    for p in (f, pg, tp, at, cp):
+    for p in (f, pg, tp, at, cp, vs, en):
         p.add_argument('--library', required=True, help='library root (its _kb.json gives the names)')
-    for p in (f, pg, cp):
+    for p in (f, pg, cp, vs):
         p.add_argument('--target', default=None, help='write here instead of the library (a staging folder)')
     rt = sub.add_parser('retopic', help="change accepted cards' topic")
     rt.add_argument('cards', help='accepted cards (JSON lines), rewritten in place')
@@ -349,7 +593,22 @@ def main(argv=None):
             for t in known:
                 print('known: ' + t)
             return 0
+        if a.cmd == 'entities':
+            if not a.apply:
+                with open(a.cards, encoding='utf-8') as fh:
+                    cards = [json.loads(ln) for ln in fh if ln.strip()]
+                print(json.dumps(entity_report(cards, read_spec(a.library, cfg)), ensure_ascii=False))
+                return 0
+            decisions = None
+            if a.map:
+                with open(a.map, encoding='utf-8') as fh:
+                    decisions = json.load(fh)
+            print(json.dumps(apply_entities(a.cards, a.library, cfg, decisions), ensure_ascii=False))
+            return 0
         target = a.target or a.library
+        if a.cmd == 'versions':
+            print(json.dumps(version_candidates(a.batches, target, cfg, a.known), ensure_ascii=False))
+            return 0
         if a.cmd == 'check-page':
             with open(a.page, encoding='utf-8') as fh:
                 page = fh.read()
@@ -373,7 +632,7 @@ def main(argv=None):
                 names = json.load(fh)
         with open(a.cards, encoding='utf-8') as fh:
             cards = [json.loads(ln) for ln in fh if ln.strip()]
-        print(json.dumps(file_run(a.batches, cards, target, cfg, names), ensure_ascii=False))
+        print(json.dumps(file_run(a.batches, cards, target, cfg, names, dict(a.replaces)), ensure_ascii=False))
         return 0
     except (kbconf.ConfigError, OSError, ValueError) as e:
         log.error('%s', e)

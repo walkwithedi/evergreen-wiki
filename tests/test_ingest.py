@@ -436,6 +436,200 @@ class CheckPageTest(LibraryCase):
 
 
 
+REPORT = ("Week 1 of the pilot is complete and all clinics joined.\n\n"
+          "The data export is planned for the end of the month.\n\n"
+          "The review board meets every second Friday.\n\n"
+          "Training material is ready for the second group.")
+REPORT_FINAL = REPORT.replace("Training material is ready", "Training material is printed")
+WEEK_A = "Week 3: the clinics report fewer missed appointments.\n\nThe pilot budget is on track this week."
+WEEK_B = "Week 4: two clinics asked for evening slots to be added.\n\nA new scheduling screen goes live next week."
+
+
+class VersionsTest(LibraryCase):
+    def library_with(self, *sources):
+        b = make_run(self.p("lib-run"), [(n, n, "2026-03-01 09:00", body) for n, body in sources])
+        ingest.file_run(b, [], self.p("lib"), self.cfg)
+
+    def test_name_key_drops_dates_and_version_marks(self):
+        k = ingest.name_key
+        self.assertEqual(k("Atlas status report v2 final.md"), k("Atlas status report.md"))
+        self.assertEqual(k("Atlas status report (1).docx"), k("atlas_status-report.pdf"))
+        self.assertEqual(k("weekly 2026-03-09.md"), k("weekly 20260316.md"))
+        self.assertEqual(k("周报2026年3月9日.md"), k("周报 终稿.md"))
+        self.assertEqual(k("方案 副本 修订版.md"), k("方案.md"))
+        self.assertNotEqual(k("budget.md"), k("minutes.md"))
+
+    def test_candidates_need_a_close_name_and_shared_paragraphs(self):
+        self.library_with(("status report.docx", REPORT), ("weekly 2026-03-09.docx", WEEK_A),
+                          ("budget.docx", MINUTES), ("plan.docx", PLAN_V1))
+        b = make_run(self.p("run"), [("status report final.docx", "x/status report final.docx", "", REPORT_FINAL),
+                                     ("weekly 2026-03-16.docx", "x/weekly 2026-03-16.docx", "", WEEK_B),
+                                     ("summary.docx", "x/summary.docx", "", REPORT),
+                                     ("plan.docx", "x/plan.docx", "", PLAN_V2)])
+        got = ingest.version_candidates(b, self.p("lib"), self.cfg)
+        self.assertEqual(got["same_name"], ["plan.md"])
+        self.assertEqual([(c["new"], c["old"]) for c in got["candidates"]], [("status report final.md", "status report.md")])
+        c = got["candidates"][0]
+        self.assertGreaterEqual(c["name_score"], 0.8)
+        self.assertEqual(c["overlap"], 0.75)
+        self.assertFalse(c["read"])
+
+    def test_known_names_absent_from_a_staging_folder_are_marked_to_read(self):
+        self.library_with(("plan.docx", PLAN_V1))
+        b = make_run(self.p("run"), [("status report v3.docx", "status report v3.docx", "", REPORT)])
+        with open(self.p("known.txt"), "w", encoding="utf-8") as f:
+            f.write("status report.md\nplan.md\nminutes 2026.md\n")
+        got = ingest.version_candidates(b, self.p("lib"), self.cfg, known=self.p("known.txt"))
+        self.assertEqual(got["candidates"], [{"new": "status report v3.md", "old": "status report.md",
+                                              "name_score": 1.0, "overlap": None, "read": True}])
+
+    def test_file_replaces_archives_the_old_version(self):
+        self.first_run()
+        b = make_run(self.p("run2"), [("plan final.docx", "Atlas/plan final.docx", "2026-04-01 09:00", PLAN_V2)])
+        cards = accepted(b, card("S01", "p1", "The pilot starts in May.", "Pilot moves to May", "Schedule"))
+        with self.assertRaises(ValueError):
+            ingest.file_run(b, cards, self.p("lib"), self.cfg, replaces={"plan final.md": "nothing.md"})
+        self.assertFalse(os.path.exists(self.p("lib", "Sources", "plan final.md")))
+        rec = ingest.file_run(b, cards, self.p("lib"), self.cfg, replaces={"plan final.md": "plan.md"})
+        self.assertEqual(rec["sources"], ["plan final.md"])
+        self.assertEqual(rec["archived"], ["Sources/plan.md", "Cards/plan.md"])
+        self.assertEqual(rec["topics"], ["Pilot", "Schedule"])
+        self.assertFalse(os.path.exists(self.p("lib", "Sources", "plan.md")))
+        self.assertRegex(os.listdir(self.p("lib", "Archive", "Sources"))[0], r"^plan_old\d{14}\.md$")
+
+    def test_command_line(self):
+        self.first_run()
+        with open(self.p("lib", "_kb.json"), "w", encoding="utf-8") as f:
+            json.dump({"schema": 2}, f)
+        b = make_run(self.p("run2"), [("plan v2.docx", "plan v2.docx", "2026-04-01 09:00", PLAN_V1 + "\n\nAdded line.")])
+        p = cli("versions", *b, "--library", self.p("lib"))
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual([(c["new"], c["old"]) for c in json.loads(p.stdout)["candidates"]], [("plan v2.md", "plan.md")])
+        with open(self.p("none.jsonl"), "w", encoding="utf-8") as f:
+            f.write("")
+        p = cli("file", *b, "--cards", self.p("none.jsonl"), "--library", self.p("lib"), "--replaces", "plan v2.md=plan.md")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(json.loads(p.stdout)["archived"], ["Sources/plan.md", "Cards/plan.md"])
+        p = cli("file", *b, "--cards", self.p("none.jsonl"), "--library", self.p("lib"), "--replaces", "no-equals-sign")
+        self.assertEqual(p.returncode, 2)
+
+
+SPEC_E = """00_Spec
+Version: v2
+Last updated: 2026-01-01
+
+1. Table A: partitions and topics
+
+02 Goals and plans: work plans.
+09 Reference and templates: reference material.
+
+4. Table E: entities
+
+Name | Type | Aliases | Core | Note
+Project Atlas | project | Atlas; PA | yes |
+Riverside Clinic | organisation |  |  |
+
+Types: project, department or team, organisation, system or product, other.
+
+5. Table F: value filters
+"""
+SPEC_E_ZH = """00_Spec
+版本：v1
+最后更新：2026-01-01
+
+4. 表 E（Table E）：实体
+
+名称 | 类型 | 别名 | 核心 | 备注
+暂无条目。
+
+类型：项目、部门或团队、单位、系统或产品、其他。
+"""
+
+
+class EntitiesTest(LibraryCommandsTest):
+    CARDS = [{"source": "S01", "entities": ["Atlas", "Scheduling Service"], "entity_types": {"Scheduling Service": "system"}},
+             {"source": "S02", "entities": ["riverside  clinic", "Project Atlass", "Harbour Team"]},
+             {"source": "S03", "entities": ["Scheduling Service"]}]
+
+    def cards_file(self):
+        path = self.p("acc.jsonl")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("".join(json.dumps(c) + "\n" for c in self.CARDS))
+        return path
+
+    def test_table_e_is_read(self):
+        self.assertEqual(kbconf.entities(SPEC_E), [
+            {"name": "Project Atlas", "type": "project", "aliases": ["Atlas", "PA"]},
+            {"name": "Riverside Clinic", "type": "organisation", "aliases": []}])
+        self.assertEqual(kbconf.entities(SPEC_E_ZH), [])
+        self.assertEqual(kbconf.entities("00_Spec\n"), [])
+
+    def test_report_merges_known_names_and_lists_new_ones(self):
+        rep = ingest.entity_report(self.CARDS, SPEC_E)
+        self.assertEqual(rep["merged"], {"Atlas": "Project Atlas", "riverside  clinic": "Riverside Clinic"})
+        new = {e["name"]: e for e in rep["new"]}
+        self.assertEqual(list(new), ["Scheduling Service", "Project Atlass", "Harbour Team"])
+        self.assertEqual((new["Scheduling Service"]["type"], new["Scheduling Service"]["cards"]), ("system", 2))
+        self.assertEqual(new["Harbour Team"]["type"], "other")
+        self.assertEqual(new["Project Atlass"]["closest"][0], "Project Atlas")
+
+    def test_apply_rewrites_cards_and_table_e(self):
+        self.library(SPEC_E)
+        path = self.cards_file()
+        with open(self.p("map.json"), "w", encoding="utf-8") as f:
+            json.dump({"Project Atlass": "Project Atlas", "Harbour Team": {"type": "team"}}, f)
+        p = cli("entities", path, "--library", self.p("lib"), "--apply", "--map", self.p("map.json"))
+        self.assertEqual(p.returncode, 0, p.stderr)
+        cards = [json.loads(ln) for ln in read(path).splitlines()]
+        self.assertEqual(cards[0]["entities"], ["Project Atlas", "Scheduling Service"])
+        self.assertEqual(cards[1]["entities"], ["Riverside Clinic", "Project Atlas", "Harbour Team"])
+        spec = read(self.p("lib", "00_Spec.md"))
+        self.assertIn("Project Atlas | project | Atlas; PA; Project Atlass | yes |\n", spec)
+        self.assertIn("Riverside Clinic | organisation |  |  |\nScheduling Service | system or product |  |  | \n"
+                      "Harbour Team | department or team |  |  | \n\nTypes:", spec)
+        self.assertIn("Version: v2.1\n", spec)
+        self.assertRegex(spec, r'Version: v2\.1\nRevision: v2\.1 \(\d{4}-\d{2}-\d{2}\) "Project Atlass" recorded as an alias '
+                               r'of "Project Atlas"\.\nRevision: v2\.1 \(\d{4}-\d{2}-\d{2}\) entity "Scheduling Service" '
+                               r'added to Table E\.\nRevision: v2\.1 \(\d{4}-\d{2}-\d{2}\) entity "Harbour Team" added to Table E\.\n')
+        out = json.loads(p.stdout)
+        self.assertEqual((out["added"], out["aliases"]), (["Scheduling Service", "Harbour Team"], {"Project Atlass": "Project Atlas"}))
+        p = cli("entities", path, "--library", self.p("lib"))       # a second look finds nothing new
+        self.assertEqual(json.loads(p.stdout)["new"], [])
+
+    def test_apply_without_a_map_adds_every_new_name_chinese(self):
+        self.library(SPEC_E_ZH, language="zh")
+        path = self.p("acc.jsonl")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(json.dumps({"source": "S01", "entities": ["阿特拉斯项目"], "entity_types": {"阿特拉斯项目": "project"}}) + "\n")
+        p = cli("entities", path, "--library", self.p("lib"), "--apply")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        spec = read(self.p("lib", "00_Spec.md"))
+        self.assertIn("名称 | 类型 | 别名 | 核心 | 备注\n阿特拉斯项目 | 项目 |  |  | \n\n类型：", spec)
+        self.assertNotIn("暂无条目", spec)
+        self.assertRegex(spec, r"版本：v1\.1\n修订：v1\.1（\d{4}-\d{2}-\d{2}）表 E 增加实体「阿特拉斯项目」。\n")
+
+    def test_map_naming_an_unknown_entity_is_refused(self):
+        self.library(SPEC_E)
+        path = self.cards_file()
+        with open(self.p("map.json"), "w", encoding="utf-8") as f:
+            json.dump({"Harbour Team": "Nobody"}, f)
+        before = read(path)
+        p = cli("entities", path, "--library", self.p("lib"), "--apply", "--map", self.p("map.json"))
+        self.assertEqual(p.returncode, 2)
+        self.assertIn("Nobody", p.stderr)
+        self.assertEqual(read(path), before)
+
+
+class EntityTypesTest(unittest.TestCase):
+    def test_quote_check_keeps_entity_types_of_the_card(self):
+        with tempfile.TemporaryDirectory() as d:
+            b = make_run(d, [("plan.docx", "plan.docx", "", PLAN_V1)])
+            c = card("S01", "p2", "Riverside Clinic hosts the pilot.", "Riverside hosts", "Pilot",
+                     entity_types={"Riverside Clinic": "organisation", "Elsewhere": "project", "X": "planet"})
+            acc = accepted(b, dict(c, entities=["Riverside Clinic", "Y"], entity_types=dict(c["entity_types"], Y="planet")))
+        self.assertEqual(acc[0]["entity_types"], {"Riverside Clinic": "organisation"})
+
+
 INGEST_SCRIPTS = os.path.join(ROOT, "skills", "kb-ingest", "scripts")
 
 

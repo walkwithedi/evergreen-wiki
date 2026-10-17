@@ -1,6 +1,6 @@
 ---
 name: kb-ingest
-description: Ingests documents into an evergreen 2.0 knowledge base (Google Drive or local/Obsidian) and sets new libraries up. Use when the user says "ingest", "file these", "add to the knowledge base" or hands over batch files or documents for the library, and for "set up a knowledge base", "new library" or "get started with the knowledge base". Turns each batch into cards (a conclusion with its exact source sentence), checks every quote against the source with a script, files the sources, cards and topic pages, archives older versions, and asks the user about new topics. Weak tier (local models): scripts build the topic pages; strong tier (Claude, ChatGPT): the model writes them and a script checks every citation. Material is searchable only once its run is finished. Init mode creates a library from the work preset, registers it and tells the assistant it exists. Not for questions (kb-query) or saving one note (kb-note).
+description: Ingests documents into an evergreen 2.0 knowledge base (Google Drive or local/Obsidian) and sets new libraries up. Use when the user says "ingest", "file these", "add to the knowledge base" or hands over batch files or documents for the library, and for "set up a knowledge base", "new library" or "get started with the knowledge base". Turns each batch into cards (a conclusion with its exact source sentence), checks every quote against the source with a script, files the sources, cards and topic pages, archives older versions, and asks the user about new topics, new entities and possible new versions of documents. Weak tier (local models): scripts build the topic pages; strong tier (Claude, ChatGPT): the model writes them and a script checks every citation. Material is searchable only once its run is finished. Init mode creates a library from the work preset, registers it and tells the assistant it exists. Not for questions (kb-query) or saving one note (kb-note).
 ---
 
 # Knowledge base ingest
@@ -65,51 +65,70 @@ The report's new_topics are topics the spec does not have. Ask the user about ea
 
 The user's answer to this question is their confirmation of the spec change.
 
-## Step 5: preview and confirm
+## Step 5: entities
+
+python3 scripts/ingest.py entities <work>/accepted.jsonl --library <library>
+
+It compares the cards' entity names with the spec's Table E (the alias table). Names under merged are names or aliases of the table and are merged without asking. Each name under new goes into the preview with its suggested type and the closest names of the table; by default it is added as a new entity. When the user puts a name under an existing entity, or changes a type, write the decisions to <work>/entity-map.json: {"<name>": "<table name>"} records it as an alias, {"<name>": {"type": "<type>"}} sets the type (project, team, organisation, system or other).
+
+## Step 6: new versions
+
+python3 scripts/ingest.py versions <batch files> --library <library>
+
+- same_name: sources whose name is already in the library. They are new versions anyway: the old source and cards file go to the archive folder.
+- candidates: library sources with a close name and shared paragraphs, which may be older versions of a source of the run under another name.
+  - Weak tier: list each pair in the preview; the user picks the ones that are new versions.
+  - Strong tier: read both sources of each pair and decide, giving one sentence of each, quoted exactly, that the decision rests on. Add a pair the script did not list only when a library source's name or content shows it is the older version, with the same two quotes. Every pair still waits for the user's confirmation in the preview.
+
+Each confirmed pair is passed to step 8 as --replaces "<new>=<old>": the old source and its cards file go to the archive folder, and the new source keeps its own name.
+
+## Step 7: preview and confirm
 
 Show one preview and wait for the user to confirm before anything is written:
 
-- Sources to file, from the batch files' source tables. For each, find_exact its file name (the original name with .md) in the sources folder: present means a new version, and the old source and cards file go to the archive folder.
+- Sources to file, from the batch files' source tables; new versions (same name, and the pairs of step 6 with their scores or quotes).
 - Number of cards per source, and cards dropped.
+- New entities: each name with its type and the closest names of Table E; the user may put a name under an existing entity or change its type.
 - Topic pages that will be rebuilt (the accepted cards' topics, plus the topics of the cards files being archived).
 
 A local library writes straight into the library after the confirmation. For a library in Google Drive, see "Libraries in Google Drive" below before writing.
 
-## Step 6: file
+## Step 8: file
 
-python3 scripts/ingest.py file <batch files> --cards <work>/accepted.jsonl --library <library>
+1. When step 5 found new names or merged ones: python3 scripts/ingest.py entities <work>/accepted.jsonl --library <library> --apply, adding --map <work>/entity-map.json when the user changed anything. It rewrites the cards with the table's names and adds the new entities and aliases to Table E, raising the spec's version once.
+2. python3 scripts/ingest.py file <batch files> --cards <work>/accepted.jsonl --library <library>, adding --replaces "<new>=<old>" for each pair confirmed in step 6.
 
-It writes the sources and cards files, archives older versions and prints a JSON record: sources written, files archived, topics touched. Exit 2 with "parts missing": a batch file of the run is not among those given; find it and run again, nothing was written.
+It writes the sources and cards files, archives older versions and prints a JSON record: sources written, files archived, topics touched. Exit 2 with "parts missing": a batch file of the run is not among those given; find it and run again, nothing was written. Exit 2 naming a --replaces source: that source is not in the library or not in the run; nothing was written.
 
-## Step 7: topic pages
+## Step 9: topic pages
 
-Take the topics from the record of step 6.
+Take the topics from the record of step 8.
 
 - Weak tier: python3 scripts/ingest.py pages --library <library> --topic "<topic>" (repeat --topic for each). The pages are built by the script from the cards; do not write or edit them.
 - Strong tier: for each topic, read every cards file holding a card of that topic, then write the page as references/pages-strong.md says, to <work>/pages/<topic>.md. Then python3 scripts/ingest.py check-page --library <library> --topic "<topic>" --page <work>/pages/<topic>.md --write. Exit 3: the output lists unknown links (passages no card holds) and missing ones (cards the page does not cite); rewrite the page once to fix exactly those and check again. Still failing: build that page with ingest.py pages --topic "<topic>" instead and say so in the report.
 
-## Step 8: ingest report
+## Step 10: ingest report
 
-Reply with: sources filed (new and new versions), files archived, cards written per source, cards dropped with their reasons, topics added or merged, topic pages rebuilt and how (script or written and checked). Name the work folder only when a file there is useful to the user.
+Reply with: sources filed (new and new versions), files archived, cards written per source, cards dropped with their reasons, topics added or merged, entities added or recorded as aliases, topic pages rebuilt and how (script or written and checked). Name the work folder only when a file there is useful to the user.
 
 ## Libraries in Google Drive
 
 The scripts run on a staging folder in the work folder that is laid out like the library:
 
 1. Before step 3: make <work>/stage. read _kb.json and the spec into it. list the cards folder and read every cards file into <work>/stage/<cards_dir>/. For each source of the run, find_exact its name in the sources folder and, when present, read it into <work>/stage/<sources_dir>/.
-2. Run steps 3 to 7 with --library <work>/stage. add-topic changes the staged spec.
-3. After the user confirms (step 5) and the scripts have run, deliver what changed, folder by folder:
+2. Run steps 3 to 9 with --library <work>/stage. add-topic and entities --apply change the staged spec. For step 6, list the sources folder and write the names to <work>/sources.txt, one per line, and add --known <work>/sources.txt: a candidate marked "read": true is a library source not yet staged; read it into <work>/stage/<sources_dir>/ and run versions again.
+3. After the user confirms (step 7) and the scripts have run, deliver what changed, folder by folder:
    - For each file the record lists under archived: move_rename its Drive copy into the archive folder's subfolder of the same name (ensure_folder first), under the name the script gave it in <work>/stage/<archive_dir>/.
    - write_new each source and cards file the run wrote.
-   - For each topic page rebuilt and the spec when add-topic changed it: move_rename the Drive copy into the archive folder under <name><old_suffix><YYYYMMDDHHMMSS>.md, then write_new the new one.
+   - For each topic page rebuilt and the spec when add-topic or entities --apply changed it: move_rename the Drive copy into the archive folder under <name><old_suffix><YYYYMMDDHHMMSS>.md, then write_new the new one.
    - find_exact each written name once more: exactly one copy must remain.
 4. Report written and failed files. A permission error stops the delivery at once: the connected account needs edit rights on the folder.
 
 ## Hard rules
 
 1. Never write a card whose quote did not pass the check, and never write a conclusion that is not on a card.
-2. Never invent topics: a new topic is added only after the user agrees to it, never a new partition number.
-3. Never edit or delete a source. Older versions move to the archive folder.
+2. Never invent topics: a new topic is added only after the user agrees to it, never a new partition number. New entities and aliases reach Table E only through the confirmed preview.
+3. Never edit or delete a source. Older versions move to the archive folder, and a source under another name is treated as a new version only after the user confirms the pair.
 4. Never write a topic page by hand in the weak tier; a strong-tier page is written only through check-page.
 5. Material is not searchable until its run is finished. Do not answer questions from a run that has not been filed.
 6. Replies follow the library language and preferences.output (references/environment.md).

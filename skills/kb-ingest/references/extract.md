@@ -18,6 +18,7 @@ A card is one claim taken from one source, with the exact sentence it rests on. 
 - conclusion: the claim in one plain sentence, in the library language. It says what the quote says and nothing more: no inference, no advice, no judgement.
 - topic: one topic from the topic list of the library (<work>/topics.txt), spelled as there. When none fits, write the closest category name; the user decides about it later.
 - entities: names of organisations, projects, systems or products the quote mentions, as written in the source. [] when there are none. Never personal data.
+- entity_types: only for entities that are not in the spec's Table E (its names and aliases), your suggested type for each: {"Riverside Clinic": "organisation"}. One of project, team (a department or team), organisation, system (a system or product) or other. Leave it out when every entity is in the table; the user confirms the types in the preview.
 - event_date: only when the quote itself states the date of the event, as YYYY-MM-DD. Leave it out otherwise; never guess a year.
 
 ## What deserves a card
