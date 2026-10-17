@@ -28,8 +28,7 @@ class InstallOptionsTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.home = self.p("home")
         os.makedirs(self.p("home", ".claude"))
-        self.env = dict(os.environ, HOME=self.home, USERPROFILE=self.home, APPDATA=self.p("home", "appdata"),
-                        XDG_CONFIG_HOME=self.p("home", ".config"), PYTHONIOENCODING="utf-8")
+        self.env = dict(os.environ, HOME=self.home, XDG_CONFIG_HOME=self.p("home", ".config"), PYTHONIOENCODING="utf-8")
         self.env.pop("KB_LIBRARIES", None)
         self.existing = self.p("home", "atlas")
         write(os.path.join(self.existing, "_kb.json"), json.dumps({"schema": 2, "label": "Atlas"}))

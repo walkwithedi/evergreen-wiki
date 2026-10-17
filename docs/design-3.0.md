@@ -4,7 +4,7 @@ Status: in progress. Each step below is its own pull request and refines this do
 
 ## 1. Scope
 
-- 3.0 serves one setting: an offline workstation (Kylin or Ubuntu) where OpenCode runs a privately deployed model. Libraries are local folders; every step that can be decided mechanically is done by a script.
+- 3.0 serves one setting: an offline Kylin workstation where OpenCode runs a privately deployed model. Libraries are local folders; every step that can be decided mechanically is done by a script.
 - Everything outside that setting leaves the repository: the Google Drive backend, the ChatGPT versions of the skills, the strong tier, the Claude Code plugin manifests, and the code paths for Windows and macOS.
 - 2.0.x stays available for Google Drive libraries and ChatGPT; no further 2.0.x releases are made. 1.x libraries are still not migrated.
 
@@ -25,7 +25,7 @@ Status: in progress. Each step below is its own pull request and refines this do
 ## 4. Agent and platform
 
 - OpenCode is the agent 3.0 is tested with. The installer offers the folders OpenCode reads: its own (~/.config/opencode/skills), ~/.agents/skills and ~/.claude/skills; other agents that read these folders may work but are not tested. The instructions line goes into OpenCode's AGENTS.md.
-- Linux only: the Windows registry and state locations, the Windows link handling and the macOS and Windows CI jobs are removed. Handling of file names and archives made on other systems (GBK names, __MACOSX folders) stays, since material comes from anywhere.
+- Kylin only: the Windows registry and state locations, the Windows link handling and the macOS and Windows CI jobs are removed, and so are the platform checks in the tests. CI runs on Ubuntu, which stands in for Kylin, with Python 3.8, the version Kylin V10 ships. Handling of file names and archives made on other systems (GBK names, __MACOSX folders) stays, since material comes from anywhere.
 - doc2kb no longer asks for a tier; --tier stays on the command line for older scripts and picks its limit (weak 20,000, strong 100,000 characters).
 
 ## 5. Steps

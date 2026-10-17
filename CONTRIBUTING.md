@@ -4,7 +4,7 @@ Thanks for helping.
 
 ## How to start
 
-1. Pick an issue. Ones labelled good first issue are small and self-contained; help wanted ones need someone with a particular setup (OpenCode with a local model, a Kylin or Ubuntu workstation). Say in the issue that you are taking it.
+1. Pick an issue. Ones labelled good first issue are small and self-contained; help wanted ones need someone with a particular setup (OpenCode with a local model, a Kylin workstation). Say in the issue that you are taking it.
 2. Fork the repository, make a branch, and open a pull request against main. The template lists the checks; CI runs them again on four platforms.
 3. Not sure about an idea? Open an issue first and describe the problem before writing code.
 

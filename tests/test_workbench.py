@@ -19,7 +19,6 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SETUP = os.path.join(ROOT, "tools", "opencode-setup")
 WORKBENCH = os.path.join(ROOT, "tools", "workbench")
 LAUNCHER = "启动OpenCode工作台.desktop"
-HAS_BASH = os.name == "posix" and shutil.which("bash") is not None and shutil.which("setsid") is not None
 
 
 def read(path):
@@ -64,7 +63,6 @@ class FakeModel:
         self.server.server_close()
 
 
-@unittest.skipUnless(HAS_BASH, "needs bash and setsid")
 class OpencodeSetupTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
@@ -165,7 +163,6 @@ class BundleTest(unittest.TestCase):
         self.assertIn("$d/evergreen-wiki/tools/workbench", text.replace("\\", ""))
 
 
-@unittest.skipUnless(os.name == "posix", "the wizard runs on Linux desktops")
 class WizardServerTest(unittest.TestCase):
     def test_wizard_finds_the_tools_of_this_repository(self):
         tmp = tempfile.mkdtemp()

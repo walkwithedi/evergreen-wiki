@@ -14,7 +14,7 @@ A ready-to-use offline workbench: [opencode-setup](../opencode-setup/README.md) 
 
 ## Requirements
 
-- As for opencode-setup: Kylin or Ubuntu, bash 4.4+, python3 3.8+, Node 22+, opencode installed, an existing OpenCode configuration.
+- As for opencode-setup: Kylin, bash 4.4+, python3 3.8+, Node 22+, opencode installed, an existing OpenCode configuration.
 - A browser with `fetch` and `EventSource` (a recent Firefox or Chromium).
 - Optional: `pdftotext` (poppler-utils); without it PDFs are read whole, more slowly.
 - No network access and no packages to install.

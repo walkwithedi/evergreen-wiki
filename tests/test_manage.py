@@ -31,8 +31,7 @@ class ManageTest(unittest.TestCase):
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.home = self.p("home")
-        self.env = dict(os.environ, HOME=self.home, USERPROFILE=self.home, APPDATA=self.p("home", "appdata"),
-                        XDG_CONFIG_HOME=self.p("home", ".config"), PYTHONIOENCODING="utf-8")
+        self.env = dict(os.environ, HOME=self.home, XDG_CONFIG_HOME=self.p("home", ".config"), PYTHONIOENCODING="utf-8")
         self.env.pop("KB_LIBRARIES", None)
         os.makedirs(self.p("home", ".config", "opencode"))
         self.claude_md = self.p("home", ".config", "opencode", "AGENTS.md")
@@ -190,16 +189,10 @@ class ManageTest(unittest.TestCase):
         reg["libraries"] += [{"id": "home", "label": "Home", "scope": "s", "backend": {"type": "local", "root": "~"}},
                              {"id": "plain", "label": "Plain", "scope": "s",
                               "backend": {"type": "local", "root": plain}}]
-        linked = False
         link = self.p("home", "link")
-        try:
-            os.symlink(self.lib, link)
-            linked = True
-        except OSError as e:  # no right to create links (Windows without developer mode)
-            print(f"symbolic link case left out: {e}", file=sys.stderr)
-        if linked:
-            reg["libraries"].append({"id": "link", "label": "Link", "scope": "s",
-                                     "backend": {"type": "local", "root": link}})
+        os.symlink(self.lib, link)
+        reg["libraries"].append({"id": "link", "label": "Link", "scope": "s",
+                                 "backend": {"type": "local", "root": link}})
         write(self.registry, json.dumps(reg))
         # only the real library is offered: one question for it, then the plain confirmation
         p = self.manage(["uninstall"], ["y", "n", "y"])
@@ -207,8 +200,7 @@ class ManageTest(unittest.TestCase):
         self.assertEqual(p.stdout.count("Delete "), 1)
         self.assertIn("not offered: Home", p.stdout)
         self.assertIn("not offered: Plain", p.stdout)
-        if linked:
-            self.assertIn("not offered: Link", p.stdout)
+        self.assertIn("not offered: Link", p.stdout)
         self.assertTrue(os.path.isdir(self.lib))
         self.assertTrue(os.path.isfile(os.path.join(plain, "a.md")))
 
