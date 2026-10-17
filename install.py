@@ -1,22 +1,20 @@
 #!/usr/bin/env python3
-"""Install the evergreen-wiki skills into an agent's user-level skills folder.
+"""Install the evergreen-wiki skills for OpenCode.
 
 Interactive (recommended the first time):
   python3 install.py                          asks a few questions, installs the skills, can set up
                                               a local knowledge base, registers it and tells your
                                               agent it exists; previews everything before writing
 Usage:
-  python3 install.py --target agents          ~/.agents/skills (read by several agents)
-  python3 install.py --target claude-code     ~/.claude/skills
-  python3 install.py --target gemini          ~/.gemini/skills
   python3 install.py --target opencode        ~/.config/opencode/skills
-  python3 install.py --target codex           ~/.codex/skills
+  python3 install.py --target agents          ~/.agents/skills (also read by OpenCode and other agents)
+  python3 install.py --target claude-code     ~/.claude/skills (also read by OpenCode)
   python3 install.py --dest /some/skills/dir  any folder
 Options: --locale zh (Chinese descriptions), --descriptions FILE (your own descriptions, in the shape of
 locales/*/descriptions.json), --link (symlink instead of copy, for development), --force (replace an
 existing install), --dry-run, --wizard (interactive even without a terminal); for the wizard, --agent
-answers that question in advance. A new library is a 2.0 work library; its tier is weak for OpenCode
-and strong for the other agents, and can be changed in the preview.
+answers that question in advance. A new library is a work library whose topic pages are built by
+the scripts.
 
 Afterwards (details in kb_manage.py):
   python3 install.py backup                   back up the skills, the knowledge-base line and the registry
@@ -26,10 +24,9 @@ Afterwards (details in kb_manage.py):
                                               unless you pick them
 Replacing skills, a registry or an instructions file backs up the present state first.
 
-Claude Code users can also install as a plugin:  /plugin marketplace add walkwithedi/evergreen-wiki
-claude.ai users upload the zips from the Releases page in Settings > Capabilities > Skills.
-Folder locations change between agent versions; check your agent's documentation if a
-skill does not show up, and use --dest.
+OpenCode is the agent this release is tested with; other agents that read Agent Skills from these
+folders may work but are not tested. Folder locations change between versions; check the agent's
+documentation if a skill does not show up, and use --dest.
 """
 import argparse
 import json
@@ -47,12 +44,10 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 SKILLS = ["kb-note", "kb-query", "kb-ingest"]
 HOME = os.path.expanduser("~")
 TARGETS = {
-    # target: (path, verified against the agent's own documentation)
+    # target: (path, verified against OpenCode's documentation); OpenCode reads all three
+    "opencode": (os.path.join(HOME, ".config", "opencode", "skills"), True),
     "agents": (os.path.join(HOME, ".agents", "skills"), True),
     "claude-code": (os.path.join(HOME, ".claude", "skills"), True),
-    "gemini": (os.path.join(HOME, ".gemini", "skills"), True),
-    "opencode": (os.path.join(HOME, ".config", "opencode", "skills"), True),
-    "codex": (os.path.join(HOME, ".codex", "skills"), False),
 }
 
 
@@ -110,22 +105,19 @@ def install_one(name, dest_root, a, desc):
 # Interactive setup. The questions and defaults are the ones init mode uses
 # (skills/kb-ingest/references/init.md); the files come from the same script.
 
-AGENT_ORDER = ["claude-code", "codex", "gemini", "opencode", "agents"]
-AGENT_NAMES = {"claude-code": "Claude Code", "codex": "Codex", "gemini": "Gemini CLI",
-               "opencode": "OpenCode", "agents": "~/.agents/skills (several agents)"}
-# The tier a new library gets by agent: OpenCode usually runs a local model (scripts build the topic
-# pages); the others run models that write them.
-TIER_BY_AGENT = {"opencode": "weak"}
-AGENT_HOMES = {"claude-code": os.path.join(HOME, ".claude"), "codex": os.path.join(HOME, ".codex"),
-               "gemini": os.path.join(HOME, ".gemini"), "opencode": os.path.join(HOME, ".config", "opencode"),
-               "agents": os.path.join(HOME, ".agents")}
-# The file each agent always reads, where one line tells it the libraries exist:
-# (path, verified against the agent's own documentation)
+# The skills folders OpenCode reads: its own first, then ~/.agents/skills and ~/.claude/skills, which
+# other agents read too.
+AGENT_ORDER = ["opencode", "agents", "claude-code"]
+AGENT_NAMES = {"opencode": "OpenCode", "agents": "~/.agents/skills (OpenCode and other agents)",
+               "claude-code": "~/.claude/skills (OpenCode and Claude Code)"}
+AGENT_HOMES = {"opencode": os.path.join(HOME, ".config", "opencode"), "agents": os.path.join(HOME, ".agents"),
+               "claude-code": os.path.join(HOME, ".claude")}
+# The file the agent always reads, where one line tells it the libraries exist:
+# (path, verified against the agent's own documentation). OpenCode reads its own AGENTS.md, and
+# CLAUDE.md when it has none.
 INSTRUCTION_FILES = {
-    "claude-code": (os.path.join(HOME, ".claude", "CLAUDE.md"), True),
-    "gemini": (os.path.join(HOME, ".gemini", "GEMINI.md"), True),
-    "codex": (os.path.join(HOME, ".codex", "AGENTS.md"), False),
     "opencode": (os.path.join(HOME, ".config", "opencode", "AGENTS.md"), False),
+    "claude-code": (os.path.join(HOME, ".claude", "CLAUDE.md"), True),
 }
 # Where backup and uninstall look besides the folders this installer recorded.
 MANAGE_DEFAULTS = {"skill_dirs": [p for p, _ in TARGETS.values()],
@@ -137,7 +129,6 @@ MSG = {
         "found": "found on this computer",
         "other": "another folder",
         "folder": "Skills folder",
-        "plugin_note": "Already installed the Claude Code plugin? Then answer n to the next question.",
         "install": "Install kb-note, kb-query and kb-ingest into {dest}?",
         "replace": "{names} already installed there. Replace with this version?",
         "unverified": "note: this folder is not confirmed by the agent's documentation; if the skills do not show up, run again and choose another folder.",
@@ -149,9 +140,7 @@ MSG = {
         "q_id": "Short id (lowercase letters, digits, hyphens)",
         "id_taken": "The id {id!r} is already registered; using {new!r}. Change it in the preview if you like.",
         "preview": "Preview",
-        "items": ["Folder", "Label", "Id", "Scope", "Language", "Timezone", "Tier"],
-        "tiers": [("weak", "weak: scripts build the topic pages (local models)"),
-                  ("strong", "strong: the assistant writes them, a script checks every citation (Claude, ChatGPT)")],
+        "items": ["Folder", "Label", "Id", "Scope", "Language", "Timezone"],
         "files": "Files to create",
         "folders": "Folders to create",
         "registry": "Registry entry, added to {path}",
@@ -161,7 +150,7 @@ MSG = {
         "line": "Your agent only consults the knowledge base when it knows one exists. Line for {path} ({what}):",
         "line_added": "added", "line_updated": "updated", "line_unchanged": "already there",
         "line_ok": "Write it?",
-        "line_paste": "Add this line to the instructions your agent always reads (AGENTS.md, CLAUDE.md, GEMINI.md or similar):",
+        "line_paste": "Add this line to the instructions your agent always reads (AGENTS.md):",
         "skipped_line": "Not written. Add the line above yourself when you are ready.",
         "done": "Done. Restart your agent, then try:",
         "tries": ['"note this: the review meeting moves to Friday"', '"ingest these" with documents attached',
@@ -170,7 +159,7 @@ MSG = {
         "bad": "Not valid: {err}",
         "existing": "{root} already holds a library. It can be registered as it is; nothing in the folder changes.",
         "existing_items": ["Folder", "Label", "Id", "Scope"],
-        "old_library": "{root} holds a 1.x library. 2.0 does not migrate 1.x libraries: keep using the 1.x release for it, or choose an empty folder for a 2.0 library and ingest the material again.",
+        "old_library": "{root} holds a 1.x library. This release does not migrate 1.x libraries: keep using the 1.x release for it, or choose an empty folder for a new library and ingest the material again.",
         "registered_only": "Library {root} registered in {path} as it is.",
         "upgraded": "Skills upgraded: {skills}.",
         "was": "{name} {new} (was {old})", "new_skill": "{name} {new} (new)",
@@ -182,7 +171,6 @@ MSG = {
         "found": "本机已检测到",
         "other": "其他文件夹",
         "folder": "技能文件夹",
-        "plugin_note": "已经装过 Claude Code 插件的，下一题回答 n 即可。",
         "install": "把 kb-note、kb-query、kb-ingest 装到 {dest}？",
         "replace": "{names} 已经装在那里。替换为当前版本？",
         "unverified": "提示：该文件夹未经此助手官方文档确认；若技能没有出现，请重新运行并选择其他文件夹。",
@@ -194,9 +182,7 @@ MSG = {
         "q_id": "简短 id（小写字母、数字、连字符）",
         "id_taken": "id {id!r} 已被登记，改用 {new!r}；可以在预览里修改。",
         "preview": "预览",
-        "items": ["文件夹", "名称", "id", "范围", "语言", "时区", "档位"],
-        "tiers": [("weak", "weak 弱档：由脚本拼主题页（本地模型）"),
-                  ("strong", "strong 强档：由助手写主题页，脚本核对每条引用（Claude、ChatGPT）")],
+        "items": ["文件夹", "名称", "id", "范围", "语言", "时区"],
         "files": "将创建的文件",
         "folders": "将创建的文件夹",
         "registry": "注册表条目，写入 {path}",
@@ -206,7 +192,7 @@ MSG = {
         "line": "助手只有知道你有知识库时才会去查。要写入 {path} 的一行（{what}）：",
         "line_added": "新增", "line_updated": "更新已有的一行", "line_unchanged": "已存在，无需改动",
         "line_ok": "写入吗？",
-        "line_paste": "请把这一行加到助手每次都会读的指令文件里（AGENTS.md、CLAUDE.md、GEMINI.md 等）：",
+        "line_paste": "请把这一行加到助手每次都会读的指令文件里（AGENTS.md）：",
         "skipped_line": "未写入。准备好后请自行添加上面这一行。",
         "done": "完成。重启助手后可以试试：",
         "tries": ["「记一下：评审会改到周五」", "附上文档说「入库」", "「试点的事最后怎么定的？」"],
@@ -214,7 +200,7 @@ MSG = {
         "bad": "无效：{err}",
         "existing": "{root} 里已经有知识库，可以按原样登记，不改动文件夹里的任何文件。",
         "existing_items": ["文件夹", "名称", "id", "范围"],
-        "old_library": "{root} 里是 1.x 的知识库。2.0 不迁移 1.x 的库：这个库可以继续用已发布的 1.x 版本，或另选一个空文件夹新建 2.0 库，再把材料重新入库。",
+        "old_library": "{root} 里是 1.x 的知识库。本版本不迁移 1.x 的库：这个库可以继续用已发布的 1.x 版本，或另选一个空文件夹新建知识库，再把材料重新入库。",
         "registered_only": "已把 {root} 按原样登记到 {path}。",
         "upgraded": "技能已升级：{skills}。",
         "was": "{name} {new}（原 {old}）", "new_skill": "{name} {new}（新装）",
@@ -267,7 +253,7 @@ def choose_dest(q, m, agent=None, agent_default=None):
             print(m["unverified"])
         return agent, TARGETS[agent][0]
     found = [t for t in AGENT_ORDER if os.path.isdir(AGENT_HOMES[t])]
-    default = agent_default if agent_default in TARGETS else (found[0] if found else "agents")
+    default = agent_default if agent_default in AGENT_ORDER else "opencode"
     opts = [(t, f"{AGENT_NAMES[t]}  ({TARGETS[t][0]}){'  - ' + m['found'] if t in found else ''}")
             for t in AGENT_ORDER]
     opts.append(("other", m["other"]))
@@ -302,8 +288,6 @@ def skill_descriptions(lang, descriptions=None):
 
 
 def install_skills(q, m, target, dest_root, lang, descriptions=None):
-    if target == "claude-code":
-        print(m["plugin_note"])
     if not q.yes(m["install"].format(dest=dest_root)):
         return
     present = [n for n in SKILLS if os.path.lexists(os.path.join(dest_root, n))]
@@ -408,13 +392,13 @@ def register_existing(q, m, il, lang, reg_path, root, s):
 def library_settings(il, s):
     """Validate through the same code the skill uses; returns the completed settings."""
     ns = argparse.Namespace(preset=s["preset"], label=s["label"], id=s["id"], scope=s["scope"],
-                            language=s["language"], timezone=s["timezone"], tier=s["tier"], date=None)
+                            language=s["language"], timezone=s["timezone"], date=None)
     return il.settings(ns)
 
 
 def show_preview(m, il, s, root, reg_path, entry):
     files, folders = il.build_files(s)
-    values = [root, s["label"], s["id"], s["scope"], s["language"], s["timezone"], s["tier"]]
+    values = [root, s["label"], s["id"], s["scope"], s["language"], s["timezone"]]
     print(f"\n{m['preview']}")
     for i, (k, v) in enumerate(zip(m["items"], values), 1):
         print(f"  {i}. {k}: {v}")
@@ -432,15 +416,12 @@ def edit_item(q, m, il, s, root, n):
             if not existing:
                 return new
             print(m["bad"].format(err=m["existing"].format(root=new)))
-    if n == 7:
-        s["tier"] = q.choose(item, m["tiers"], s["tier"])
-    else:
-        key = ["", "label", "id", "scope", "language", "timezone"][n - 1]
-        s[key] = q.ask(item, s[key])
+    key = ["", "label", "id", "scope", "language", "timezone"][n - 1]
+    s[key] = q.ask(item, s[key])
     return root
 
 
-def setup_library(q, m, il, lang, tier="strong"):
+def setup_library(q, m, il, lang):
     reg_path = il.registry_path()
     reg = il.load_registry_or_new(reg_path, lang)
     taken = [lib.get("id") for lib in reg.get("libraries", [])]
@@ -451,7 +432,6 @@ def setup_library(q, m, il, lang, tier="strong"):
     if not q.yes(m["setup"]):
         return None
     s = il.defaults("work", lang)
-    s["tier"] = tier
     new_id = free_id(s["id"], taken)
     if new_id != s["id"]:
         print(m["id_taken"].format(id=s["id"], new=new_id))
@@ -546,14 +526,12 @@ def usable_library(reg):
     return False
 
 
-def upgrade(asker=Asker, lang="en", places=None, default_root=None, instructions=None, descriptions=None,
-            tier="weak"):
+def upgrade(asker=Asker, lang="en", places=None, default_root=None, instructions=None, descriptions=None):
     """Replaces the knowledge-base skills with this release, asking nothing about where or whether.
     places maps a skill to the skills folder its copy in effect is in; a skill without one goes to
     default_root. The present state is backed up first. With a usable library the libraries stay as they
     are and only the knowledge-base line in instructions (a file path, or None to show it) is refreshed,
-    after a question when it changes; without one the library questions of the wizard follow, a new library
-    getting tier."""
+    after a question when it changes; without one the library questions of the wizard follow."""
     sys.path.insert(0, os.path.join(ROOT, "skills", "kb-ingest", "scripts"))
     import init_library as il
     q = asker(lang)
@@ -579,7 +557,7 @@ def upgrade(asker=Asker, lang="en", places=None, default_root=None, instructions
         write_line(q, m, il, instructions, verified, reg, lang)
         print(m["kept"])
         return
-    reg = setup_library(q, m, il, lang, tier)
+    reg = setup_library(q, m, il, lang)
     if reg is None:
         print(m["later"])
         return
@@ -592,8 +570,7 @@ def upgrade(asker=Asker, lang="en", places=None, default_root=None, instructions
 def wizard(asker=Asker, lang=None, agent=None, descriptions=None, agent_default=None):
     """asker(lang) returns the object that asks the questions. lang and agent (a --target name) answer
     those questions in advance; descriptions is a file that replaces the skill descriptions; agent_default
-    is the agent (a --target name) chosen beforehand when that question is asked. A new library's tier
-    follows the agent (TIER_BY_AGENT, else strong)."""
+    is the agent (a --target name) chosen beforehand when that question is asked."""
     sys.path.insert(0, os.path.join(ROOT, "skills", "kb-ingest", "scripts"))
     import init_library as il
     il.kbconf.utf8_stdio()
@@ -607,7 +584,7 @@ def wizard(asker=Asker, lang=None, agent=None, descriptions=None, agent_default=
     try:
         target, dest_root = choose_dest(q, m, agent, agent_default)
         install_skills(q, m, target, dest_root, lang, descriptions)
-        reg = setup_library(q, m, il, lang, TIER_BY_AGENT.get(target, "strong"))
+        reg = setup_library(q, m, il, lang)
         if reg is None:
             print(m["later"])
             return
@@ -648,7 +625,7 @@ def main():
         except (OSError, ValueError) as e:
             ap.error(str(e))
     if a.wizard or not (a.target or a.dest):
-        # Both ends must be a terminal: on Windows the NUL device reports isatty() as true.
+        # Both ends must be a terminal.
         if not a.wizard and not (sys.stdin.isatty() and sys.stdout.isatty()):
             ap.error("give --target or --dest, or run without options in a terminal for interactive setup")
         if a.locale or a.link or a.force or a.dry_run:
@@ -664,7 +641,7 @@ def main():
         dest_root, verified = TARGETS[a.target]
         if not verified:
             print(f"note: the {a.target} skills folder ({dest_root}) is not confirmed by its official "
-                  "documentation; if the skills do not show up, try --target agents or --dest.")
+                  "documentation; if the skills do not show up, try --target opencode or --dest.")
     desc = load_descriptions(a.descriptions) if a.descriptions else None
     if a.locale:
         with open(os.path.join(ROOT, "locales", a.locale, "descriptions.json"), encoding="utf-8") as f:

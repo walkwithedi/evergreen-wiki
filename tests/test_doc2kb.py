@@ -21,7 +21,6 @@ import kb_batch  # noqa: E402
 import doc2kb_fixtures as fx  # noqa: E402
 
 HAS_PDF = shutil.which("pdftotext") is not None
-HAS_BASH = os.name != "nt" and shutil.which("bash") is not None
 
 
 def run(args, check=True, env=None, cwd=None):
@@ -357,7 +356,6 @@ class ConfigTest(Tmp):
         self.assertEqual(copies["skills/kb-ingest/scripts/doc2kb_core.py"], "shared/scripts/doc2kb_core.py")
 
 
-@unittest.skipUnless(HAS_BASH, "needs bash")
 class ShellTest(Tmp):
     def sh(self, *args, lang="en"):
         return run(["bash", os.path.join(TOOL, "doc2kb.sh"), *args], check=False, env={"DOC2KB_LANG": lang})
@@ -492,12 +490,12 @@ class KbBatchTest(Tmp):
         with open(os.path.join(lib, "_kb.json"), "w", encoding="utf-8") as f:
             json.dump({"tier": "strong"}, f)
         self.assertEqual(kb_batch.batch_limit(), (20000, "weak"))
-        self.assertEqual(kb_batch.batch_limit(library=lib), (100000, "strong"))
-        self.assertEqual(kb_batch.batch_limit("weak", library=lib), (20000, "weak"))
-        self.assertEqual(kb_batch.batch_limit(chars=5000, library=lib), (5000, "strong"))
+        self.assertEqual(kb_batch.batch_limit(library=lib), (20000, "weak"))  # a library's tier is ignored
+        self.assertEqual(kb_batch.batch_limit("strong", library=lib), (100000, "strong"))
+        self.assertEqual(kb_batch.batch_limit(chars=5000, library=lib), (5000, "weak"))
         with open(os.path.join(lib, "_kb.json"), "w", encoding="utf-8") as f:
             json.dump({"tier": "strong", "batch_chars": 30000}, f)
-        self.assertEqual(kb_batch.batch_limit(library=lib), (30000, "strong"))
+        self.assertEqual(kb_batch.batch_limit(library=lib), (30000, "weak"))
         for bad in ({"tier": "medium"}, {"chars": 10}):
             with self.assertRaises(ValueError):
                 kb_batch.batch_limit(**bad)
@@ -520,7 +518,6 @@ class KbBatchTest(Tmp):
         self.assertEqual(len(names), 2)
         self.assertRegex(sorted(set(names) - set(first))[0], r"^src_\d{8}-\d{4}_b01\.md$")
 
-    @unittest.skipUnless(sys.platform.startswith("linux") and HAS_BASH, "Linux desktops with bash")
     def test_dialog_kb_batch(self):
         fx.build_all(self.p("src"), english=True)
         out = self.p("out")
@@ -537,7 +534,6 @@ case "$args" in
   *"--multiple"*) echo "%s" ;;
   *"--directory"*) echo "%s" ;;
   *"--checklist"*) echo "KB batch files|Expand workbooks" ;;
-  *"— Tier"*) echo "strong" ;;
   *"--progress"*) cat >/dev/null ;;
   *"--text-info"*) exit 1 ;;
 esac
@@ -553,7 +549,8 @@ exit 0
         names = [n for n in os.listdir(out) if re.search(r"_b\d+\.md$", n)]
         self.assertEqual(len(names), 1, os.listdir(out))
         text = read(os.path.join(out, names[0]))
-        self.assertIn("Tier: strong", text)
+        self.assertIn("Character limit: 20000", text)
+        self.assertNotIn("— Tier", read(self.p("calls.log")))
         self.assertIn("# S02 report-en.docx", text)
         self.assertFalse(os.path.isdir(os.path.join(out, "images")))
 

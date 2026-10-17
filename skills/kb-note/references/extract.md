@@ -28,7 +28,7 @@ A card is one claim taken from one source, with the exact sentence it rests on. 
 - Skip greetings, headings, tables of contents, page furniture, signatures and the converter's notes.
 - Never put a claim from one source on another source's card, even when they say the same.
 
-## Weak tier: one source at a time
+## One source at a time
 
 Read one source section (or one part), write its cards, then move on. Do not carry claims over from a source read earlier. A source that holds nothing worth a card gets no cards; say so in the report.
 

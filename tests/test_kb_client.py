@@ -133,7 +133,6 @@ class Server:
         self.proc.stderr.close()
 
 
-@unittest.skipUnless(os.name == "posix", "the client runs on Linux desktops")
 class KbClientTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
@@ -241,7 +240,7 @@ class KbClientTest(unittest.TestCase):
         self.assertEqual(len(previews), 2)
         self.assertEqual([o["value"] for o in previews[0]["options"]], ["write", "change", "cancel"])
         items = next(q for q in asked if q["kind"] == "choose" and q["options"][0]["value"] == "1")
-        self.assertEqual(len(items["options"]), 7)
+        self.assertEqual(len(items["options"]), 6)
         self.assertEqual(json.loads(read(self.p("home", "kb", "work", "_kb.json")))["label"], "Team")
 
     def test_preview_cancelled_with_a_choice(self):
@@ -537,7 +536,6 @@ class ChatEvents:
         self.c.close()
 
 
-@unittest.skipUnless(os.name == "posix", "the client runs on Linux desktops")
 class ChatTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
@@ -712,7 +710,7 @@ class ChatTest(unittest.TestCase):
     def test_chat_first(self):
         work = self.p("home", "projects", "atlas")
         os.makedirs(work)
-        work = os.path.realpath(work)  # the temporary folder may be under a link to a system folder (/var on macOS)
+        work = os.path.realpath(work)  # the temporary folder may be under a link
         ev = self.start("", "--chat-first")
         ev.until(lambda e: e["type"] == "agent" and e["state"] == "ready", "ready")
         s = self.server
@@ -1178,7 +1176,6 @@ class ChatTest(unittest.TestCase):
         self.assertEqual(s.post("/api/chat/open", {"session": "nope"})[0], 404)
 
 
-@unittest.skipUnless(sys.platform.startswith("linux") and shutil.which("bash"), "Linux desktops with bash")
 class FindOpenCodeTest(unittest.TestCase):
     """OpenCode where a desktop session does not look: a common install folder, a ~/.bashrc function."""
 
@@ -1233,7 +1230,6 @@ class FindOpenCodeTest(unittest.TestCase):
         self.ready(s)
 
 
-@unittest.skipUnless(os.name == "posix", "the client runs on Linux desktops")
 class DecideTest(unittest.TestCase):
     """Which permission requests the client answers itself (agent.decide)."""
 
@@ -1383,7 +1379,7 @@ class DecideTest(unittest.TestCase):
                                 ("python3 scripts/ingest.py file b01.md --cards a.jsonl --library l", "ingest file"),
                                 ("python3 scripts/ingest.py pages --library l --topic Pilot", "ingest pages"),
                                 ("python3 scripts/ingest.py add-topic --library l --topic Pilot", "ingest add"),
-                                ("python3 scripts/ingest.py check-page --library l --topic T --page p.md", "ingest check"),
+                                ("python3 scripts/ingest.py retopic a.jsonl --from A --to B", "ingest retopic"),
                                 ("python3 scripts/init_library.py plan --root r", "init_library plan"),
                                 ("python3 scripts/ingest.py --help", ""),
                                 ("python3 scripts/quote_check.py --help", ""), ("python3 other.py", ""),
@@ -1406,7 +1402,6 @@ class DecideTest(unittest.TestCase):
                 self.assertFalse(self.ok("bash", bad))
 
 
-@unittest.skipUnless(os.name == "posix", "the client runs on Linux desktops")
 class GraphTest(unittest.TestCase):
     """The links between a library's files (kb_client.graph)."""
 
@@ -1476,7 +1471,6 @@ class GraphTest(unittest.TestCase):
         self.assertLessEqual(len(g["nodes"]), 3)
 
 
-@unittest.skipUnless(os.name == "posix", "the client runs on Linux desktops")
 class IdleTest(unittest.TestCase):
     def test_stops_without_the_page(self):
         tmp = tempfile.mkdtemp()
@@ -1487,7 +1481,6 @@ class IdleTest(unittest.TestCase):
         self.assertEqual(s.proc.wait(15), 0)
 
 
-@unittest.skipIf(os.name == "nt", "desktop entries are for Linux desktops")
 class DesktopEntryTest(unittest.TestCase):
     """Both double-click entries, at the top of the folder and in tools/kb-client, start kb_client.py."""
 
@@ -1501,12 +1494,10 @@ class DesktopEntryTest(unittest.TestCase):
             self.assertEqual(out.stdout.strip(), os.path.realpath(os.path.dirname(TOOL)), entry)
 
 
-
 def skill_md(name, desc, version=""):
     return f"---\nname: {name}\ndescription: {desc}\n---\n\n# {name}\n" + (f"\nVersion: {version}\n" if version else "")
 
 
-@unittest.skipUnless(os.name == "posix", "the client runs on Linux desktops")
 class SkillsTest(unittest.TestCase):
     """The Skills section: listing, the lock on the knowledge-base skills, backup and restore, import, new."""
 
@@ -1604,7 +1595,6 @@ class SkillsTest(unittest.TestCase):
         self.assertFalse(os.path.exists(self.p("evil")))
 
 
-@unittest.skipUnless(os.name == "posix", "the client runs on Linux desktops")
 class SkillCommandTest(unittest.TestCase):
     def test_skill_command_on_several_lines(self):
         tmp = tempfile.mkdtemp()

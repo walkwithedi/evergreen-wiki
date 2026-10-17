@@ -450,8 +450,8 @@ class Feed:
 # The skill scripts whose runs mark a stage of an ingest run on the page: script name, then the
 # subcommands that count (None: any). Only these fixed names reach the page, never the command line itself.
 STAGE_SCRIPTS = {"doc2kb_core": None, "quote_check": ("check", "write"), "kb_batch": ("split",),
-                 "ingest": ("file", "pages", "topics", "add", "retopic", "check"), "pick_materials": None,
-                 "init_library": ("plan", "write", "render", "register", "instructions")}
+                 "ingest": ("file", "pages", "topics", "add", "retopic"), "pick_materials": None,
+                 "init_library": ("plan", "write", "register", "instructions")}
 SCRIPT_RE = re.compile(r"(?:^|[\s/'\"])(\w+)\.py['\"]?(?:\s+([a-z]+))?")
 
 

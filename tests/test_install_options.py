@@ -28,8 +28,7 @@ class InstallOptionsTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.home = self.p("home")
         os.makedirs(self.p("home", ".claude"))
-        self.env = dict(os.environ, HOME=self.home, USERPROFILE=self.home, APPDATA=self.p("home", "appdata"),
-                        XDG_CONFIG_HOME=self.p("home", ".config"), PYTHONIOENCODING="utf-8")
+        self.env = dict(os.environ, HOME=self.home, XDG_CONFIG_HOME=self.p("home", ".config"), PYTHONIOENCODING="utf-8")
         self.env.pop("KB_LIBRARIES", None)
         self.existing = self.p("home", "atlas")
         write(os.path.join(self.existing, "_kb.json"), json.dumps({"schema": 2, "label": "Atlas"}))
@@ -44,8 +43,7 @@ class InstallOptionsTest(unittest.TestCase):
                               encoding="utf-8", env=self.env)
 
     def registry(self):
-        path = self.p("home", "appdata", "kb", "kb-libraries.json") if os.name == "nt" \
-            else self.p("home", ".config", "kb", "kb-libraries.json")
+        path = self.p("home", ".config", "kb", "kb-libraries.json")
         return json.loads(read(path))
 
     def test_existing_library_is_registered_as_it_is(self):
@@ -99,15 +97,16 @@ class InstallOptionsTest(unittest.TestCase):
                  for lib in self.registry()["libraries"]]
         self.assertEqual(roots, [os.path.normpath(new)])
 
-    def test_new_library_tier_follows_the_agent(self):
-        for agent, tier in (("opencode", "weak"), ("claude-code", "strong")):
+    def test_new_library_has_no_tier(self):
+        for agent in ("opencode", "claude-code"):
             new = self.p("home", "kb", agent)
             # language, install, set up, folder, scope, confirm, line
             p = self.install(["--wizard", "--agent", agent], ["2", "", "", new, "team projects", "", ""])
             self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
             kb = json.loads(read(os.path.join(new, "_kb.json")))
-            self.assertEqual((kb["schema"], kb["tier"]), (2, tier), agent)
-            self.assertIn("Tier: " + tier, p.stdout)
+            self.assertEqual(kb["schema"], 2, agent)
+            self.assertNotIn("tier", kb)
+            self.assertNotIn("Tier", p.stdout)
             self.assertNotIn("Which kind of library", p.stdout)
             self.assertEqual(sorted(n for n in os.listdir(new) if not os.path.isdir(os.path.join(new, n))),
                              ["00_Spec.md", "00_Status-Card.md", "_kb.json"])
@@ -172,7 +171,7 @@ class AgentDefaultTest(unittest.TestCase):
         self.assertIn("claude-code", asked[0][1])
         plain, _ = self.choose()
         self.assertEqual(self.choose(agent_default="no-such-agent")[0], plain)
-        self.assertEqual(self.choose(agent="codex", agent_default="opencode"), ("codex", []))
+        self.assertEqual(self.choose(agent="agents", agent_default="opencode"), ("agents", []))
 
 
 class InstallOneTest(unittest.TestCase):

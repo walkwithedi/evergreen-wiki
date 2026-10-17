@@ -79,8 +79,8 @@ MSG = {
         "move_none": "No registered library on this computer can be moved.",
         "move_to": "Choose the folder to move the library into. The library keeps its folder name.",
         "batch_src": "Choose the folder with the documents to turn into batch files (Word, Excel, PowerPoint, PDF, mail). They are only read.",
-        "batch_lib": "Which library are they for? Its tier sets the size of a batch.",
-        "batch_no_lib": "none yet (weak tier: 20,000 characters per batch)",
+        "batch_lib": "Which library are they for? Its settings give the size of a batch.",
+        "batch_no_lib": "none yet (20,000 characters per batch)",
         "batch_out": "Choose the folder for the batch files. It stays after the client is closed, so the files can be copied and uploaded.",
         "batch_no_src": "{path} is not a folder.",
         "batch_not_empty": "{path} is not empty; choose a new or empty folder.",
@@ -114,8 +114,8 @@ MSG = {
         "move_none": "本机没有可以移动的已登记知识库。",
         "move_to": "选择要把知识库移到哪个文件夹里。知识库的文件夹名不变。",
         "batch_src": "选择放文档的文件夹（Word、Excel、PowerPoint、PDF、邮件），要转成批文件。文档只读不改。",
-        "batch_lib": "这些材料要入哪个知识库？批的大小按它的档位定。",
-        "batch_no_lib": "还没有（按弱档：每批 20000 字符）",
+        "batch_lib": "这些材料要入哪个知识库？批的大小按它的设置定。",
+        "batch_no_lib": "还没有（每批 20000 字符）",
         "batch_out": "选择批文件放在哪个文件夹。客户端关闭后仍保留，可以拷走上传。",
         "batch_no_src": "{path} 不是文件夹。",
         "batch_not_empty": "{path} 不是空文件夹，请选新的或空的文件夹。",
@@ -440,7 +440,7 @@ def run_action(action, asker, lang, options, lib_id=None):
         # each skill where OpenCode reads it now; a missing one goes to OpenCode's own folder
         places = {x["name"]: os.path.dirname(x["folder"]) for x in kb_skills()["found"]}
         install.upgrade(asker, lang, places, skills_admin.own_folder(), instructions_file(),
-                        options.get("descriptions"), tier="weak")
+                        options.get("descriptions"))
         return None
     if action.startswith("skill_"):
         try:
@@ -478,8 +478,8 @@ def _inside(path, folder):
 
 
 def batch_step(q, lang, job=None):
-    """Build batch files for kb-ingest with doc2kb: the material folder, the library whose tier sets the
-    batch size, a new or empty output folder outside every library. 0 when done, 1 when refused."""
+    """Build batch files for kb-ingest with doc2kb: the material folder, the library whose settings give
+    the batch size, a new or empty output folder outside every library. 0 when done, 1 when refused."""
     m = MSG[lang]
     src = q.ask(m["batch_src"], kind="folder")
     if not src or not os.path.isdir(src):

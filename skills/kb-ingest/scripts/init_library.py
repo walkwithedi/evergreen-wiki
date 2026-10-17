@@ -8,18 +8,13 @@ Subcommands (results on stdout, logs on stderr):
   defaults  [--preset P] [--language L]       suggested label, id, scope, timezone and language
   plan      --root DIR --preset P [options]   preview of what write would create; exit 3 if refused
   write     --root DIR --preset P [options]   create the library (local folder)
-  render    --out DIR  --preset P [options]   write the same files into DIR for upload (Drive)
-  register  --registry FILE --id ID --label L --scope S --type local|gdrive --root R [--dry-run]
+  register  --registry FILE --id ID --label L --scope S --type local --root R [--dry-run]
   instructions --registry FILE [--language L] [--file F [--apply]] [--project-block]
             print the instructions line, or update it in F, or print a block to paste
-            into claude.ai Project instructions (the line plus the registry)
-  instructions --drive-folder ID [--language L]
-            print the one line for claude.ai Project instructions when the registry lives in
-            Google Drive (kb-libraries.json in that folder); it never changes when libraries are added
+            into project instructions (the line plus the registry)
 
-Options for plan/write/render: --label --id --scope --language --timezone --tier weak|strong --date.
-Missing options take the values printed by defaults (tier: the preset's, weak). A new library is a 2.0
-library: _kb.json (schema 2), the spec, the status card and the folders for sources, cards, topics
+Options for plan/write: --label --id --scope --language --timezone --date.
+Missing options take the values printed by defaults. A new library is _kb.json (schema 2), the spec, the status card and the folders for sources, cards, topics
 and the archive.
 
 Exit codes: 0 ok, 2 bad input, 3 refused (folder holds Markdown files, id already used).
@@ -57,15 +52,6 @@ LINE_TAIL = {
     "en": ". For questions about these, use kb-query before searching code or answering from memory; "
           "to save something, use kb-note; to add documents, use kb-ingest.",
     "zh": "。相关问题先用 kb-query 查知识库，再查代码或凭记忆回答；要记录用 kb-note；要入库用 kb-ingest。",
-}
-# One line for a registry kept in Google Drive. The "registry: ..." part is what the skills
-# look for (references/config.md), so it stays in English in every language.
-DRIVE_LINE = {
-    "en": "I keep knowledge bases; their list and scopes are in Google Drive "
-          "(registry: Google Drive folder {folder}, file kb-libraries.json). For questions my knowledge "
-          "bases may answer, use kb-query before searching code or answering from memory; to save something, use kb-note.",
-    "zh": "我有知识库，库的清单与范围在 Google Drive 里（registry: Google Drive folder {folder}, file kb-libraries.json）。"
-          "可能记在知识库里的问题，先用 kb-query 查知识库，再查代码或凭记忆回答；要记录用 kb-note。",
 }
 REGISTRY_HEADING = {"en": "Knowledge base registry (kb-libraries.json):", "zh": "知识库注册表（kb-libraries.json）："}
 
@@ -122,9 +108,8 @@ def defaults(preset=None, language=None):
     out = {"language": language, "timezone": detect_timezone()}
     if preset:
         label, scope = PRESET_DEFAULTS[preset][language]
-        kb = load_preset_kb(preset)
-        out.update({"preset": preset, "id": preset, "label": label, "scope": scope,
-                    "tier": kb.get("tier", "weak")})
+        load_preset_kb(preset)
+        out.update({"preset": preset, "id": preset, "label": label, "scope": scope})
     return out
 
 
@@ -148,7 +133,6 @@ def settings(a):
     for k, v in s.items():
         if not v:
             s[k] = d[k]
-    s["tier"] = getattr(a, "tier", None) or d["tier"]
     s["date"] = getattr(a, "date", None) or datetime.now(local_tz(s["timezone"])).strftime("%Y-%m-%d")
     problems = kbconf.check_timezone(s["timezone"])
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", s["id"]):
@@ -170,8 +154,7 @@ def local_tz(name):
 def build_files(s):
     """Return [(relative path, text)] for a new library, and the folders to create."""
     kb = load_preset_kb(s["preset"])
-    kb.update({"label": s["label"], "preset": s["preset"], "language": s["language"], "timezone": s["timezone"],
-               "tier": s.get("tier") or kb.get("tier", "weak")})
+    kb.update({"label": s["label"], "preset": s["preset"], "language": s["language"], "timezone": s["timezone"]})
     problems = kbconf.validate(kb)
     if problems:
         raise kbconf.ConfigError("generated _kb.json: " + "; ".join(problems))
@@ -211,7 +194,7 @@ def check_root(root):
 def plan_text(root, s, files, folders):
     lines = [f"Library: {s['label']} (id {s['id']}) | preset {s['preset']} | {root}",
              f"Scope: {s['scope']}",
-             f"Language: {s['language']} | timezone: {s['timezone']} | tier: {s['tier']}",
+             f"Language: {s['language']} | timezone: {s['timezone']}",
              "Files:"]
     lines += [f"  {p}" for p, _ in files]
     lines.append("Folders: " + ", ".join(folders))
@@ -299,14 +282,8 @@ def instructions_line(reg, language=None):
 
 
 def is_our_line(line):
-    """Both forms (libraries listed, or registry in Drive) start with the same words."""
+    """Our line starts with the same words in every language."""
     return any(line.lstrip().startswith(p.strip().rstrip(":：")) for p in LINE_PREFIX.values())
-
-
-def drive_line(folder, language=None):
-    if not re.fullmatch(r"[A-Za-z0-9_-]{10,}", folder or ""):
-        raise kbconf.ConfigError(f"not a Drive folder ID: {folder!r}")
-    return DRIVE_LINE[lang_key(language)].format(folder=folder)
 
 
 def upsert_line(text, line):
@@ -351,23 +328,21 @@ def main():
     p = sub.add_parser("defaults")
     p.add_argument("--preset", choices=PRESETS)
     p.add_argument("--language")
-    for c in ("plan", "write", "render"):
+    for c in ("plan", "write"):
         p = sub.add_parser(c)
-        p.add_argument("--out" if c == "render" else "--root", required=True)
+        p.add_argument("--root", required=True)
         p.add_argument("--preset", required=True, choices=PRESETS)
         for opt in ("label", "id", "scope", "language", "timezone", "date"):
             p.add_argument("--" + opt)
-        p.add_argument("--tier", choices=list(kbconf.TIERS))
     p = sub.add_parser("register")
     p.add_argument("--registry")
     for opt in ("id", "label", "scope", "root"):
         p.add_argument("--" + opt, required=True)
-    p.add_argument("--type", required=True, choices=["local", "gdrive"])
+    p.add_argument("--type", default="local", choices=["local"])
     p.add_argument("--language")
     p.add_argument("--dry-run", action="store_true")
     p = sub.add_parser("instructions")
     p.add_argument("--registry")
-    p.add_argument("--drive-folder")
     p.add_argument("--language")
     p.add_argument("--file")
     p.add_argument("--apply", action="store_true")
@@ -386,14 +361,6 @@ def main():
             if a.cmd == "write":
                 write_files(root, files, folders)
                 print(f"result: written {len(files)} files and {len(folders)} folders")
-        elif a.cmd == "render":
-            s = settings(a)
-            out = os.path.abspath(os.path.expanduser(a.out))
-            check_root(out)
-            files, folders = build_files(s)
-            write_files(out, files, [])
-            print(plan_text(out, s, files, folders))
-            print(f"result: rendered {len(files)} files; create the folders in the library: {', '.join(folders)}")
         elif a.cmd == "register":
             path = registry_path(a.registry)
             entry = registry_entry(a.id, a.label, a.scope, a.type, a.root)
@@ -401,8 +368,6 @@ def main():
             print(f"registry: {path}")
             print(json.dumps(entry, ensure_ascii=False))
             print("result: " + ("would add" if a.dry_run else "added"))
-        elif a.cmd == "instructions" and a.drive_folder:
-            print(drive_line(a.drive_folder, a.language))
         elif a.cmd == "instructions":
             path = registry_path(a.registry)
             reg = kbconf.load_json(path)

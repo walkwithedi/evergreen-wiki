@@ -1,6 +1,6 @@
 ---
 name: kb-note
-description: Saves a small piece of information from the conversation into the user's knowledge base (an evergreen 2.0 library) at once, as a source with cards, so it can be found right away. Use when the user says "note this", "save this", "add this to my knowledge base", "jot this down" or similar, for example "note this: send the draft plan to Alex by Friday". Keeps the user's words as a new source, takes cards from them (each a conclusion with the exact sentence it rests on, checked by a script), files them and rebuilds the topic pages they touch; asks first only when the note brings a new topic or entity. Use only when the user asks; never save on your own or ask whether to save. Requests aimed at the assistant's own memory ("remember that", "from now on") are not for this skill. Ingesting documents and setting up libraries belong to kb-ingest; questions belong to kb-query.
+description: Saves a small piece of information from the conversation into the user's knowledge base (an evergreen library) at once, as a source with cards, so it can be found right away. Use when the user says "note this", "save this", "add this to my knowledge base", "jot this down" or similar, for example "note this: send the draft plan to Alex by Friday". Keeps the user's words as a new source, takes cards from them (each a conclusion with the exact sentence it rests on, checked by a script), files them and rebuilds the topic pages they touch; asks first only when the note brings a new topic or entity. Use only when the user asks; never save on your own or ask whether to save. Requests aimed at the assistant's own memory ("remember that", "from now on") are not for this skill. Ingesting documents and setting up libraries belong to kb-ingest; questions belong to kb-query.
 ---
 
 # Quick notes: save a piece of the conversation
@@ -25,9 +25,9 @@ Load the registry. Match the content against each library's scope.
 1. The user named a library: use it.
 2. Exactly one scope fits: use it.
 3. None or several fit: ask "Which library: <labels>?" in one sentence. Never default.
-Then read that library's backend file (references/backend-gdrive.md or references/backend-local.md), its _kb.json (language, timezone, tier, names; schema 1 is a 1.x library this release does not write: say so) and its spec.
+Then read references/backend-local.md, the library's _kb.json (language, timezone, names; schema 1 is a 1.x library this release does not write: say so) and its spec.
 
-Writing needs Python (hard rule 5). Without it, or for a library in Google Drive without a tool that writes there, do not write: show the note's words in the reply and say that saving needs a code environment.
+Writing needs Python (hard rule 5). Without it, do not write: show the note's words in the reply and say that saving needs a code environment.
 
 ## Step 3: the note as a source
 
@@ -47,9 +47,9 @@ It prints the batch file of a one-source run: the source "Note <YYYYMMDD-HHMM> <
 
 1. When the entity report listed any name: python3 scripts/ingest.py entities <work>/accepted.jsonl --library <library> --apply (with --map when the user chose aliases or types).
 2. python3 scripts/ingest.py file <batch file> --cards <work>/accepted.jsonl --library <library>
-3. Topic pages, for the topics in the record: weak tier, python3 scripts/ingest.py pages --library <library> --topic "<topic>" (repeat --topic); strong tier, write each page as references/pages-strong.md says and run python3 scripts/ingest.py check-page --library <library> --topic "<topic>" --page <work>/pages/<topic>.md --write (a page that fails twice is built with pages instead).
+3. Topic pages, for the topics in the record: python3 scripts/ingest.py pages --library <library> --topic "<topic>" (repeat --topic).
 
-A library in Google Drive is worked on a staging folder and written back after the scripts ran, as references/backend-gdrive.md, "Writing an ingest run", describes. On a write failure, retry once; if it still fails, give the reason and show the note's words in the reply.
+On a write failure, retry once; if it still fails, give the reason and show the note's words in the reply.
 
 ## Step 6: reply
 

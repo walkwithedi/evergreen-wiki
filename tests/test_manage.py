@@ -31,17 +31,16 @@ class ManageTest(unittest.TestCase):
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.home = self.p("home")
-        self.env = dict(os.environ, HOME=self.home, USERPROFILE=self.home, APPDATA=self.p("home", "appdata"),
-                        XDG_CONFIG_HOME=self.p("home", ".config"), PYTHONIOENCODING="utf-8")
+        self.env = dict(os.environ, HOME=self.home, XDG_CONFIG_HOME=self.p("home", ".config"), PYTHONIOENCODING="utf-8")
         self.env.pop("KB_LIBRARIES", None)
-        os.makedirs(self.p("home", ".claude"))
-        self.claude_md = self.p("home", ".claude", "CLAUDE.md")
+        os.makedirs(self.p("home", ".config", "opencode"))
+        self.claude_md = self.p("home", ".config", "opencode", "AGENTS.md")
         write(self.claude_md, "# Mine\n")
         self.lib = self.p("home", "kb", "work")
         # language, agent, install, set up, folder, scope, confirm preview, write line
         p = self.run_install(["--wizard"], ["2", "", "", "", self.lib, "team projects", "", ""])
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
-        self.skill = self.p("home", ".claude", "skills", "kb-note", "SKILL.md")
+        self.skill = self.p("home", ".config", "opencode", "skills", "kb-note", "SKILL.md")
         with mock.patch.dict(os.environ, self.env, clear=True):
             self.registry = kb_manage.registry_path()
             self.state = kb_manage.state_dir()
@@ -62,7 +61,7 @@ class ManageTest(unittest.TestCase):
 
     def test_install_is_recorded(self):
         st = json.loads(read(os.path.join(self.state, "state.json")))
-        self.assertEqual(st["skills_dirs"], [self.p("home", ".claude", "skills")])
+        self.assertEqual(st["skills_dirs"], [self.p("home", ".config", "opencode", "skills")])
         self.assertEqual(st["instruction_files"], [self.claude_md])
 
     def test_backup_and_rollback(self):
@@ -99,7 +98,7 @@ class ManageTest(unittest.TestCase):
 
     def test_force_install_backs_up_first(self):
         write(self.skill, "local edit\n")
-        p = self.run_install(["--target", "claude-code", "--force"])
+        p = self.run_install(["--target", "opencode", "--force"])
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         self.assertIn("backup: the present state is saved as", p.stdout)
         self.assertIn("name: kb-note", read(self.skill))
@@ -163,7 +162,7 @@ class ManageTest(unittest.TestCase):
     def test_uninstall_keeps_libraries_by_default(self):
         p = self.manage(["uninstall"], ["", "y"])
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
-        self.assertFalse(os.path.exists(self.p("home", ".claude", "skills", "kb-note")))
+        self.assertFalse(os.path.exists(self.p("home", ".config", "opencode", "skills", "kb-note")))
         self.assertFalse(os.path.exists(self.registry))
         self.assertFalse(os.path.exists(self.state))
         self.assertEqual(read(self.claude_md), "# Mine\n")
@@ -190,16 +189,10 @@ class ManageTest(unittest.TestCase):
         reg["libraries"] += [{"id": "home", "label": "Home", "scope": "s", "backend": {"type": "local", "root": "~"}},
                              {"id": "plain", "label": "Plain", "scope": "s",
                               "backend": {"type": "local", "root": plain}}]
-        linked = False
         link = self.p("home", "link")
-        try:
-            os.symlink(self.lib, link)
-            linked = True
-        except OSError as e:  # no right to create links (Windows without developer mode)
-            print(f"symbolic link case left out: {e}", file=sys.stderr)
-        if linked:
-            reg["libraries"].append({"id": "link", "label": "Link", "scope": "s",
-                                     "backend": {"type": "local", "root": link}})
+        os.symlink(self.lib, link)
+        reg["libraries"].append({"id": "link", "label": "Link", "scope": "s",
+                                 "backend": {"type": "local", "root": link}})
         write(self.registry, json.dumps(reg))
         # only the real library is offered: one question for it, then the plain confirmation
         p = self.manage(["uninstall"], ["y", "n", "y"])
@@ -207,8 +200,7 @@ class ManageTest(unittest.TestCase):
         self.assertEqual(p.stdout.count("Delete "), 1)
         self.assertIn("not offered: Home", p.stdout)
         self.assertIn("not offered: Plain", p.stdout)
-        if linked:
-            self.assertIn("not offered: Link", p.stdout)
+        self.assertIn("not offered: Link", p.stdout)
         self.assertTrue(os.path.isdir(self.lib))
         self.assertTrue(os.path.isfile(os.path.join(plain, "a.md")))
 

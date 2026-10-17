@@ -903,16 +903,8 @@ has_opt() { printf '|%s|' "$OPTS" | grep -qF "|$1|"; }
 RUN_ARGS=(--lang "$UI_LANG" "${SINCE_ARG[@]}")
 KBB=0
 if has_opt "$O_KBB"; then
-    TIER=$(zenity --list --radiolist \
-        --title="$TITLE — $(t "Tier" "档位")" \
-        --text="$(t "Which assistant ingests these batch files?" "这些批文件交给哪一档模型入库？")" \
-        --column="$(t "Pick" "选择")" --column="$(t "Tier" "档位")" --column="$(t "Description" "说明")" \
-        TRUE  weak   "$(t "Models with limited reasoning, such as local models through OpenCode: 20,000 characters per batch" "推理能力有限的模型，如通过 OpenCode 运行的本地模型：每批 2 万字符")" \
-        FALSE strong "$(t "Claude or ChatGPT clients: 100,000 characters per batch" "Claude、ChatGPT 客户端：每批 10 万字符")" \
-        --height=260 --width=660 2>/dev/null)
-    [ -z "$TIER" ] && exit 0
     KBB=1
-    RUN_ARGS+=(--kb-batch --tier "$TIER")
+    RUN_ARGS+=(--kb-batch)
 elif has_opt "$O_MERGE"; then
     RUN_ARGS+=(--merge)
 fi
