@@ -122,10 +122,15 @@ Scripts prepare each decision; the owner confirms. Nothing in this section is wr
 
 - A Drive library is used from an AI client (Claude, ChatGPT) through the skills. Batch files are built locally with doc2kb and uploaded.
 - The quote check and page assembly scripts run in the client's code environment. Without a code environment, the skills refuse to write to the library; reading and answering still work.
+- This holds for every write and every backend: ingesting, notes, status-card updates and setting up a library. Each skill's hard rules say "Without a code environment (Python), write nothing to the library and say so; reading and answering still work.", and the by-hand ways of writing are gone.
 
 ### 6.3 ChatGPT
 
 ChatGPT uses the same skills; each skill also ships a prompt version (prompt.md) carrying the same rules, for clients that take instructions instead of skill folders.
+
+- prompt.md is at most 8000 characters, so it fits a custom GPT's instructions. It sums up the steps and holds every hard rule of SKILL.md word for word (scripts/check_repo.py checks the length, the version and the rules).
+- Each release attaches <skill>-<version>-chatgpt.zip: <skill>-prompt.md and <skill>-files.zip, the skill folder as it is. The prompt has ChatGPT unpack the files zip once in its Python tool, so SKILL.md, the references, the scripts and the presets keep their paths.
+- Writing to a library needs the Python tool and write access to the library's Drive folder; without either, nothing is written.
 
 ## 7. Skills and tools
 
@@ -261,6 +266,6 @@ Each step is a pull request; the 2.0 release comes after the last one.
    - 4a. Version candidates and the alias table: ingest.py versions, file --replaces and entities; the kb-ingest steps and preview that use them.
    - 4b. Conflict lists with restore, status-card review marks and the status-card rewrite check (ingest.py conflicts, file --restore, status-check); the kb-ingest step and preview that use them.
 5. kb-query: weak-tier card selection, quoted answers checked by a script and confirmed status-card updates; kb-note on the new pipeline, without a quick-notes folder.
-6. prompt.md versions for ChatGPT; Drive libraries without a code environment refuse writes.
+6. prompt.md versions for ChatGPT, with -chatgpt.zip release assets and check_repo checks; no write without a code environment, for every skill and backend.
 7. kb-client pages "Build batch file" and "Waiting for confirmation".
 8. Documentation (README, methodology) and the 2.0 release.

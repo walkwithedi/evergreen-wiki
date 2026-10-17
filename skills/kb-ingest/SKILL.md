@@ -33,7 +33,7 @@ The summary files (status card, spec, indexes) sit in the library root. Beside t
 4. The tier is _kb.json "tier": weak or strong. Missing: strong when you are a Claude or ChatGPT client, weak otherwise (OpenCode or a local model), and say which you assumed.
 5. First line of the reply: Library: <label> (tier <tier>). From here on, read and write only inside that library.
 
-A library in Google Drive needs a code environment to run the scripts. Without one, stop before step 2: say that writing to the library needs a code environment and that reading and questions still work.
+Every library needs a code environment to run the scripts (hard rule 8). Without one, stop before step 2: say that writing to the library needs a code environment and that reading and questions still work.
 
 ## Step 1: batch files
 
@@ -146,3 +146,4 @@ The scripts run on a staging folder in the work folder that is laid out like the
 5. Material is not searchable until its run is finished. Do not answer questions from a run that has not been filed.
 6. Replies follow the library language and preferences.output (references/environment.md).
 7. Never rewrite the status card without ingest.py status-check (references/config.md, section 2); review marks are added only by the filing script.
+8. Without a code environment (Python), write nothing to the library and say so; reading and answering still work.

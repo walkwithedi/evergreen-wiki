@@ -4,6 +4,7 @@
 | --- | --- |
 | `kb-note-<version>.zip`, `kb-query-<version>.zip`, `kb-ingest-<version>.zip` | claude.ai or the Claude apps: upload each in Settings > Capabilities > Skills. 在 claude.ai 或 Claude App 的设置里逐个上传。 |
 | the same ending in `-zh.zip` | the same with Chinese trigger phrases. 中文口令版，中文用户上传这三个。 |
+| the same ending in `-chatgpt.zip` | ChatGPT: `<skill>-prompt.md` goes into a custom GPT's instructions (or is uploaded to a project with a one-line instruction naming it), `<skill>-files.zip` is uploaded beside it. ChatGPT 用：prompt 放进自定义 GPT 的指令（或上传到项目），files.zip 一并上传。 |
 | `evergreen-wiki-v<version>.zip` | everything: skills, `install.py` (setup, backup, rollback, move, uninstall), tools/kb-client (the same steps in the browser; double-click kb-client.desktop at the top of the folder), tools/doc2kb, sample library, docs. For terminal agents without git, computers without network, or the page in the browser on a Linux desktop. 完整包：没有 git、电脑不能联网或在 Linux 桌面上用浏览器页面安装时用这个（双击最上层的 kb-client.desktop 打开页面）。 |
 | `doc2kb-v<version>.zip` | the document converter alone. 只要文档转换器时用。 |
 

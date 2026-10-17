@@ -11,6 +11,9 @@
   5. Presets and the sample library pass kbconf validation (schema 2); presets hold the spec with its
      {{DATE}} placeholder and the status card, in every translation.
   6. Plugin manifests are valid JSON and carry the skills version.
+  7. Every skill has prompt.md, its ChatGPT version: at most PROMPT_MAX characters (it must fit a
+     custom GPT's instructions), the same "Version:" line, and every line of the SKILL.md section
+     "## Hard rules" word for word.
 Exit code 1 on any problem.
 """
 import glob
@@ -27,6 +30,7 @@ SKILLS = ["kb-note", "kb-query", "kb-ingest"]
 ENV_WORDS = ["search_files", "read_file_content", "download_file_content", "create_file", "update_file",
              "get_file_metadata", "present_files", "/home/claude", "/mnt/user-data", "application/vnd.google-apps"]
 ENV_ALLOWED = {"backend-gdrive.md", "backend-local.md", "environment.md"}
+PROMPT_MAX = 8000
 problems = []
 
 
@@ -73,6 +77,40 @@ def check_skills():
             if len(loc[s]) > 1024:
                 bad(f"{os.path.relpath(p, ROOT)}: {s} description too long")
     return next(iter(versions.values()), None)
+
+
+def hard_rules(skill_md):
+    """The numbered lines of the "## Hard rules" section, or None when there is no such section."""
+    m = re.search(r"^## Hard rules\s*$(.*?)(?=^## |\Z)", skill_md, re.M | re.S)
+    if not m:
+        return None
+    return [ln.strip() for ln in m.group(1).split("\n") if re.match(r"^\d+\. ", ln.strip())]
+
+
+def check_prompts(root, skills):
+    """Problems with the skills' prompt.md files (check 7)."""
+    out = []
+    for s in skills:
+        skill_md = read(os.path.join(root, "skills", s, "SKILL.md"))
+        path = os.path.join(root, "skills", s, "prompt.md")
+        if not os.path.isfile(path):
+            out.append(f"{s}: no prompt.md (the ChatGPT version)")
+            continue
+        prompt = read(path)
+        if len(prompt) > PROMPT_MAX:
+            out.append(f"{s}/prompt.md: {len(prompt)} characters, longer than {PROMPT_MAX}")
+        want = re.search(r"^Version: (\S+)$", skill_md, re.M)
+        got = re.search(r"^Version: (\S+)$", prompt, re.M)
+        if not got or not want or got.group(1) != want.group(1):
+            out.append(f"{s}/prompt.md: version {got.group(1) if got else None} differs from SKILL.md")
+        rules = hard_rules(skill_md)
+        if rules is None:
+            out.append(f"{s}/SKILL.md: no Hard rules section")
+            continue
+        for rule in rules:
+            if rule not in prompt:
+                out.append(f"{s}/prompt.md: hard rule missing: {rule[:60]}")
+    return out
 
 
 def check_env_words():
@@ -142,6 +180,8 @@ def main():
     check_hardcoded_names()
     check_libraries()
     check_manifests(version)
+    for msg in check_prompts(ROOT, SKILLS):
+        bad(msg)
     print("result: " + (f"{len(problems)} problems" if problems else "ok"))
     sys.exit(1 if problems else 0)
 

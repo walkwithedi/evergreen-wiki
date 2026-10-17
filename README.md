@@ -52,6 +52,7 @@ Every release on the [Releases](../../releases) page carries these files:
 | --- | --- | --- |
 | `kb-note-<version>.zip`, `kb-query-<version>.zip`, `kb-ingest-<version>.zip` | one skill each, English trigger phrases | uploading the skills to claude.ai or the Claude apps |
 | the same names ending in `-zh.zip` | the same skills with Chinese trigger phrases | the same, in Chinese |
+| the same names ending in `-chatgpt.zip` | each skill's prompt (`<skill>-prompt.md`, at most 8000 characters) and its files (`<skill>-files.zip`) | ChatGPT: put the prompt into a custom GPT's instructions and upload the files zip as knowledge; or upload all three skills' files to one project, with a project instruction saying which prompt file to follow for questions, notes and ingesting. Writing to a library needs the Python tool and write access to its Drive folder |
 | `evergreen-wiki-v<version>.zip` | the whole repository: skills, `install.py` with its backup, rollback, move and uninstall commands, tools/kb-client, tools/doc2kb, the sample library and the docs | installing for a terminal agent without git, on a computer without network, or from the page in the browser on a Linux desktop |
 | `doc2kb-v<version>.zip` | the document converter alone | converting folders of documents to Markdown without the skills |
 

@@ -39,6 +39,7 @@
 | --- | --- | --- |
 | `kb-note-<版本>.zip`、`kb-query-<版本>.zip`、`kb-ingest-<版本>.zip` | 每个一个技能，英文口令 | 上传到 claude.ai 或 Claude App |
 | 同名但以 `-zh.zip` 结尾 | 同样的技能，中文口令 | 同上，中文用户用这三个 |
+| 同名但以 `-chatgpt.zip` 结尾 | 每个技能的提示词（`<技能>-prompt.md`，不超过 8000 字符）和文件包（`<技能>-files.zip`） | ChatGPT：提示词放进自定义 GPT 的指令，文件包作为知识文件上传；或者把三个技能的文件都上传到一个项目，在项目指令里写明提问、随手记、入库各按哪份提示词做。写库需要 Python 工具和该 Drive 文件夹的写权限 |
 | `evergreen-wiki-v<版本>.zip` | 完整仓库：技能、带备份/回滚/移动/卸载命令的 `install.py`、tools/kb-client、tools/doc2kb、示例知识库和文档 | 没有 git 时给终端助手安装、电脑不能联网时安装，或在 Linux 桌面上用浏览器页面安装 |
 | `doc2kb-v<版本>.zip` | 只有文档转换器 | 只想把文档目录转成 Markdown，不装技能 |
 
