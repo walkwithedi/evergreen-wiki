@@ -95,6 +95,7 @@ class KbconfTest(Tmp):
         self.assertIn("scope", problems)
 
 
+@unittest.skipIf(os.name == "nt", "fake zenity is a shell script")
 class PickMaterialsTest(Tmp):
     """pick_materials.py against a fake zenity that replays scripted answers."""
 
