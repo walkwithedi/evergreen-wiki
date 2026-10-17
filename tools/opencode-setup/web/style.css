@@ -1,0 +1,205 @@
+:root {
+  --bg: #f5f6f4;
+  --panel: #ffffff;
+  --ink: #1f2328;
+  --muted: #5f6670;
+  --line: #d9dcd6;
+  --accent: #2b62a8;
+  --accent-ink: #ffffff;
+  --good: #2f7a4f;
+  --warn: #8a5a00;
+  --bad: #b0302a;
+  --info: #3d5f8a;
+  --good-bg: #e8f4ec;
+  --warn-bg: #fbf3e0;
+  --bad-bg: #fbe9e7;
+  --info-bg: #e9eff7;
+  --log: #f2f3f0;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17191b;
+    --panel: #202326;
+    --ink: #e7e9ea;
+    --muted: #a2a8ae;
+    --line: #363a3e;
+    --accent: #6fa3e0;
+    --accent-ink: #0d1a2a;
+    --good: #7fc29d;
+    --warn: #e0b45a;
+    --bad: #ef8a83;
+    --info: #9bb8dc;
+    --good-bg: #1f2d25;
+    --warn-bg: #2f2817;
+    --bad-bg: #33201e;
+    --info-bg: #1e2733;
+    --log: #1a1d1f;
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.6 system-ui, -apple-system, "Segoe UI", "Noto Sans CJK SC", "Noto Sans SC", "WenQuanYi Micro Hei", sans-serif;
+}
+h1 { font-size: 19px; margin: 0; }
+h2 { font-size: 16px; margin: 0 0 12px; }
+h3 { font-size: 15px; margin: 0 0 4px; }
+p { margin: 0 0 8px; }
+
+button {
+  font: inherit;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 7px 16px;
+  cursor: pointer;
+}
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; padding: 9px 24px; }
+button.danger { color: var(--bad); }
+button.quiet { background: transparent; }
+button.link { background: none; border: 0; padding: 0; color: var(--accent); font-size: 14px; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+input[type=password], input[type=text] {
+  font: inherit;
+  font-family: ui-monospace, "DejaVu Sans Mono", monospace;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 7px 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.conn { flex: 1; font-size: 14px; }
+.conn.bad { color: var(--bad); font-weight: 600; }
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) 1fr;
+  gap: 20px;
+  padding: 20px;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+@media (max-width: 820px) {
+  .layout { grid-template-columns: 1fr; padding: 12px 16px; }
+}
+
+.side-head { display: flex; align-items: baseline; justify-content: space-between; }
+.cards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.card {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left-width: 4px;
+}
+.card .dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 7px; flex: none; background: var(--muted); }
+.card b { font-weight: 600; }
+.card p { margin: 2px 0 0; font-size: 13px; color: var(--muted); word-break: break-all; }
+.card.ok { border-left-color: var(--good); }
+.card.ok .dot { background: var(--good); }
+.card.warn { border-left-color: var(--warn); background: var(--warn-bg); }
+.card.warn .dot { background: var(--warn); }
+.card.bad { border-left-color: var(--bad); background: var(--bad-bg); }
+.card.bad .dot { background: var(--bad); }
+.card.info { border-left-color: var(--info); }
+.card.info .dot { background: var(--info); }
+
+.work { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 18px 20px;
+}
+
+.step { display: flex; gap: 14px; padding: 14px 0; border-top: 1px solid var(--line); }
+.step:first-of-type { border-top: 0; }
+.num {
+  flex: none;
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700;
+}
+.step-body { flex: 1; min-width: 0; }
+.hint { color: var(--muted); font-size: 14px; }
+.hint.small { font-size: 13px; margin-top: 6px; }
+.ak-row { display: flex; gap: 8px; }
+
+.more { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 4px; }
+.buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.buttons.right { justify-content: flex-end; }
+
+.notice { padding: 10px 12px; border-radius: 8px; }
+.notice.bad { background: var(--bad-bg); color: var(--bad); font-weight: 600; }
+
+.run-head { display: flex; align-items: baseline; gap: 12px; }
+.run-head h2 { margin: 0; }
+.elapsed { flex: 1; color: var(--muted); font-size: 13px; }
+.result {
+  margin: 12px 0 0;
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+}
+.result.ok { background: var(--good-bg); color: var(--good); }
+.result.warn { background: var(--warn-bg); color: var(--warn); }
+.result.bad { background: var(--bad-bg); color: var(--bad); }
+.log {
+  margin: 12px 0 0;
+  padding: 12px;
+  background: var(--log);
+  border-radius: 8px;
+  max-height: 460px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font: 13px/1.55 ui-monospace, "DejaVu Sans Mono", "Noto Sans Mono CJK SC", monospace;
+}
+.log .ok { color: var(--good); }
+.log .warn { color: var(--warn); }
+.log .bad { color: var(--bad); font-weight: 600; }
+.log .head { font-weight: 700; }
+
+.modal {
+  position: fixed; inset: 0;
+  background: rgba(0, 0, 0, .4);
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+}
+.dialog {
+  background: var(--panel);
+  border-radius: 10px;
+  padding: 20px;
+  max-width: 480px;
+  width: 100%;
+}
+.check { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; margin: 8px 0 14px; }
+.check input { margin-top: 5px; }
+.bye { padding: 40px 20px; text-align: center; font-size: 17px; }

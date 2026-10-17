@@ -31,7 +31,7 @@ Status: in progress. Each step below is its own pull request and refines this do
 ## 5. Steps
 
 1. Trimming (this document, the removals of sections 2 to 4, tests).
-2. The offline workbench: the OpenCode setup page and the workbench wizard come into tools/ as one setup path that starts kb-client, with a bundle attached to each release. Their texts state rules and behaviour only.
+2. The offline workbench: tools/opencode-setup (the OpenCode setup page and script) and tools/workbench (the three-step wizard that ends in kb-client). They use this repository's kb-client instead of a downloaded release. The hints on where a key is issued and how Node is switched are general and can be reworded in a local hints file (~/.config/opencode-setup/hints.conf) that is read, never run. Each release attaches workbench-bundle-<version>.zip, built by scripts/build_workbench.py from the repository zip: the workbench entry at the top and evergreen-wiki/ beside it. The ~/.bashrc block and the files under ~/.config/work-kb/ keep their names, so set-up workstations need nothing redone.
 3. Documentation and the 3.0.0 release: README in both languages, methodology, backends and manual setup, the changelog.
 
 Later, in their own designs: an evaluation set with a scoring script for the target models, Chinese-first skill text checked against that evaluation, and further load taken off the model (quotes filled in by script from an anchor and a sentence number, question keywords found by script).
