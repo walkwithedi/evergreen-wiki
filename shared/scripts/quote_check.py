@@ -19,6 +19,7 @@ check: every card is checked against the batch files of its run (kb_batch.py for
   - a quote found in exactly one other paragraph of the same source passes with its anchor
     corrected; one found in several paragraphs, across paragraphs or nowhere fails;
   - with --topics, a topic not in the list passes and is listed as a new topic to confirm;
+    topics compare without regard to case and spacing, and a known one takes the list's spelling;
   - a card with the same source, quote and conclusion as an earlier one is dropped.
   Cards that pass go to ACCEPTED (JSON lines, anchors corrected, date added); the report
   (JSON) lists rejected cards with the reason, corrected anchors and new topics.
@@ -63,6 +64,7 @@ PUNCT = str.maketrans({'。': '.', '、': ',', '“': '"', '”': '"', '‘': "'
                        '【': '[', '】': ']', '—': '-', '–': '-', '…': '...'})
 DROP_RE = re.compile(r'[\s*_`~|]+')
 LINK_UNSAFE_RE = re.compile(r'[\[\]|#^\n\r]+')
+PAGE_UNSAFE_RE = re.compile(r'[\\/:*?"<>|#^\[\]]')
 
 LABELS = {
     'en': {'title': '# Cards: [[%s]]', 'source': 'Source: [[%s]] · Document last modified: %s',
@@ -191,6 +193,11 @@ def check_card(card, table, by_sid, qmin, qmax):
     return out, None, note
 
 
+def topic_key(name):
+    """Topics compare without regard to case and spacing (kbconf.topic_key does the same)."""
+    return ' '.join(name.split()).casefold()
+
+
 def _anchor_n(a):
     return int(a.rsplit('p', 1)[1])
 
@@ -199,6 +206,7 @@ def check(lines, table, by_sid, topics=None, qmin=QUOTE_MIN, qmax=QUOTE_MAX):
     """(accepted cards, report) for the card lines given."""
     accepted, rejected, fixed, seen = [], [], [], set()
     new_topics, dups, total = [], 0, 0
+    known = {topic_key(t): t for t in topics or ()}
     for i, ln in enumerate(lines, 1):
         if not ln.strip():
             continue
@@ -221,8 +229,10 @@ def check(lines, table, by_sid, topics=None, qmin=QUOTE_MIN, qmax=QUOTE_MAX):
         seen.add(key)
         if note:
             fixed.append({'line': i, 'from': note[0], 'to': note[1]})
-        if topics is not None and out['topic'] not in topics and out['topic'] not in new_topics:
-            new_topics.append(out['topic'])
+        if topics is not None:
+            out['topic'] = known.get(topic_key(out['topic']), out['topic'])
+            if out['topic'] not in topics and out['topic'] not in new_topics:
+                new_topics.append(out['topic'])
         accepted.append(out)
     report = {'cards': total, 'accepted': len(accepted), 'rejected': rejected,
               'anchors_fixed': fixed, 'duplicates': dups, 'new_topics': new_topics}
@@ -235,16 +245,28 @@ def link_text(s):
     return ' '.join(LINK_UNSAFE_RE.sub(' ', s).split())
 
 
-def render_cards(stem, cards, date, lang='en'):
+def page_name(topic):
+    """File name (without .md) of a topic's page."""
+    return PAGE_UNSAFE_RE.sub('-', ' '.join(topic.split())).strip().lstrip('.').strip()
+
+
+def topic_link(topic, topics_dir=''):
+    if not topics_dir:
+        return '[[%s]]' % link_text(topic)
+    return '[[%s/%s|%s]]' % (topics_dir, page_name(topic), link_text(topic))
+
+
+def render_cards(stem, cards, date, lang='en', sources_dir='', topics_dir=''):
     lb = LABELS[lang]
-    w = [lb['title'] % stem, '', lb['source'] % (stem, date or lb['unknown']), '']
+    src = '%s/%s' % (sources_dir, stem) if sources_dir else stem
+    w = [lb['title'] % src, '', lb['source'] % (src, date or lb['unknown']), '']
     for c in sorted(cards, key=lambda c: _anchor_n(c['anchor'])):
         n = _anchor_n(c['anchor'])
         w.append('## ' + ' '.join(c['conclusion'].split()).lstrip('#').strip())
         w.append('')
-        w.append('> %s [[%s#^p%d]]' % (' '.join(c['quote'].split()), stem, n))
+        w.append('> %s [[%s#^p%d]]' % (' '.join(c['quote'].split()), src, n))
         w.append('')
-        w.append(lb['topic'] % ('[[%s]]' % link_text(c['topic'])))
+        w.append(lb['topic'] % topic_link(c['topic'], topics_dir))
         if c.get('entities'):
             w.append(lb['entities'] % ', '.join('[[%s]]' % link_text(e) for e in c['entities']))
         d = (c.get('date') or lb['unknown']) + (lb['event'] % c['event_date'] if c.get('event_date') else '')
@@ -253,8 +275,9 @@ def render_cards(stem, cards, date, lang='en'):
     return '\n'.join(w)
 
 
-def write(cards, table, outdir, names=None, lang='en'):
-    """One file per source; returns the paths written."""
+def write(cards, table, outdir, names=None, lang='en', sources_dir='', topics_dir=''):
+    """One file per source; returns the paths written. With sources_dir and topics_dir the links
+    name their folders, as a library needs: a source and its cards file share a name."""
     by_sid = {}
     for c in cards:
         by_sid.setdefault(c['source'], []).append(c)
@@ -266,9 +289,56 @@ def write(cards, table, outdir, names=None, lang='en'):
         stem = os.path.splitext(fname)[0]
         path = os.path.join(outdir, fname)
         with open(path, 'w', encoding='utf-8') as f:
-            f.write(render_cards(stem, by_sid[sid], src.get('modified', ''), lang))
+            f.write(render_cards(stem, by_sid[sid], src.get('modified', ''), lang, sources_dir, topics_dir))
         paths.append(path)
     return paths
+
+
+CARD_QUOTE_RE = re.compile(r'^> (.*) \[\[([^\]#|]+)#\^(p\d+)\]\]\s*$')
+LINK_RE = re.compile(r'\[\[([^\]]+)\]\]')
+PAREN_RE = re.compile(r'[(（][^)）]*[)）]')
+STAMP_RE = re.compile(r'\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2})?')
+
+
+def _shown(link):
+    return link.split('|', 1)[1] if '|' in link else link
+
+
+def read_cards(text):
+    """A cards file written by write(), back as {'source': link target, 'cards': [...]}; each card
+    has conclusion, quote, anchor (pN), topic, entities, date and, when given, event_date.
+    Read by structure, so either label language works."""
+    lines = text.replace('\r\n', '\n').split('\n')
+    m = LINK_RE.search(lines[0]) if lines and lines[0].startswith('# ') else None
+    out = {'source': m.group(1) if m else '', 'cards': []}
+    card = None
+    for ln in lines[1:]:
+        if ln.startswith('## '):
+            card = {'conclusion': ln[3:].strip(), 'quote': '', 'anchor': '', 'topic': '',
+                    'entities': [], 'date': '', '_bullets': 0}
+            out['cards'].append(card)
+            continue
+        if card is None:
+            continue
+        q = CARD_QUOTE_RE.match(ln)
+        if q:
+            card['quote'], card['anchor'] = q.group(1).strip(), q.group(3)
+        elif ln.startswith('- '):
+            links = [_shown(x) for x in LINK_RE.findall(ln)]
+            if card['_bullets'] == 0:
+                card['topic'] = links[0] if links else ''
+            elif links:
+                card['entities'] = links
+            else:
+                ev = PAREN_RE.search(ln)
+                if ev and STAMP_RE.search(ev.group(0)):
+                    card['event_date'] = STAMP_RE.search(ev.group(0)).group(0)
+                d = STAMP_RE.search(PAREN_RE.sub('', ln))
+                card['date'] = d.group(0) if d else ''
+            card['_bullets'] += 1
+    for c in out['cards']:
+        del c['_bullets']
+    return out
 
 
 # ---------------------------------------------------------------- command line

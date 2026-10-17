@@ -40,13 +40,17 @@ kb-ingest reads one batch file and processes it according to the tier.
 2. Quote check, both tiers (quote_check.py check): a script checks every card against the batch files of its run.
    - The quote has 6 to 300 characters and occurs in the paragraph, list item or table of its anchor. The comparison ignores white space, full- and half-width punctuation and Markdown emphasis; any other difference fails, so a reworded quote never passes.
    - A quote found in exactly one other paragraph of the same source passes with its anchor corrected; one found in several paragraphs, across paragraphs or nowhere fails.
-   - A topic not among the library's topics passes and is listed for the owner to confirm (section 4.2 works the same way for entities). A repeated card (same source, quote and conclusion) is dropped.
+   - A topic not among the library's topics passes and is listed for the owner to confirm (section 4.2 works the same way for entities). The library's topics are those of the spec's Table A: each partition from topic_start on lists them after the colon, separated by semicolons; they compare without regard to case and spacing, and a known topic takes the spec's spelling. A repeated card (same source, quote and conclusion) is dropped.
    - Cards that fail are not written; the report lists each with its reason, together with the corrected anchors and new topics.
 3. Topic pages:
-   - Weak tier: a script assembles topic pages from the cards, entries ordered by date. The model writes no page text.
+   - Weak tier: a script (ingest.py pages) rebuilds each touched topic page, `Topics/<topic>.md`, from every cards file: the topic's cards newest first (event date, else the source's date), each with its date, conclusion, quote linked `[[Sources/<source>#^pN]]` and a link to its cards file. The page says it is generated; edits to it are overwritten. A topic left without cards keeps a page saying so. The model writes no page text.
    - Strong tier: the model rewrites each affected topic page from its cards.
-4. Split and file: the batch file is split back into one file per source; the originals are kept flat as the source archive. Cards are stored under `Cards/`, one file per source with the source's name, rewritten as a whole when the source is ingested again (quote_check.py write); each card is a section with its quote linked as `[[source#^pN]]` and its topic and entities as wiki links.
+4. Split and file (ingest.py file): the batch files are split back into one file per source, `Sources/<original file name>.md`, flat; two sources of one run with the same name get their parent folder's name in front. The original documents themselves are not kept in the library; each source file records its original path. Cards are stored under `Cards/`, one file per source with the source's name (quote_check.py write); each card is a section with its quote linked as `[[Sources/<source>#^pN]]`, its topic as `[[Topics/<page>|<topic>]]` and its entities as wiki links. Links name their folder because a source and its cards file share a name.
+   - A source whose name is already in the library is a new version: the old source file and its cards file move to `Archive/Sources` and `Archive/Cards` as `<name>_old<YYYYMMDDHHMMSS>.md`; nothing is deleted. The topics of the archived cards are rebuilt with the new ones, so the old version's entries leave the pages.
+   - A run with a part missing from its batch files writes nothing.
+   - The run record lists the sources written, the files archived and the topics touched. For a library in Google Drive the script writes to a staging folder laid out like the library, which the skill uploads (step 3b).
 5. Material is not searchable before its ingest run has finished. There is no fast lane that files material first and reconciles it later.
+6. Library layout: the summary files (status card as the home page, spec, indexes) in the root; `Sources/`, `Cards/`, `Topics/` and `Archive/` beside them. Folder names come from the library's names (sources_dir, cards_dir, topics_dir, archive_dir) and can be changed per library.
 
 ### 3.3 Notes (kb-note)
 
@@ -146,17 +150,28 @@ Card as the model writes it (one line per card):
 Cards file (Cards/Project Atlas kickoff minutes.md):
 
 ```markdown
-# Cards: [[Project Atlas kickoff minutes]]
+# Cards: [[Sources/Project Atlas kickoff minutes]]
 
-Source: [[Project Atlas kickoff minutes]] · Document last modified: 2026-03-04 05:06
+Source: [[Sources/Project Atlas kickoff minutes]] · Document last modified: 2026-03-04 05:06
 
 ## Riverside Clinic hosts the Project Atlas pilot.
 
-> Riverside Clinic will host the pilot. [[Project Atlas kickoff minutes#^p2]]
+> Riverside Clinic will host the pilot. [[Sources/Project Atlas kickoff minutes#^p2]]
 
-- Topic: [[Pilot]]
+- Topic: [[Topics/Pilot|Pilot]]
 - Entities: [[Riverside Clinic]], [[Project Atlas]]
 - Date: 2026-03-04 05:06 (event: 2026-03-03)
+```
+
+Topic page (Topics/Pilot.md), weak tier:
+
+```markdown
+# Pilot
+
+> This page is generated from the cards by a script; edits here are overwritten.
+
+- 2026-03-03 · Riverside Clinic hosts the Project Atlas pilot.
+  > Riverside Clinic will host the pilot. [[Sources/Project Atlas kickoff minutes#^p2]] · [[Cards/Project Atlas kickoff minutes|card]]
 ```
 
 _kb.json additions:
@@ -165,9 +180,14 @@ _kb.json additions:
 {
   "schema": 2,
   "tier": "weak",
-  "batch_chars": 20000
+  "batch_chars": 20000,
+  "quote_min": 6,
+  "quote_max": 300,
+  "names": {"sources_dir": "Sources", "cards_dir": "Cards", "topics_dir": "Topics"}
 }
 ```
+
+kbconf accepts and checks these keys (tier weak or strong, batch_chars at least 1000, quote_min at least 1, quote_max not below quote_min) while the schema stays 1; it becomes 2 when kb-incremental is removed (step 3c).
 
 ## 9. Implementation steps
 
@@ -176,7 +196,10 @@ Each step is a pull request; the 2.0 release comes after the last one.
 0. This design document.
 1. doc2kb: batch files with source numbers, anchors, tier-based batch size and chapter splitting.
 2. Card format and the quote-check script, with tests.
-3. kb-ingest: card extraction, weak-tier page assembly, strong-tier rewrite, split and file, `Cards/`; kb-incremental and the life preset removed.
+3. kb-ingest, in three pull requests:
+   - 3a. Scripts: library settings and topics in kbconf, ingest.py (file, pages), folder-qualified links in the cards files.
+   - 3b. The kb-ingest skill: both tiers' procedures, calling the scripts; Drive libraries through a staging folder.
+   - 3c. kb-incremental and the life preset removed; installer, kb-client, tests and documents updated; schema 2.
 4. Owner decisions: version candidates, alias table, conflict lists, status-card review marks.
 5. kb-query: weak-tier card selection and quoted answers; kb-note on the new pipeline.
 6. prompt.md versions for ChatGPT; Drive libraries without a code environment refuse writes.

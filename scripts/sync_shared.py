@@ -32,6 +32,8 @@ PLAN.append(("scripts/doc2kb_core.py", ["skills/kb-incremental/scripts", "tools/
 PLAN.append(("scripts/kb_batch.py", ["skills/kb-incremental/scripts", "tools/doc2kb"]))
 # checking cards against their batch file and writing them
 PLAN.append(("scripts/quote_check.py", ["skills/kb-incremental/scripts", "tools/doc2kb"]))
+# filing an intake run into a 2.0 library and rebuilding its topic pages
+PLAN.append(("scripts/ingest.py", ["skills/kb-incremental/scripts"]))
 
 
 def copies():
