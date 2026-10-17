@@ -7,11 +7,17 @@ Usage:
   python3 scripts/build_skill.py --locale zh          descriptions from locales/zh/descriptions.json
   python3 scripts/build_skill.py --config my.json     bake a private registry into config/kb-libraries.json
   python3 scripts/build_skill.py --out-dir DIR
+  python3 scripts/build_skill.py --chatgpt            ChatGPT versions -> dist/<skill>-<version>-chatgpt.zip
+
+A -chatgpt.zip holds <skill>-prompt.md (the skill's prompt.md, for a custom GPT's instructions or a
+ChatGPT project) and <skill>-files.zip (the skill folder as it is), which the prompt has ChatGPT unpack
+in its Python tool, so references, scripts and presets keep their paths.
 
 A zip built with --config holds your library locations: keep it private, never attach it
 to a public release. The version is read from the "Version:" line of each SKILL.md.
 """
 import argparse
+import io
 import json
 import logging
 import os
@@ -77,11 +83,39 @@ def build(name, out_dir, locale_desc, config_path):
     return ver
 
 
+def build_chatgpt(name, out_dir):
+    """<skill>-<version>-chatgpt.zip: the prompt and the zipped skill folder. Returns its path."""
+    src = os.path.join(ROOT, "skills", name)
+    with open(os.path.join(src, "SKILL.md"), encoding="utf-8") as f:
+        ver = skill_version(f.read())
+    prompt = os.path.join(src, "prompt.md")
+    if not ver or not os.path.isfile(prompt):
+        raise SystemExit(f"{name}: needs a 'Version:' line in SKILL.md and a prompt.md")
+    inner = io.BytesIO()
+    with zipfile.ZipFile(inner, "w", zipfile.ZIP_DEFLATED) as z:
+        for dirpath, dirnames, filenames in os.walk(src):
+            dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS)
+            for fn in sorted(filenames):
+                if fn in SKIP_FILES or fn.endswith(".pyc"):
+                    continue
+                full = os.path.join(dirpath, fn)
+                z.write(full, os.path.join(name, os.path.relpath(full, src)).replace(os.sep, "/"))
+    os.makedirs(out_dir, exist_ok=True)
+    dest = os.path.join(out_dir, f"{name}-{ver}-chatgpt.zip")
+    with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as z:
+        z.write(prompt, f"{name}-chatgpt/{name}-prompt.md")
+        z.writestr(f"{name}-chatgpt/{name}-files.zip", inner.getvalue())
+    log.info("built %s (%d bytes)", dest, os.path.getsize(dest))
+    print(f"built: {os.path.relpath(dest, ROOT) if dest.startswith(ROOT) else dest}")
+    return dest
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("skills", nargs="*", default=SKILLS)
     ap.add_argument("--locale")
     ap.add_argument("--config")
+    ap.add_argument("--chatgpt", action="store_true", help="build the ChatGPT versions instead")
     ap.add_argument("--out-dir", default=os.path.join(ROOT, "dist"))
     ap.add_argument("--log-level", default=os.environ.get("LOG_LEVEL", "INFO").upper(),
                     choices=["DEBUG", "INFO", "WARNING", "ERROR"])
@@ -96,6 +130,10 @@ def main():
         missing = [s for s in a.skills if s not in locale_desc]
         if missing:
             raise SystemExit(f"{p} has no description for {missing}")
+    if a.chatgpt:
+        for s in a.skills:
+            build_chatgpt(s, a.out_dir)
+        return
     if a.config:
         log.warning("baking a private registry into the zip; do not publish it")
     versions = {build(s, a.out_dir, locale_desc, a.config) for s in a.skills}

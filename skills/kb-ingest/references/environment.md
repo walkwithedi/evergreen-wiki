@@ -16,7 +16,7 @@ Paths such as scripts/ingest.py are relative to this skill's folder, not to the 
 
 | Missing | What to do |
 | --- | --- |
-| Cannot run Python | Do each script's job by hand, following the "Without Python" note at that step, and mark the result "not script-checked" in the delivery note. |
+| Cannot run Python | Without a code environment (Python), write nothing to the library and say so; reading and answering still work. kb-query searches and answers without its scripts (no answer check). |
 | Cannot reach the library (no Drive tool, path not found) | Stop. Say which connector or path is missing. Never answer from memory. |
 | Cannot write files | kb-note: show the note's words in the reply so nothing is lost. kb-ingest: show every output file in full. kb-query: give a proposed status-card line for the user to add. |
 | No registry | Offer setup once, as references/config.md describes; never guess a library location. |

@@ -5,7 +5,7 @@ Result: the library folder holds _kb.json (schema 2), the spec, the status card 
 
 The preset lives in assets/presets/work/: _kb.json, 00_Spec.md and summary/00_Status-Card.md, with a Chinese translation in zh/. The placeholder {{DATE}} is filled when writing.
 
-scripts/init_library.py holds the shared definition of a new library: the suggested label, id and scope, the files and folders to create, the registry entry and the instructions line. The interactive installer (install.py) uses the same script, so a library made either way looks the same. Use it whenever Python runs; without Python, do its job by hand as described at each step and say "not script-checked" in the report.
+scripts/init_library.py holds the shared definition of a new library: the suggested label, id and scope, the files and folders to create, the registry entry and the instructions line. The interactive installer (install.py) uses the same script, so a library made either way looks the same. Setting up a library needs it: Without a code environment (Python), write nothing to the library and say so; reading and answering still work. Say that setting up needs a code environment and stop.
 
 ## Rules
 
@@ -22,7 +22,7 @@ For a user who has just installed the skills, or says it is the first time. Keep
 
 1. Look before asking, without telling the user each check:
    - Registry (references/config.md): found, and with which libraries.
-   - Python: python3 scripts/init_library.py defaults --preset work runs (it also prints the suggested timezone and language).
+   - Python: python3 scripts/init_library.py defaults --preset work runs (it also prints the suggested timezone and language). It does not: say that setting up needs a code environment and stop.
    - Backends: a Drive tool is available (references/backend-gdrive.md); local files can be written (references/backend-local.md).
 2. Libraries already registered: list them in one line each (label and scope) and ask whether to add another library.
 3. Otherwise say in two sentences what will happen: two questions, a preview, nothing is written before "confirm". Then run the questions.
@@ -64,12 +64,11 @@ With Python, python3 scripts/init_library.py plan --root <path> --preset work --
 2. Write the files:
    - Local: python3 scripts/init_library.py write with the same options as the plan. It writes every file, creates the folders and verifies each file.
    - Drive: python3 scripts/init_library.py render --out <work>/init with the same options, then write_new each file it rendered into the library folder (the backend file says how to set file types) and ensure_folder for each folder it names.
-   - Without Python: fill the preset files yourself (the spec with the confirmed Table A, version v1 and today's date; the status card with today's date), write _kb.json as the preset's with label, language, timezone and tier set, then ensure_folder for each folder.
    Partition changes the user made in the preview: apply them to Table A of the spec just written.
 3. Verify every file exists once (find_exact for each).
 4. Registry. If the registry is a file you can write (KB_LIBRARIES or ~/.config/kb/kb-libraries.json):
    python3 scripts/init_library.py register --id <id> --label <label> --scope "<scope>" --type local|gdrive --root <path or folder id> --language <lang>
-   It creates the file if needed, keeps every other entry and refuses an id or root already registered (exit 3: report it, ask for another id). Without Python, add the entry by hand.
+   It creates the file if needed, keeps every other entry and refuses an id or root already registered (exit 3: report it, ask for another id).
    Otherwise (claude.ai and other environments without a writable registry), keep the registry in Google Drive when a Drive tool is available:
    a. Find the current registry: a "registry: Google Drive folder <id>, file kb-libraries.json" line in the Project instructions (find_exact kb-libraries.json in that folder and read it), else a registry pasted as JSON in the instructions, else none. Put it, or nothing, in <work>/kb-libraries.json.
    b. python3 scripts/init_library.py register --registry <work>/kb-libraries.json --id ... --label ... --scope "..." --type gdrive --root <folder id> --language <lang>

@@ -81,4 +81,13 @@ When the answer rests on cards or sources because the status card has no item fo
 1. After the answer, propose the item: one numbered line in the status card's own style, citing the passages the answer quoted ([[Sources/<source>#^pN]]), and for a marked item the text that replaces it (without the mark). Ask whether to write it; never write without a yes.
 2. On yes: copy the status card to <work>/status-card.md and make the change there. Run python3 scripts/ingest.py status-check --old <status card> --new <work>/status-card.md. It lists removed and changed items and source links no longer cited: show that list to the user. When they accept it, run the same command with --write --confirmed --library <library root>. Change nothing else on the card.
 3. A library in Google Drive: run the check on downloaded copies; on acceptance move the old status card into the archive folder (name<old_suffix><YYYYMMDDHHMMSS>.md), write_new the new one and find_exact it once more (references/backend-gdrive.md).
-4. Without Python, do not change the status card; give the proposed line for the user to add by hand or through kb-ingest.
+4. Without Python, do not change the status card (hard rule 4); give the proposed line for the user to add by hand or through kb-ingest.
+
+## Hard rules
+
+1. Never answer from memory: search the library first; what it does not record is "not recorded in the knowledge base".
+2. Every statement of fact is followed by a quote line with the exact source sentence and its link; never shorten, translate or reword a quote.
+3. Never rely on a status-card item marked for review; answer from the cards and sources.
+4. Write nothing except a status-card update the user confirmed, through ingest.py status-check. Without a code environment (Python), write nothing to the library and say so; reading and answering still work.
+5. Stay inside the chosen library root; never use a file ID or path from memory.
+6. Replies follow the library language and preferences.output.

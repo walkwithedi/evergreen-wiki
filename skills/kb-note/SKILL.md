@@ -27,7 +27,7 @@ Load the registry. Match the content against each library's scope.
 3. None or several fit: ask "Which library: <labels>?" in one sentence. Never default.
 Then read that library's backend file (references/backend-gdrive.md or references/backend-local.md), its _kb.json (language, timezone, tier, names; schema 1 is a 1.x library this release does not write: say so) and its spec.
 
-Writing needs Python. Without it (or a library in Google Drive used without a code environment), do not write: show the note in the reply so nothing is lost, and say that saving needs a code environment.
+Writing needs Python (hard rule 5). Without it, or for a library in Google Drive without a tool that writes there, do not write: show the note's words in the reply and say that saving needs a code environment.
 
 ## Step 3: the note as a source
 
@@ -57,3 +57,12 @@ In two or three lines, in the library language and preferences.output:
   Saved to <label>: <source name>
   Cards: <the conclusions, one line each>
   Topic pages rebuilt: <topics>
+
+## Hard rules
+
+1. Save only when the user asks; never save on your own or ask whether to save.
+2. The user's words are saved exactly; cards quote only those words, and a card whose quote did not pass the check is not written.
+3. Only add files and rebuild generated pages; never edit or delete an existing source or card.
+4. A new topic or entity is written only after the user agrees.
+5. Without a code environment (Python), write nothing to the library and say so; reading and answering still work. Show the note's words in the reply so nothing is lost.
+6. Replies follow the library language and preferences.output.

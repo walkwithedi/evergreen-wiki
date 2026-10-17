@@ -29,4 +29,4 @@ The library is a folder on disk; backend.root in the registry is its path (~ all
 
 kb-ingest's scripts write straight into the library folder after the user confirms the preview: scripts/ingest.py file writes the sources and cards files and moves each older version, with its cards file, into the archive folder as <stem><old_suffix><YYYYMMDDHHMMSS>.md; scripts/ingest.py pages (or check-page --write) writes the topic pages. A folder cannot hold two files with the same name, so versions never pile up.
 
-Without Python, do the same by hand: for each file, if it exists move it to the archive folder under the suffixed name first, then write the new file.
+Without a code environment (Python), write nothing to the library and say so; reading and answering still work.
