@@ -4,7 +4,7 @@ Thanks for helping.
 
 ## How to start
 
-1. Pick an issue. Ones labelled good first issue are small and self-contained; help wanted ones need someone with a particular setup (claude.ai, Codex, Gemini CLI, OpenCode). Say in the issue that you are taking it.
+1. Pick an issue. Ones labelled good first issue are small and self-contained; help wanted ones need someone with a particular setup (OpenCode with a local model, a Kylin or Ubuntu workstation). Say in the issue that you are taking it.
 2. Fork the repository, make a branch, and open a pull request against main. The template lists the checks; CI runs them again on four platforms.
 3. Not sure about an idea? Open an issue first and describe the problem before writing code.
 
@@ -20,9 +20,9 @@ A few rules keep the skills reliable:
 2. Keep environment-specific tool names and paths in the backend and environment references; SKILL.md and other references use the abstract operations. scripts/check_repo.py enforces this.
 3. Scripts use only the Python standard library, run on Python 3.8+, log to stderr in the format used by the other scripts and accept --log-level.
 4. Never hard-code a library file or folder name in a script; take it from kbconf names.
-5. Changing a rule in a SKILL.md changes behaviour for every user. Explain the failure it prevents in the pull request, and add a test where a script is involved. Each skill's prompt.md (its ChatGPT version) carries the same rules: change it in the same pull request. scripts/check_repo.py checks that it stays within 8000 characters, carries the same version and holds every hard rule of SKILL.md word for word.
+5. Changing a rule in a SKILL.md changes behaviour for every user. Explain the failure it prevents in the pull request, and add a test where a script is involved.
 6. No personal data, work details or credentials, ever: run python3 scripts/sensitive_scan.py. Examples use obviously fictional names (Riverside Clinic, Project Atlas), example.com addresses and the documentation IP ranges (192.0.2.0/24). Images go in without EXIF or text metadata, documents without an author. Commit with your GitHub noreply address (Settings > Emails > Keep my email addresses private). SECURITY.md lists everything the scan covers and how to keep a private list of names it should also catch. Write rules and behaviour, not stories: documentation, comments, commit messages and pull requests describe what something does, never where a rule came from or the workplace, people or projects behind it.
 7. No case stories, no background. Documentation, specs, comments, changelogs, commit messages and pull requests state rules and behaviour, not where they came from: no anecdotes ("lesson learned", "a user once..."), no description of the environment, organisation, people or projects something was built for, and no figures taken from real documents. Explain a rule by its reason in general terms. Where an example is truly needed, keep it minimal, fictional and de-identified (rule 6).
-8. Releases: bump "Version:" in all three SKILL.md files and both plugin manifests and add a CHANGELOG section headed with the version, in one pull request. Merging it to main publishes v<version> (.github/workflows/release.yml creates the tag and the release); Actions > release > Run workflow does the same by hand.
+8. Releases: bump "Version:" in all three SKILL.md files and add a CHANGELOG section headed with the version, in one pull request. Merging it to main publishes v<version> (.github/workflows/release.yml creates the tag and the release); Actions > release > Run workflow does the same by hand.
 
 Bug reports are most useful with the library's _kb.json (without folder IDs), the request you made and the reply you got.

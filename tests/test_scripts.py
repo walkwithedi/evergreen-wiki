@@ -1,5 +1,5 @@
 """Tests for kbconf, kb-ingest's setup scripts (init_library, pick_materials), the installer wizard, kb-query's
-kbfind and the repository hooks. Standard library only: python3 -m unittest discover tests"""
+and the repository hooks. Standard library only: python3 -m unittest discover tests"""
 import json
 import os
 import subprocess
@@ -87,10 +87,12 @@ class KbconfTest(Tmp):
     def test_registry(self):
         reg = {"schema": 1, "libraries": [
             {"id": "life", "label": "Life", "scope": "me", "backend": {"type": "local", "root": "~/kb"}},
-            {"id": "life", "label": "Dup", "scope": "", "backend": {"type": "ftp"}}]}
+            {"id": "life", "label": "Dup", "scope": "", "backend": {"type": "ftp"}},
+            {"id": "drive", "label": "Drive", "scope": "x", "backend": {"type": "gdrive", "root": "abc123"}}]}
         problems = " ".join(kbconf.check_registry(reg))
         self.assertIn("used twice", problems)
-        self.assertIn("gdrive or local", problems)
+        self.assertIn("must be local", problems)
+        self.assertIn("is a Google Drive library", problems)
         self.assertIn("scope", problems)
 
 
@@ -176,7 +178,8 @@ class InitLibraryTest(Tmp):
                   "--timezone", "+08:00", "--scope", "工作资料", "--date", "2026-10-10").stdout
         self.assertIn("result: written 3 files and 4 folders", out)
         cfg = kbconf.load_library(root)
-        self.assertEqual((cfg["label"], cfg["language"], cfg["timezone"], cfg["tier"]), ("工作", "zh", "+08:00", "weak"))
+        self.assertEqual((cfg["label"], cfg["language"], cfg["timezone"]), ("工作", "zh", "+08:00"))
+        self.assertNotIn("tier", json.loads(read(os.path.join(root, "_kb.json"))))
         self.assertEqual(kbconf.validate(json.loads(read(os.path.join(root, "_kb.json")))), [])
         names = cfg["names"]
         spec = read(os.path.join(root, names["spec"]))
@@ -205,25 +208,20 @@ class InitLibraryTest(Tmp):
         self.assertEqual(p.returncode, 3)
         self.assertEqual(os.listdir(root), ["notes.md"])
 
-    def test_render_for_upload(self):
-        out = run("init_library.py", "render", "--out", self.p("out"), "--preset", "work", "--language", "en",
-                  "--timezone", "UTC", "--tier", "strong").stdout
-        self.assertIn("create the folders in the library: Sources, Cards, Topics, Archive", out)
-        self.assertNotIn("Quick-Notes", out)
-        self.assertEqual(sorted(os.listdir(self.p("out"))), ["00_Spec.md", "00_Status-Card.md", "_kb.json"])
-        self.assertEqual(json.loads(read(self.p("out", "_kb.json")))["tier"], "strong")
-
     def test_register_and_instructions(self):
         reg = self.p("cfg", "kb-libraries.json")
         run("init_library.py", "register", "--registry", reg, "--id", "atlas", "--label", "Atlas",
             "--scope", "Project Atlas", "--type", "local", "--root", self.p("atlas"))
         run("init_library.py", "register", "--registry", reg, "--id", "work", "--label", "Work",
-            "--scope", "team projects", "--type", "gdrive", "--root", "abc123")
+            "--scope", "team projects", "--root", self.p("work"))
         p = run("init_library.py", "register", "--registry", reg, "--id", "work", "--label", "W",
-                "--scope", "x", "--type", "gdrive", "--root", "zzz", check=False)
+                "--scope", "x", "--root", self.p("zzz"), check=False)
         self.assertEqual(p.returncode, 3)
+        p = run("init_library.py", "register", "--registry", reg, "--id", "drive", "--label", "D",
+                "--scope", "x", "--type", "gdrive", "--root", "abc123", check=False)
+        self.assertEqual(p.returncode, 2)
         self.assertEqual([lib["id"] for lib in kbconf.load_registry(reg)["libraries"]], ["atlas", "work"])
-        md = self.p("CLAUDE.md")
+        md = self.p("AGENTS.md")
         write(md, "# My rules\n\nBe brief.\n")
         out = run("init_library.py", "instructions", "--registry", reg, "--file", md).stdout
         self.assertIn("would be added", out)
@@ -238,7 +236,7 @@ class InitLibraryTest(Tmp):
         self.assertIn("unchanged", out)
         block = run("init_library.py", "instructions", "--registry", reg, "--project-block").stdout
         self.assertIn("Knowledge base registry (kb-libraries.json):", block)
-        self.assertIn('"root": "abc123"', block)
+        self.assertIn('"id": "work"', block)
 
     def test_every_preset_has_defaults(self):
         sys.path.insert(0, SCRIPTS)
@@ -247,17 +245,6 @@ class InitLibraryTest(Tmp):
         self.assertEqual(presets, sorted(il.PRESETS))
         for p in presets:
             self.assertEqual(sorted(il.PRESET_DEFAULTS[p]), sorted(il.LANGUAGES))
-
-    def test_drive_line(self):
-        out = run("init_library.py", "instructions", "--drive-folder", "1AbCdEfGhIjKlMnOpQ", "--language", "zh").stdout
-        self.assertIn("registry: Google Drive folder 1AbCdEfGhIjKlMnOpQ, file kb-libraries.json", out)
-        self.assertTrue(out.startswith("我有知识库"))
-        self.assertEqual(run("init_library.py", "instructions", "--drive-folder", "x y", check=False).returncode, 2)
-        sys.path.insert(0, SCRIPTS)
-        import init_library as il
-        text, what = il.upsert_line("a\n我有知识库：工作（x）。\n", il.drive_line("1AbCdEfGhIjKlMnOpQ", "zh"))
-        self.assertEqual(what, "updated")
-        self.assertEqual(text.count("我有知识库"), 1)
 
     def test_upsert_line(self):
         sys.path.insert(0, SCRIPTS)
@@ -291,30 +278,29 @@ class WizardTest(Tmp):
             os.environ.update(old)
 
     def test_install_setup_and_second_library(self):
-        os.makedirs(self.p("home", ".claude"))
-        claude_md = self.p("home", ".claude", "CLAUDE.md")
-        write(claude_md, "# Mine\n")
+        agents_md = self.p("home", ".config", "opencode", "AGENTS.md")
+        write(agents_md, "# Mine\n")
         lib1, lib2 = self.p("home", "kb", "work"), self.p("home", "kb", "work2")
         # language, agent, install, set up, folder, scope, confirm preview, write line
         p = self.wizard(["2", "", "", "", lib1, "team projects", "", ""])
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         for s in ("kb-note", "kb-query", "kb-ingest"):
-            self.assertTrue(os.path.isfile(self.p("home", ".claude", "skills", s, "SKILL.md")))
+            self.assertTrue(os.path.isfile(self.p("home", ".config", "opencode", "skills", s, "SKILL.md")))
         self.assertTrue(os.path.isfile(os.path.join(lib1, "_kb.json")))
-        self.assertIn("I keep knowledge bases: Work (team projects).", read(claude_md))
+        self.assertIn("I keep knowledge bases: Work (team projects).", read(agents_md))
         # second run: keep the installed skills, a second work library gets a free id
         p = self.wizard(["2", "", "", "n", "", lib2, "", "3", "acme", "", ""])
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         self.assertIn("using 'work-2'", p.stdout)
         libs = self.registry()["libraries"]
         self.assertEqual([lib["id"] for lib in libs], ["work", "acme"])
-        text = read(claude_md)
+        text = read(agents_md)
         self.assertTrue(text.startswith("# Mine\n"))
         self.assertEqual(text.count("I keep knowledge bases:"), 1)
         self.assertIn("Work (team projects); Work (work goals and plans, projects and tasks, meetings and decisions, policies and procedures, reports).", text)
 
     def test_cancel_writes_nothing(self):
-        p = self.wizard(["2", "6", self.p("skills"), "n", "", self.p("lib"), "", "n"])
+        p = self.wizard(["2", "4", self.p("skills"), "n", "", self.p("lib"), "", "n"])
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         self.assertIn("Nothing was written", p.stdout)
         self.assertFalse(os.path.exists(self.p("lib")))
@@ -325,66 +311,6 @@ class WizardTest(Tmp):
                            capture_output=True, text=True)
         self.assertEqual(p.returncode, 2)
         self.assertIn("--target", p.stderr)
-
-
-QUERY = os.path.join(ROOT, "skills", "kb-query", "scripts", "kbfind.py")
-
-
-def kbfind(*args):
-    p = subprocess.run([sys.executable, QUERY, *args], capture_output=True, text=True, encoding="utf-8")
-    if p.returncode != 0:
-        raise AssertionError(f"kbfind {args} exited {p.returncode}\n{p.stdout}\n{p.stderr}")
-    return p.stdout
-
-
-class KbFindTest(Tmp):
-    def setUp(self):
-        super().setUp()
-        write(self.p("lib", "_kb.json"), json.dumps({"schema": 2, "names": {"old_suffix": "_alt"}}))
-        card = ["# Status card", "", "## Payments", ""] + [f"{i}. Item {i} about routine things" for i in range(1, 40)]
-        card += ["40. Settlement window moves to 18:00 (basis: [[05_Ops_minutes_Window]])", "    continued line", "",
-                 "## Projects", "", "Atlas launches in May; the settlement report follows.", "",
-                 "| Item | Owner |", "| --- | --- |", "| Settlement report | Finance |"]
-        write(self.p("lib", "00_Status-Card.md"), "\n".join(card) + "\n")
-        write(self.p("lib", "05_Ops_minutes_Window.md"), "---\ntopic: \"Settlement\"\n---\n\nBody.\n")
-        write(self.p("lib", "05_Ops_minutes_Window_alt20260101120000.md"), "settlement old\n")
-        write(self.p("lib", "_intake-batches.json"), "settlement")
-        write(self.p("lib", "_note.md"), "settlement")
-        write(self.p("lib", "snapshot_card.md"), "settlement")
-        write(self.p("lib", "Archive", "x.md"), "settlement")
-        write(self.p("lib", "Entities", "Atlas.md"), "# Atlas\n\nSettlement owner.\n")
-
-    def test_find_blocks(self):
-        out = kbfind("find", self.p("lib"), "SETTLEMENT")
-        self.assertIn("files searched: 2 | files with hits: 2 | blocks: 4", out)
-        self.assertIn("-- lines 44-45 | Status card > Payments\n40. Settlement window moves to 18:00", out)
-        self.assertIn("continued line", out)
-        self.assertIn("| Status card > Projects\nAtlas launches in May", out)
-        self.assertIn("| Item | Owner |\n| Settlement report | Finance |", out)  # the header row comes along
-        self.assertIn("-- lines 1-3 | (no heading) | front matter", out)
-        for skipped in ("old", "Archive", "snapshot", "_note", "Entities"):
-            self.assertNotIn(skipped, out.split("\n", 1)[1])
-        self.assertNotIn("Item 5 about", out)
-
-    def test_find_options_and_caps(self):
-        out = kbfind("find", self.p("lib"), "settlement", "atlas", "--all")
-        self.assertIn("blocks: 1", out)
-        out = kbfind("find", self.p("lib"), "item", "--file", "Status-Card", "--max-per-file", "3")
-        self.assertIn("files searched: 1", out)
-        self.assertIn("more blocks in this file", out)
-        out = kbfind("find", self.p("lib"), "settlement", "--in", "Entities")
-        self.assertIn("== Atlas.md", out)
-        self.assertIn("no match", kbfind("find", self.p("lib"), "nothing-like-this"))
-        p = subprocess.run([sys.executable, QUERY, "find", self.p("lib"), "x", "--in", "../.."], capture_output=True)
-        self.assertEqual(p.returncode, 2)
-
-    def test_toc(self):
-        out = kbfind("toc", self.p("lib", "00_Status-Card.md"))
-        self.assertIn("1-2 | # Status card", out)
-        self.assertIn("3-46 | ## Payments |", out)
-        self.assertIn("40 items", out)
-        self.assertIn("| ## Projects |", out)
-        self.assertIn("2 table rows", out)
 
 
 class HookTest(unittest.TestCase):

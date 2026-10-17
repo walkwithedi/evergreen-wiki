@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""ingest.py - file one intake run into a 2.0 library and rebuild its topic pages.
+"""ingest.py - file one intake run into a library and rebuild its topic pages.
 
-The library (or a staging folder laid out like it, for a library in Google Drive) has three
+The library (or, with --target, another folder laid out like it) has three
 folders, named by kbconf names: sources_dir (default Sources), cards_dir (Cards) and topics_dir
 (Topics), plus archive_dir for older versions.
 
@@ -56,8 +56,6 @@ versions: for each source of the run whose name is not in the library yet, the l
   version marks (v2, rev, final, draft, copy, (1), 副本, 终稿, 定稿, 修订版) and punctuation are
   dropped (equal, or a similarity of NAME_MIN or more) and at least OVERLAP_MIN of the shorter
   source's paragraphs (PARA_MIN characters or more, compared as quote_check does) are in the other.
-  --known FILE lists the library's source names (a Drive listing for a staging folder): a close
-  name whose file is not in the folder is listed with "read": true, to be read in and run again.
   Same-named sources are new versions anyway and are listed apart. Prints JSON.
 
 entities: the cards' entity names against the spec's Table E. Names or aliases of the table
@@ -83,13 +81,9 @@ add-topic: appends topics the owner confirmed to a partition of Table A (partiti
 
 retopic: changes the topic of accepted cards, for a new topic the owner put under a known one.
 
-check-page: a topic page the model wrote (strong tier) must cite every current card of the topic
-  and nothing else ([[Sources/<source>#^pN]] links); exit 3 with the unknown and missing links
-  otherwise. --write puts a page that passes into the topics folder.
-
 Python 3 standard library only.
 
-Exit codes: 0 done; 3 check-page or status-check found problems; 2 bad arguments, unreadable input or a part missing.
+Exit codes: 0 done; 3 status-check found problems; 2 bad arguments, unreadable input or a part missing.
 Usage:
   ingest.py file BATCH.md [BATCH.md ...] --cards ACCEPTED.jsonl --library DIR [--target DIR]
                  [--names NAMES.json] [--replaces NEW.md=OLD.md ...] [--restore RESTORE.json]
@@ -100,13 +94,12 @@ Usage:
   ingest.py pending write --library DIR [--run NAME] [--report F] [--entities F] [--versions F] [--conflicts F]
   ingest.py pending read --library DIR --run NAME --work DIR
   ingest.py pending done --library DIR --run NAME
-  ingest.py versions BATCH.md [BATCH.md ...] --library DIR [--target DIR] [--known NAMES.txt]
+  ingest.py versions BATCH.md [BATCH.md ...] --library DIR [--target DIR]
   ingest.py entities ACCEPTED.jsonl --library DIR [--apply [--map MAP.json]]
   ingest.py pages --library DIR [--target DIR] (--topic NAME ... | --all)
   ingest.py topics --library DIR [--out FILE]
   ingest.py add-topic --library DIR --topic NAME [--topic NAME ...] [--partition NN]
   ingest.py retopic ACCEPTED.jsonl --from TOPIC --to TOPIC
-  ingest.py check-page --library DIR [--target DIR] --topic NAME --page FILE [--write]
 """
 import argparse
 import difflib
@@ -477,7 +470,6 @@ EMPTY_TABLE_RE = re.compile(r'^\s*(?:No entries yet|暂无条目)')
 VERSION_RE = re.compile(r'^((?:Version|版本)\s*[:：]\s*v)(\d+)(?:\.(\d+))?\s*$')
 UPDATED_RE = re.compile(r'^((?:Last updated|最后更新)\s*[:：]\s*).*$')
 REVISION_RE = re.compile(r'^(?:Revision|修订)\s*[:：]')
-LINK_ANCHOR_RE = re.compile(r'\[\[([^\]#|]+)#\^(p\d+)(?:\|[^\]]*)?\]\]')
 
 
 def spec_path(library, cfg):
@@ -681,16 +673,6 @@ def _write_table_e(library, cfg, spec, added, aliases):
                 + [lb['entity'] % (version, today, name) for name, _ in added])
 
 
-def check_page(target, cfg, topic, page):
-    """Links of a topic page written by the model against the topic's current cards:
-    unknown = cited passages no card holds; missing = cards the page does not cite."""
-    key = kbconf.topic_key(topic)
-    have = {'%s#^%s' % (c.get('link') or src, c['anchor']) for _, src, c in _all_cards(target, cfg)
-            if kbconf.topic_key(c['topic']) == key}
-    cited = {'%s#^%s' % m for m in LINK_ANCHOR_RE.findall(page)}
-    return {'unknown': sorted(cited - have), 'missing': sorted(have - cited)}
-
-
 NOTE_LABELS = {
     'en': {'name': 'Note', 'origin': 'assistant conversation', 'path': 'Original path', 'recorded': 'Recorded',
            'context': 'Context', 'colon': ': '},
@@ -713,7 +695,7 @@ def note_batch(cfg, title, text, outdir, context=None):
     meta = ''.join('> %s%s%s\n' % (k, lb['colon'], v) for k, v in (
         (lb['path'], lb['origin']), (lb['recorded'], '%s (%s)' % (when, cfg['timezone']))) + (
         ((lb['context'], ' '.join(context.split())),) if context and context.strip() else ()))
-    limit, tier = kb_batch.batch_limit(cfg.get('tier'), cfg.get('batch_chars'))
+    limit, tier = kb_batch.batch_limit(None, cfg.get('batch_chars'))
     units, _ = kb_batch.build_units([{'name': '%s %s %s.md' % (lb['name'], stamp, title), 'path': lb['origin'],
                                       'modified': when, 'meta': meta, 'body': words}], limit)
     batches = kb_batch.pack(units, limit)
@@ -904,7 +886,6 @@ def main(argv=None):
     nt.add_argument('-o', '--outdir', required=True, help='work folder for the batch file')
     vs = sub.add_parser('versions', help='library sources that may be older versions of the run\'s sources')
     vs.add_argument('batches', nargs='+', help='batch files of the run')
-    vs.add_argument('--known', default=None, help='file listing the library\'s source names, one per line')
     en = sub.add_parser('entities', help='the cards\' entities against Table E; --apply writes the decisions')
     en.add_argument('cards', help='accepted cards (JSON lines); rewritten in place with --apply')
     en.add_argument('--apply', action='store_true', help='rewrite the cards and add to Table E')
@@ -918,14 +899,10 @@ def main(argv=None):
     at = sub.add_parser('add-topic', help='add confirmed topics to Table A (one version step, a revision line each)')
     at.add_argument('--topic', action='append', required=True, help='a topic to add (repeatable)')
     at.add_argument('--partition', default=None, help='two-digit partition (default: partitions.fallback)')
-    cp = sub.add_parser('check-page', help="check a model-written topic page against the topic's cards")
-    cp.add_argument('--topic', required=True)
-    cp.add_argument('--page', required=True, help='the page as written')
-    cp.add_argument('--write', action='store_true', help='when it passes, write it to the topics folder')
-    for p in (f, pg, tp, at, cp, vs, en, cf, nt, pd):
+    for p in (f, pg, tp, at, vs, en, cf, nt, pd):
         p.add_argument('--library', required=True, help='library root (its _kb.json gives the names)')
-    for p in (f, pg, cp, vs, cf):
-        p.add_argument('--target', default=None, help='write here instead of the library (a staging folder)')
+    for p in (f, pg, vs, cf):
+        p.add_argument('--target', default=None, help='work on this folder, laid out like the library, instead')
     rt = sub.add_parser('retopic', help="change accepted cards' topic")
     rt.add_argument('cards', help='accepted cards (JSON lines), rewritten in place')
     rt.add_argument('--from', dest='old', required=True)
@@ -1006,20 +983,7 @@ def main(argv=None):
             print(json.dumps(conflicts(a.batches, cards, target, cfg, None, dict(a.replaces)), ensure_ascii=False))
             return 0
         if a.cmd == 'versions':
-            print(json.dumps(version_candidates(a.batches, target, cfg, a.known), ensure_ascii=False))
-            return 0
-        if a.cmd == 'check-page':
-            with open(a.page, encoding='utf-8') as fh:
-                page = fh.read()
-            res = check_page(target, cfg, a.topic, page)
-            print(json.dumps(res, ensure_ascii=False))
-            if res['unknown'] or res['missing']:
-                return 3
-            if a.write:
-                folder = os.path.join(target, cfg['names']['topics_dir'])
-                os.makedirs(folder, exist_ok=True)
-                with open(os.path.join(folder, quote_check.page_name(a.topic) + '.md'), 'w', encoding='utf-8') as fh:
-                    fh.write(page)
+            print(json.dumps(version_candidates(a.batches, target, cfg), ensure_ascii=False))
             return 0
         if a.cmd == 'pages':
             for p in pages_run(target, cfg, None if a.all else a.topic):

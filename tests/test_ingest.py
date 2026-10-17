@@ -411,32 +411,6 @@ class LibraryCommandsTest(Tmp):
         self.assertIn("1 card", p.stdout)
 
 
-class CheckPageTest(LibraryCase):
-    def test_strong_page_must_cite_exactly_the_cards(self):
-        self.first_run()
-        os.makedirs(self.p("work"))
-        good = ("# Pilot\n\nThe pilot starts in April [[Sources/plan#^p1]], hosted by Riverside "
-                "[[Sources/plan#^p2]].\n")
-        bad = "# Pilot\n\nThe pilot starts in April [[Sources/plan#^p1]] in all regions [[Sources/plan#^p7]].\n"
-        with open(self.p("work", "good.md"), "w", encoding="utf-8") as f:
-            f.write(good)
-        with open(self.p("work", "bad.md"), "w", encoding="utf-8") as f:
-            f.write(bad)
-        res = ingest.check_page(self.p("lib"), self.cfg, "pilot", bad)
-        self.assertEqual(res, {"unknown": ["Sources/plan#^p7"], "missing": ["Sources/plan#^p2"]})
-        self.assertEqual(ingest.check_page(self.p("lib"), self.cfg, "Pilot", good), {"unknown": [], "missing": []})
-        with open(self.p("lib", "_kb.json"), "w", encoding="utf-8") as f:
-            json.dump({"schema": 2}, f)
-        p = cli("check-page", "--library", self.p("lib"), "--topic", "Pilot", "--page", self.p("work", "bad.md"), "--write")
-        self.assertEqual(p.returncode, 3)
-        self.assertFalse(os.path.exists(self.p("lib", "Topics", "Pilot.md")))
-        self.assertEqual(json.loads(p.stdout)["unknown"], ["Sources/plan#^p7"])
-        p = cli("check-page", "--library", self.p("lib"), "--topic", "Pilot", "--page", self.p("work", "good.md"), "--write")
-        self.assertEqual(p.returncode, 0, p.stderr)
-        self.assertEqual(read(self.p("lib", "Topics", "Pilot.md")), good)
-
-
-
 REPORT = ("Week 1 of the pilot is complete and all clinics joined.\n\n"
           "The data export is planned for the end of the month.\n\n"
           "The review board meets every second Friday.\n\n"
@@ -474,15 +448,6 @@ class VersionsTest(LibraryCase):
         self.assertGreaterEqual(c["name_score"], 0.8)
         self.assertEqual(c["overlap"], 0.75)
         self.assertFalse(c["read"])
-
-    def test_known_names_absent_from_a_staging_folder_are_marked_to_read(self):
-        self.library_with(("plan.docx", PLAN_V1))
-        b = make_run(self.p("run"), [("status report v3.docx", "status report v3.docx", "", REPORT)])
-        with open(self.p("known.txt"), "w", encoding="utf-8") as f:
-            f.write("status report.md\nplan.md\nminutes 2026.md\n")
-        got = ingest.version_candidates(b, self.p("lib"), self.cfg, known=self.p("known.txt"))
-        self.assertEqual(got["candidates"], [{"new": "status report v3.md", "old": "status report.md",
-                                              "name_score": 1.0, "overlap": None, "read": True}])
 
     def test_file_replaces_archives_the_old_version(self):
         self.first_run()
@@ -690,8 +655,8 @@ class ConflictsTest(LibraryCase):
         page = read(self.p("lib", "Topics", "Pilot.md"))
         self.assertIn("[[Archive/Sources/%s#^p1]] · [[Cards/plan|card]] · earlier version" % plan_old, page)
         self.assertIn("Pilot starts in May", page)
-        cited = "".join("[[%s#^%s]]" % (c.get("link") or "Sources/plan", c["anchor"]) for c in back)
-        self.assertEqual(ingest.check_page(self.p("lib"), self.cfg, "Pilot", cited), {"unknown": [], "missing": []})
+        for c in back:
+            self.assertIn("[[%s#^%s]]" % (c.get("link") or "Sources/plan", c["anchor"]), page)
 
     def test_command_line(self):
         self.first_run()
@@ -909,11 +874,12 @@ def init(*args):
 class InitTest(Tmp):
     BASE = ["--language", "en", "--timezone", "UTC", "--scope", "work material"]
 
-    def test_new_library_is_a_2_0_library(self):
-        p = init("write", "--root", self.p("lib"), "--preset", "work", *self.BASE, "--tier", "weak")
+    def test_new_library_is_a_schema_2_library(self):
+        p = init("write", "--root", self.p("lib"), "--preset", "work", *self.BASE)
         self.assertEqual(p.returncode, 0, p.stderr)
         kb = json.loads(read(self.p("lib", "_kb.json")))
-        self.assertEqual((kb["schema"], kb["tier"], kb["label"]), (2, "weak", "Work"))
+        self.assertEqual((kb["schema"], kb["label"]), (2, "Work"))
+        self.assertNotIn("tier", kb)
         self.assertEqual(kbconf.validate(kb), [])
         self.assertEqual(sorted(os.listdir(self.p("lib"))),
                          ["00_Spec.md", "00_Status-Card.md", "Archive", "Cards", "Sources", "Topics", "_kb.json"])
@@ -922,15 +888,14 @@ class InitTest(Tmp):
         cfg = kbconf.load_library(self.p("lib"))
         self.assertIn("work plans", kbconf.topics(read(self.p("lib", "00_Spec.md")), cfg))
 
-    def test_tier_default_and_chinese(self):
+    def test_chinese_and_tier_gone(self):
         p = init("write", "--root", self.p("zh"), "--preset", "work", "--language", "zh", "--timezone", "UTC",
                  "--scope", "工作资料")
         self.assertEqual(p.returncode, 0, p.stderr)
-        self.assertEqual(json.loads(read(self.p("zh", "_kb.json")))["tier"], "weak")
         self.assertIn("版本：v1", read(self.p("zh", "00_Spec.md")))
         p = init("write", "--root", self.p("s"), "--preset", "work", *self.BASE, "--tier", "strong")
-        self.assertEqual(p.returncode, 0, p.stderr)
-        self.assertEqual(json.loads(read(self.p("s", "_kb.json")))["tier"], "strong")
+        self.assertEqual(p.returncode, 2)
+        self.assertFalse(os.path.exists(self.p("s")))
 
     def test_life_preset_and_1x_options_gone(self):
         p = init("write", "--root", self.p("life"), "--preset", "life", *self.BASE)

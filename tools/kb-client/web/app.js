@@ -16,7 +16,7 @@
       move: "Move a library",
       batch: "Build batch files",
       material: "Material",
-      batch_hint: "Turn a folder of documents into batch files for ingesting; upload them to claude.ai, or ingest them here.",
+      batch_hint: "Turn a folder of documents into batch files for ingesting, then ingest them here.",
       batch_copy: "Copy path", batch_ingest: "Ingest these",
       say_batch: "ingest these batch files: {path}",
       pending_title: "Waiting for confirmation",
@@ -183,10 +183,10 @@
       why_check: "Every card carries the exact sentence it rests on; a script looks that sentence up in the source before anything is written.",
       why_file: "Sources and cards are written; an older version of a source moves to the archive with its cards, nothing is deleted.",
       why_pages: "The pages of the topics touched are rebuilt from the cards, newest first, each line linked to its source sentence.",
-      more_convert: "Pictures keep a placeholder; tables stay tables. The library's tier sets the size of a batch.",
+      more_convert: "Pictures keep a placeholder; tables stay tables. The library's settings give the size of a batch.",
       more_check: "A card whose quote is not found is written once more from the source; one that fails twice is dropped and listed in the report.",
       more_file: "A source's name is its version: a new version of a document lands on the same name.",
-      more_pages: "With a weak model a script builds the pages; with a strong one the model writes them and a script checks every citation.",
+      more_pages: "A script builds the pages from the cards; the model does not write them.",
       auto_count: "Allowed without asking: {n}",
       check_title: "Getting started",
       check_hide: "Hide", check_show: "Show",
@@ -242,7 +242,7 @@
       move: "移动知识库",
       batch: "生成批文件",
       material: "材料",
-      batch_hint: "把一个文件夹里的文档转成入库用的批文件；可以上传到 claude.ai，也可以在这里入库。",
+      batch_hint: "把一个文件夹里的文档转成入库用的批文件，然后在这里入库。",
       batch_copy: "复制路径", batch_ingest: "入库这些",
       say_batch: "入库这些批文件：{path}",
       pending_title: "等待确认",
@@ -409,10 +409,10 @@
       why_check: "每张卡片都带着它依据的原句；写入前由脚本到原文里逐句核对。",
       why_file: "写入来源和卡片；同一来源的旧版本连同卡片移入归档，从不删除。",
       why_pages: "涉及的主题页由卡片重建，新的在前，每句都链接到原句。",
-      more_convert: "图片留占位，表格仍是表格。每批的大小由知识库的档位决定。",
+      more_convert: "图片留占位，表格仍是表格。每批的大小由知识库的设置决定。",
       more_check: "引文找不到的卡片照原文重写一次；两次都不通过的丢弃，并在报告里列出。",
       more_file: "名称即版本：同一份文件的新版本落在同一个名字上。",
-      more_pages: "弱模型时主题页由脚本生成；强模型时由模型撰写，脚本核对每处引用。",
+      more_pages: "主题页由脚本根据卡片生成，模型不撰写。",
       auto_count: "已自动允许 {n} 次",
       check_title: "首次使用清单",
       check_hide: "收起", check_show: "展开",
@@ -2272,7 +2272,7 @@
   var SCRIPT_STAGE = {
     "pick_materials": "convert", "doc2kb_core": "convert", "kb_batch split": "convert",
     "ingest topics": "check", "quote_check check": "check", "ingest retopic": "check", "ingest add": "check",
-    "quote_check write": "file", "ingest file": "file", "ingest pages": "pages", "ingest check": "pages"
+    "quote_check write": "file", "ingest file": "file", "ingest pages": "pages"
   };
   var stages = { current: "", shown: "", hideTimer: null };
 

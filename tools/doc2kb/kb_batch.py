@@ -57,7 +57,8 @@ import sys
 log = logging.getLogger('kb_batch')
 LOG_FORMAT = '%(asctime)s [%(levelname)s] %(name)s.%(funcName)s:%(lineno)d - %(message)s'
 
-# Characters per batch for each tier; a library may set its own (_kb.json "batch_chars").
+# Characters per batch (weak is the default; strong is kept for older command lines); a library may
+# set its own (_kb.json "batch_chars").
 TIER_CHARS = {'weak': 20000, 'strong': 100000}
 DEFAULT_TIER = 'weak'
 SETTINGS_FILE = '_kb.json'
@@ -104,10 +105,11 @@ def read_settings(library):
 
 
 def batch_limit(tier=None, chars=None, library=None):
-    """(characters per batch, tier). Explicit values win over the library's settings,
-    batch_chars over tier; without any the weak tier applies."""
+    """(characters per batch, tier). Explicit values win over the library's batch_chars; an explicit
+    tier (kept for older command lines) picks its limit; otherwise the default applies. A library's
+    tier setting is ignored."""
     lib = read_settings(library) if library else {}
-    tier = tier or lib.get('tier') or DEFAULT_TIER
+    tier = tier or DEFAULT_TIER
     if tier not in TIER_CHARS:
         raise ValueError('tier must be one of %s, got %r' % (', '.join(sorted(TIER_CHARS)), tier))
     chars = chars or lib.get('batch_chars') or TIER_CHARS[tier]

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""answer.py - material for an answer from a 2.0 library, and a check of the answer's quotes.
+"""answer.py - material for an answer from a library, and a check of the answer's quotes.
 
-select: the cards and status-card items a question's keywords point to, for the weak tier, where
-  the assistant answers only from what it is given. A keyword that names an entity of the spec's
+select: the cards and status-card items a question's keywords point to; the assistant answers only
+  from what it is given. A keyword that names an entity of the spec's
   Table E (its name or an alias) stands for all of that entity's names. A card scores one point
   for each keyword in its conclusion or quote, two for each of its entities a keyword names and
   two when a keyword names its topic; the best LIMIT cards are listed, newest first among equals,

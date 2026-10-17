@@ -1,6 +1,6 @@
 # Backend: local folder
 
-The library is a folder on disk; backend.root in the registry is its path (~ allowed). It may be an Obsidian vault or a folder synced by Google Drive for desktop, Dropbox or similar. Use the file tools of your environment (read, write, list, search, shell). If you cannot reach the path, stop and say which path is missing.
+The library is a folder on disk; backend.root in the registry is its path (~ allowed). It may be an Obsidian vault. Use the file tools of your environment (read, write, list, search, shell). If you cannot reach the path, stop and say which path is missing.
 
 ## Operations
 
@@ -10,7 +10,7 @@ The library is a folder on disk; backend.root in the registry is its path (~ all
 | find_exact | test whether <folder>/<name> exists |
 | find_by_text | search file contents in the folder, one level only (grep -l -F or ripgrep with --max-depth 1); fall back to reading candidates if no search tool exists |
 | find_folder | test whether <parent>/<name> is a directory |
-| list | list the folder with modification times (ls -l, dir, or the file tool) |
+| list | list the folder with modification times (ls -l or the file tool) |
 | read | read the file as UTF-8 |
 | write_new | write a new file; refuse if the name already exists |
 | ensure_folder | create the folder if it does not exist |
@@ -27,6 +27,6 @@ The library is a folder on disk; backend.root in the registry is its path (~ all
 
 ## Writing an ingest run
 
-kb-ingest's scripts write straight into the library folder after the user confirms the preview: scripts/ingest.py file writes the sources and cards files and moves each older version, with its cards file, into the archive folder as <stem><old_suffix><YYYYMMDDHHMMSS>.md; scripts/ingest.py pages (or check-page --write) writes the topic pages. A folder cannot hold two files with the same name, so versions never pile up.
+kb-ingest's scripts write straight into the library folder after the user confirms the preview: scripts/ingest.py file writes the sources and cards files and moves each older version, with its cards file, into the archive folder as <stem><old_suffix><YYYYMMDDHHMMSS>.md; scripts/ingest.py pages writes the topic pages. A folder cannot hold two files with the same name, so versions never pile up.
 
 Without a code environment (Python), write nothing to the library and say so; reading and answering still work.

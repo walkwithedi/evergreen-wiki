@@ -1,6 +1,6 @@
 # Design: knowledge base 2.0
 
-Status: implemented in 2.0. This document was the reference for the 2.0 work; each implementation step below was its own pull request and refined details here in the same pull request.
+Status: implemented in 2.0. This document was the reference for the 2.0 work; each implementation step below was its own pull request and refined details here in the same pull request. 3.0 narrows the scope to offline, script-led use and removes the Google Drive backend, the strong tier and the ChatGPT versions described here: see design-3.0.md.
 
 ## 1. Scope
 

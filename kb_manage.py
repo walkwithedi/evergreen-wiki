@@ -176,8 +176,6 @@ def init_library():
 # ---------- install record ----------
 
 def state_dir():
-    if os.name == "nt" and os.environ.get("APPDATA"):
-        return os.path.join(os.environ["APPDATA"], "evergreen-wiki")
     base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
     return os.path.join(base, "evergreen-wiki")
 
@@ -268,8 +266,6 @@ def copy_any(src, dest):
 def remove_any(path):
     if os.path.isdir(path) and not os.path.islink(path):
         shutil.rmtree(path)
-    elif os.name == "nt" and os.path.islink(path) and os.path.isdir(path):
-        os.rmdir(path)  # a directory link on Windows is removed like a folder, its target stays
     elif os.path.lexists(path):
         os.remove(path)
 
@@ -380,7 +376,7 @@ def inside(path, parent):
     path, parent = os.path.realpath(path), os.path.realpath(parent)
     try:
         return os.path.commonpath([path, parent]) == parent
-    except ValueError:  # different drives on Windows
+    except ValueError:
         return False
 
 

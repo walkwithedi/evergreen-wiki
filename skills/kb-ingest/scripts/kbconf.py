@@ -5,8 +5,9 @@ Two levels of configuration:
 
   Registry (user level)   kb-libraries.json: which libraries exist and where they live.
   Library (per library)   _kb.json in the library root (schema 2): label, language, timezone,
-                          tier, batch and quote limits, partitions and file/folder names.
-                          A 1.x library (schema 1) is refused: 2.0 does not migrate them.
+                          batch and quote limits, partitions and file/folder names. A tier
+                          set by 2.0.x is accepted and ignored. A 1.x library (schema 1) is
+                          refused: this release does not migrate them.
 
 Every name a skill or script uses (summary files, archive folder, "_old" suffix, ...)
 comes from resolve_names(), so a library can keep its own names (for example Chinese
@@ -70,17 +71,17 @@ DEFAULTS = {
     "partitions": {"max": 9, "topic_start": 2, "fallback": ""},
     "names": {},
 }
-# 2.0 intake (kb-ingest): tier (weak: scripts assemble the topic pages; strong: the model writes
-# them), characters per batch file, and the quote length a card's quote must keep to.
+# Intake (kb-ingest): characters per batch file and the quote length a card's quote must keep to.
+# tier is a setting of 2.0.x: still accepted (weak or strong) and ignored.
 TIERS = ("weak", "strong")
 INGEST_KEYS = ("tier", "batch_chars", "quote_min", "quote_max")
 KNOWN_KEYS = set(DEFAULTS) | {"backend", "notes"} | set(INGEST_KEYS)
-OLD_SCHEMA = ("this is a 1.x library (schema 1); 2.0 libraries are not migrated from 1.x: keep using the "
-              "1.x release for it, or set up a 2.0 library and ingest the material again")
+OLD_SCHEMA = ("this is a 1.x library (schema 1); 1.x libraries are not migrated: keep using the "
+              "1.x release for it, or set up a new library and ingest the material again")
 
 
 def utf8_stdio():
-    """Windows consoles default to a legacy code page; library names may be CJK."""
+    """A console may default to a legacy encoding; library names may be CJK."""
     for s in (sys.stdout, sys.stderr):
         try:
             s.reconfigure(encoding="utf-8", errors="replace")
@@ -120,8 +121,6 @@ def registry_candidates():
     env = os.environ.get("KB_LIBRARIES")
     if env:
         out.append(os.path.expanduser(env))
-    if os.name == "nt" and os.environ.get("APPDATA"):
-        out.append(os.path.join(os.environ["APPDATA"], "kb", REGISTRY_FILE))
     base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
     out.append(os.path.join(base, "kb", REGISTRY_FILE))
     here = os.path.dirname(os.path.abspath(__file__))
@@ -167,8 +166,10 @@ def check_registry(reg):
             problems.append(f"{where}.id {lid!r} is used twice")
         seen.add(lid)
         b = lib.get("backend") or {}
-        if b.get("type") not in ("gdrive", "local"):
-            problems.append(f"{where}.backend.type must be gdrive or local")
+        if b.get("type") == "gdrive":
+            problems.append(f"{where} is a Google Drive library: the 2.0.x release reads it, this release does not")
+        elif b.get("type") != "local":
+            problems.append(f"{where}.backend.type must be local")
         if not b.get("root"):
             problems.append(f"{where}.backend.root is required")
         if not lib.get("scope"):
@@ -333,7 +334,7 @@ def match_topic(name, known):
 
 class TimezoneUnavailable(ConfigError):
     """The name may be fine, but this Python cannot resolve IANA names
-    (3.8 has no zoneinfo; Windows has no system timezone database)."""
+    (3.8 has no zoneinfo, and a system may have no timezone database)."""
 
 
 def check_timezone(name):
@@ -394,8 +395,8 @@ def tzinfo(name):
         return zoneinfo.ZoneInfo(name)
     except Exception:
         if not zoneinfo.available_timezones():
-            raise TimezoneUnavailable(f"this system has no timezone database for {name!r} "
-                                      "(usual on Windows); use a fixed offset like +08:00")
+            raise TimezoneUnavailable(f"this system has no timezone database for {name!r}; "
+                                      "use a fixed offset like +08:00")
         raise ConfigError(f"unknown timezone {name!r}")
 
 

@@ -492,12 +492,12 @@ class KbBatchTest(Tmp):
         with open(os.path.join(lib, "_kb.json"), "w", encoding="utf-8") as f:
             json.dump({"tier": "strong"}, f)
         self.assertEqual(kb_batch.batch_limit(), (20000, "weak"))
-        self.assertEqual(kb_batch.batch_limit(library=lib), (100000, "strong"))
-        self.assertEqual(kb_batch.batch_limit("weak", library=lib), (20000, "weak"))
-        self.assertEqual(kb_batch.batch_limit(chars=5000, library=lib), (5000, "strong"))
+        self.assertEqual(kb_batch.batch_limit(library=lib), (20000, "weak"))  # a library's tier is ignored
+        self.assertEqual(kb_batch.batch_limit("strong", library=lib), (100000, "strong"))
+        self.assertEqual(kb_batch.batch_limit(chars=5000, library=lib), (5000, "weak"))
         with open(os.path.join(lib, "_kb.json"), "w", encoding="utf-8") as f:
             json.dump({"tier": "strong", "batch_chars": 30000}, f)
-        self.assertEqual(kb_batch.batch_limit(library=lib), (30000, "strong"))
+        self.assertEqual(kb_batch.batch_limit(library=lib), (30000, "weak"))
         for bad in ({"tier": "medium"}, {"chars": 10}):
             with self.assertRaises(ValueError):
                 kb_batch.batch_limit(**bad)
@@ -537,7 +537,6 @@ case "$args" in
   *"--multiple"*) echo "%s" ;;
   *"--directory"*) echo "%s" ;;
   *"--checklist"*) echo "KB batch files|Expand workbooks" ;;
-  *"— Tier"*) echo "strong" ;;
   *"--progress"*) cat >/dev/null ;;
   *"--text-info"*) exit 1 ;;
 esac
@@ -553,7 +552,8 @@ exit 0
         names = [n for n in os.listdir(out) if re.search(r"_b\d+\.md$", n)]
         self.assertEqual(len(names), 1, os.listdir(out))
         text = read(os.path.join(out, names[0]))
-        self.assertIn("Tier: strong", text)
+        self.assertIn("Character limit: 20000", text)
+        self.assertNotIn("— Tier", read(self.p("calls.log")))
         self.assertIn("# S02 report-en.docx", text)
         self.assertFalse(os.path.isdir(os.path.join(out, "images")))
 
