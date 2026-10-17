@@ -58,7 +58,7 @@ Write all cards of the run to <work>/cards.jsonl, one JSON object per line.
 
 ## Step 4: new topics
 
-The report's new_topics are topics the spec does not have. Ask the user about each one, as a choice: put it under one of the existing topics (name the closest ones), or add it as a new topic. Ask once per topic, never more than four at a time.
+The new_topics of report.json, and of report2.json when step 3 checked rewritten cards, are topics the spec does not have. Ask the user about each one, as a choice: put it under one of the existing topics (name the closest ones), or add it as a new topic. Ask once per topic, never more than four at a time.
 
 - Under an existing topic: python3 scripts/ingest.py retopic <work>/accepted.jsonl --from "<new topic>" --to "<existing topic>".
 - Add: collect them and run python3 scripts/ingest.py add-topic --library <library> --topic "<topic>" (repeat --topic for each), which appends them to the fallback partition of Table A, raises the spec's version once and adds a revision line for each. With --partition NN when the user names a partition. Never add a partition number.

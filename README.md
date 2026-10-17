@@ -12,16 +12,18 @@ An LLM-maintained knowledge base that stays current, cites its sources and is ea
 
 ## Why
 
-A knowledge base an assistant maintains goes stale or drifts unless the rules are strict. These skills follow a few strict ones:
+An assistant that answers from a pile of documents returns whatever matches best, even an outdated plan, and a summary it writes can drift from what the documents say. evergreen-wiki keeps every answer tied to a sentence a script has found in a source:
 
-- One file name per document. A new version replaces the old one under the same name; the old one moves to the archive folder. Nothing is ever deleted.
-- Every conclusion in the library is a card that carries the exact sentence it rests on, linked to the paragraph in the source. A script looks each quote up in the source before anything is written; a card whose quote is not found is not written.
-- Topic pages are built from the cards, newest first. With a model of limited reasoning (a weak tier, such as a local model run through OpenCode) a script builds them; with a strong model the model writes them and a script checks every citation.
-- Partitions and topics come from the library's own spec. A topic the spec does not have is added only after you agree.
+- **Quote or no card.** Every conclusion in the library is a card: the conclusion, the exact sentence it rests on and a link to that paragraph of the source. A script looks each sentence up before anything is written; a reworded sentence is refused.
+- **Answers quote.** Every fact in an answer is followed by its source sentence and link. In the weak tier a script selects the cards an answer may use and checks every quote in it before the reply.
+- **Name equals version.** A new version of a document takes the old one's name; the old source and its cards move to the archive. A new version under another name is proposed by a script and confirmed by you. Nothing is ever deleted.
+- **You decide what changes.** New topics, new entities, new versions, conclusions a new version drops or changes, and every rewrite of the status card are put to you first, in one preview (or as a form in the browser client).
+- **Two tiers.** With a model of limited reasoning (the weak tier, such as a local model run through OpenCode) scripts do everything mechanical: they build the topic pages and pick what answers rest on. With a strong model (Claude, ChatGPT) the model writes the pages and answers, and scripts check every citation.
+- **No code, no writes.** Writing to a library needs Python to run the checks. Without it the skills read and answer, and write nothing.
 
-Documents are converted locally into batch files before they are ingested (Word, Excel, PowerPoint, PDF, mail): plain text with a source number per document and an anchor on every paragraph, cut to a size that fits the library's tier. The assistant reads these instead of binary files, and quotes and links point at the anchors. Material becomes searchable once its run is filed.
+Documents are converted locally into batch files before they are ingested (Word, Excel, PowerPoint, PDF, mail): plain text with a source number per document and an anchor on every paragraph, cut to a size that fits the library's tier. Material becomes searchable once its run is filed.
 
-The full reasoning is in [docs/methodology.md](docs/methodology.md).
+The full reasoning is in [docs/methodology.md](docs/methodology.md) ([中文](docs/methodology.zh-CN.md)); the design and its implementation steps in [docs/design-2.0.md](docs/design-2.0.md).
 
 ## How it fits together
 
@@ -61,6 +63,7 @@ Every release on the [Releases](../../releases) page carries these files:
 | Your situation | What to do |
 | --- | --- |
 | claude.ai or the Claude apps, library in Google Drive | upload the three skill zips: [In claude.ai or the Claude apps](#in-claudeai-or-the-claude-apps-google-drive) |
+| ChatGPT | the three `-chatgpt.zip` files: [In ChatGPT](#in-chatgpt) |
 | Claude Code | the plugin or the installer: [In a terminal](#in-a-terminal-claude-code-codex-gemini-cli-opencode) |
 | Codex, Gemini CLI, OpenCode or another agent that reads Agent Skills | the installer: [In a terminal](#in-a-terminal-claude-code-codex-gemini-cli-opencode) |
 | A computer without network | copy `evergreen-wiki-v<version>.zip` over, then the installer or the desktop tool |
@@ -101,6 +104,14 @@ It needs Python 3.8 or later and a browser. Details in [tools/kb-client](tools/k
 2. Connect Google Drive, create an empty folder for the library, and open a Project for your knowledge base.
 3. In the Project, say "get started with the knowledge base". The assistant asks two questions, shows a preview, writes the library into the folder and gives you one line to paste into the Project instructions. Paste it, save, and start a new conversation in the Project. That line points to the library list kept in Drive, so adding more libraries later needs no further pasting, and filed material is written straight into Drive after you confirm a preview.
 
+Documents are converted on your computer: make batch files with tools/doc2kb or the client's Build batch files and upload them in the conversation ("ingest these").
+
+### In ChatGPT
+
+1. Download the three `-chatgpt.zip` files from [Releases](../../releases) and unzip them.
+2. Either make one custom GPT per skill (its instructions are `<skill>-prompt.md`, its knowledge `<skill>-files.zip`), or upload all six files to one project and add a project instruction such as: "For questions use kb-query-prompt.md, to save something kb-note-prompt.md, to add documents kb-ingest-prompt.md."
+3. Turn on the Python tool. Reading and answering work with a Drive connector; writing to a library also needs a tool that can write to its Drive folder, and without one nothing is written.
+
 Try everything first on the fictional [sample library](examples/). Prefer to do each step by hand, or need the registry format? See [docs/manual-setup.md](docs/manual-setup.md).
 
 ## How a library looks
@@ -114,16 +125,22 @@ work-kb/
   Cards/                   one cards file per source: conclusion, exact quote, link, topic, date
   Topics/                  one page per topic, built from the cards, newest first
   Archive/                 older versions of sources and cards
+  _pending/                decisions an ingest run waits for (local libraries; removed after filing)
 ```
 
-Every name is configurable in `_kb.json`, so an existing library in another language keeps its own file names.
+Every name is configurable in `_kb.json`. A quick note is a source like any other ("Note <YYYYMMDD-HHMM> <title>"). Table E of the spec is the alias table of entities, and status-card items citing a source that got a new version carry a review mark (⏳) until they are checked.
+
+## Coming from 1.x
+
+The 1.x line is frozen: its last release, [v1.22.1](../../releases/tag/v1.22.1), stays available, and no further 1.x releases are made. 2.0 does not migrate 1.x libraries (schema 1); the skills say so and stop when they meet one. Keep using the 1.x release for such a library, or set up a 2.0 library in an empty folder and ingest the material again. The life library and its preset exist only in 1.x.
 
 ## Backends
 
 | | Google Drive | Local folder |
 | --- | --- | --- |
 | Works in | claude.ai and Claude apps with the Drive connector; other agents with a Drive MCP server | any agent with file access (Claude Code, Codex, Gemini CLI, OpenCode, Claude desktop with file access) |
-| Delivery of filed material | written directly after you confirm a preview; old versions archived on the spot | the same |
+| Writing an ingest run | the scripts run on a staging folder, then the changed files are written to Drive after you confirm the preview; old copies move to the archive folder first | the scripts write straight into the folder after you confirm the preview |
+| Needs | a code environment and a Drive tool that can write | Python 3.8+ |
 | Obsidian | via Google Drive for desktop sync | open the folder as a vault |
 
 Details: [docs/backends.md](docs/backends.md).
@@ -132,17 +149,18 @@ Details: [docs/backends.md](docs/backends.md).
 
 | Environment | Status |
 | --- | --- |
-| Claude Code, local backend | the 2.0 skills are covered by the script tests and the sample library; end-to-end runs are still to do |
-| claude.ai / Claude apps, Drive backend | supported; English build not yet re-tested |
+| Claude Code, local backend | the three skills run end to end on a copy of the sample library: an ingest run (strong tier, with a rejected and rewritten card, a new topic, a new entity, the pending file and a topic page check-page refused once), a quick note, questions in both tiers (with answer.py check), and a new version that marked a status-card item for review, which was then updated through status-check |
+| claude.ai / Claude apps, Drive backend | supported through the staging folder; not yet tested end to end |
+| ChatGPT | prompt versions built and checked by scripts; not yet tested end to end |
 | Codex, Gemini CLI, OpenCode | not yet verified; reports welcome |
 
-Scripts need Python 3.8+ and nothing outside the standard library. Without Python the skills do the same work by hand and say so (and read uploads without converting them).
+Scripts need Python 3.8+ and nothing outside the standard library. Without Python the skills read and answer, and write nothing.
 
 ## Tools
 
-[tools/doc2kb](tools/doc2kb/) is the converter as a stand-alone tool: it turns whole folders of Office files, PDFs and mail into one Markdown knowledge base with an index, from a Linux desktop dialog or a cron job, incrementally. Each release attaches it as `doc2kb-<version>.zip`.
+[tools/doc2kb](tools/doc2kb/) is the converter as a stand-alone tool: it turns whole folders of Office files, PDFs and mail into one Markdown knowledge base with an index, from a Linux desktop dialog or a cron job, incrementally. Each release attaches it as `doc2kb-v<version>.zip`.
 
-[tools/kb-client](tools/kb-client/) runs the installer and its backup, rollback, move and uninstall commands in a page in the browser, served from your own computer, for people who do not use a terminal, lists the registered libraries and the state of the skills, and holds a conversation with OpenCode (ingesting, quick notes, questions) with permission requests answered on the page; it comes with the evergreen-wiki zip.
+[tools/kb-client](tools/kb-client/) runs the installer and its backup, rollback, move and uninstall commands in a page in the browser, served from your own computer, for people who do not use a terminal. It lists the registered libraries and the state of the skills, builds batch files from a folder of documents, shows the decisions an ingest run waits for as a form (Waiting for confirmation, with the status-card items to review), and holds a conversation with OpenCode (ingesting, quick notes, questions) with permission requests answered on the page. It comes with the evergreen-wiki zip.
 
 ## Development
 

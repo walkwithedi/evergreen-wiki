@@ -65,6 +65,16 @@ class SelectTest(SampleCase):
         self.assertEqual((c["link"], c["anchor"], c["topic"]), ("Sources/Atlas weekly status 2026-03-09", "p4", "milestones"))
         self.assertEqual(got["paragraphs"], [])
 
+    def test_same_event_date_newer_source_first(self):
+        self.write(os.path.join("Cards", "Atlas weekly status 2026-03-16.md"),
+                   "# Cards: [[Sources/Atlas weekly status 2026-03-16]]\n\n"
+                   "Source: [[Sources/Atlas weekly status 2026-03-16]] · Document last modified: 2026-03-16 17:00\n\n"
+                   "## The data export is on track for 2026-03-20.\n\n"
+                   "> the data export is on track for 2026-03-20. [[Sources/Atlas weekly status 2026-03-16#^p4]]\n\n"
+                   "- Topic: [[Topics/milestones|milestones]]\n- Date: 2026-03-16 17:00 (event: 2026-03-20)\n")
+        got = answer.select(self.lib, self.cfg, ["data export"])
+        self.assertEqual([c["date"][:10] for c in got["cards"][:2]], ["2026-03-16", "2026-03-09"])
+
     def test_aliases_of_table_e_and_topic_names(self):
         self.add_entity("Riverside Clinic | organisation | RC; the clinic |  |")
         got = answer.select(self.lib, self.cfg, ["rc"])

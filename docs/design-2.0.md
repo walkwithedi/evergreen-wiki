@@ -1,6 +1,6 @@
 # Design: knowledge base 2.0
 
-Status: agreed design, not yet implemented. This document is the reference for the 2.0 work; each implementation step below is its own pull request and may refine details here, updating this file in the same pull request.
+Status: implemented in 2.0. This document was the reference for the 2.0 work; each implementation step below was its own pull request and refined details here in the same pull request.
 
 ## 1. Scope
 
@@ -51,7 +51,7 @@ kb-ingest takes the batch files of one run (made with doc2kb where commands run,
    - Cards that fail are not written; the report lists each with its reason, together with the corrected anchors and new topics.
 3. Topic pages:
    - Weak tier: a script (ingest.py pages) rebuilds each touched topic page, `Topics/<topic>.md`, from every cards file: the topic's cards newest first (event date, else the source's date), each with its date, conclusion, quote linked `[[Sources/<source>#^pN]]` and a link to its cards file. The page says it is generated; edits to it are overwritten. A topic left without cards keeps a page saying so. The model writes no page text.
-   - Strong tier: the model rewrites each affected topic page from its cards.
+   - Strong tier: the model rewrites each affected topic page from its cards. check-page compares source links, so two cards from the same paragraph count as cited when the link appears once; references/pages-strong.md asks for one statement per card.
 4. Split and file (ingest.py file): the batch files are split back into one file per source, `Sources/<original file name>.md`, flat; two sources of one run with the same name get their parent folder's name in front. The original documents themselves are not kept in the library; each source file records its original path. Cards are stored under `Cards/`, one file per source with the source's name (quote_check.py write); each card is a section with its quote linked as `[[Sources/<source>#^pN]]`, its topic as `[[Topics/<page>|<topic>]]` and its entities as wiki links. Links name their folder because a source and its cards file share a name.
    - A source whose name is already in the library is a new version: the old source file and its cards file move to `Archive/Sources` and `Archive/Cards` as `<name>_old<YYYYMMDDHHMMSS>.md`; nothing is deleted. The topics of the archived cards are rebuilt with the new ones, so the old version's entries leave the pages.
    - A run with a part missing from its batch files writes nothing.
