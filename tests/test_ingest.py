@@ -468,6 +468,7 @@ class InitTest(Tmp):
         self.assertEqual(json.loads(read(self.p("zh", "_kb.json")))["tier"], "weak")
         self.assertIn("版本：v1", read(self.p("zh", "00_Spec.md")))
         p = init("write", "--root", self.p("s"), "--preset", "work", *self.BASE, "--tier", "strong")
+        self.assertEqual(p.returncode, 0, p.stderr)
         self.assertEqual(json.loads(read(self.p("s", "_kb.json")))["tier"], "strong")
 
     def test_life_preset_and_1x_options_gone(self):
