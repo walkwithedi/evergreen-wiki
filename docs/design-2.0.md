@@ -69,13 +69,19 @@ Scripts prepare each decision; the owner confirms. Nothing in this section is wr
 
 ### 4.1 New versions of a document
 
-- Weak tier: a script proposes candidate pairs (old source, new source); the owner picks the ones that are new versions.
-- Strong tier: the model decides, quoting the passages of both documents its decision rests on.
+- A source whose name is already in the library is a new version without asking (section 3.2, step 4).
+- For a source under a name not yet in the library, a script (ingest.py versions) proposes candidate pairs (new source, library source): the names are equal or close (difflib ratio 0.8 or more) once dates, version marks (v2, rev, final, draft, copy, (1), 副本, 终稿, 定稿, 修订版) and punctuation are dropped, and at least half of the shorter source's paragraphs of 20 characters or more are in the other. A series that differs only by date in its names (weekly reports) is not proposed, because its contents differ.
+- Weak tier: the owner picks the pairs that are new versions in the preview.
+- Strong tier: the model judges each pair, quoting one sentence of each document its decision rests on, and may add a pair the script missed under the same rule; the owner confirms in the preview.
+- A confirmed pair is filed with ingest.py file --replaces NEW=OLD: the old source and its cards move to the archive as for a same-named version, and the new source keeps its own name.
+- A library in Google Drive passes the names of its sources folder (--known); a close name not yet in the staging folder is read in and the script runs again.
 
 ### 4.2 Entities
 
-- A script merges entity names using the alias table in the spec.
-- A name not in the table is shown to the owner, who maps it to an existing entity or confirms it as new. The result is written back to the alias table.
+- The spec's Table E is the alias table: Name | Type | Aliases | Core | Note.
+- A script (ingest.py entities) merges the cards' entity names that match a name or alias of the table, without regard to case and spacing.
+- Other names are listed in the preview, each with the type the model suggested on the card (entity_types: project, team, organisation, system or other) and the closest names of the table. By default each is added as a new entity; the owner may record it as an alias of an existing entity or change its type.
+- After the confirmation, ingest.py entities --apply rewrites the cards with the table's names and adds the new rows and aliases to Table E, with one version step and a revision line each.
 
 ### 4.3 Conflicts
 
@@ -148,10 +154,25 @@ Riverside Clinic will host the pilot. ^s01-p2
 ^s02-p1
 ```
 
-Card as the model writes it (one line per card):
+Card as the model writes it (one line per card; entity_types only for entities not in Table E):
 
 ```json
-{"source": "S01", "anchor": "s01-p2", "quote": "Riverside Clinic will host the pilot.", "conclusion": "Riverside Clinic hosts the Project Atlas pilot.", "topic": "Pilot", "entities": ["Riverside Clinic", "Project Atlas"], "event_date": "2026-03-03"}
+{"source": "S01", "anchor": "s01-p2", "quote": "Riverside Clinic will host the pilot.", "conclusion": "Riverside Clinic hosts the Project Atlas pilot.", "topic": "Pilot", "entities": ["Riverside Clinic", "Project Atlas"], "entity_types": {"Riverside Clinic": "organisation"}, "event_date": "2026-03-03"}
+```
+
+Version candidates (ingest.py versions):
+
+```json
+{"same_name": ["Project Atlas schedule.md"],
+ "candidates": [{"new": "Project Atlas plan final.md", "old": "Project Atlas plan.md", "name_score": 1.0, "overlap": 0.75, "read": false}]}
+```
+
+Entity report (ingest.py entities) and the owner's decisions (--map):
+
+```json
+{"merged": {"Atlas": "Project Atlas"},
+ "new": [{"name": "Riverside", "type": "organisation", "cards": 2, "closest": ["Riverside Clinic"]}]}
+{"Riverside": "Riverside Clinic", "Scheduling Service": {"type": "system"}}
 ```
 
 Cards file (Cards/Project Atlas kickoff minutes.md):
@@ -207,7 +228,9 @@ Each step is a pull request; the 2.0 release comes after the last one.
    - 3a. Scripts: library settings and topics in kbconf, ingest.py (file, pages), folder-qualified links in the cards files.
    - 3b. The kb-ingest skill: both tiers' procedures, calling the scripts; Drive libraries through a staging folder; ingest.py topics, add-topic, retopic and check-page. Not yet in the installer or the plugin manifests.
    - 3c. kb-incremental and the life preset removed; installer, kb-client, tests and documents updated; schema 2.
-4. Owner decisions: version candidates, alias table, conflict lists, status-card review marks.
+4. Owner decisions, in two pull requests:
+   - 4a. Version candidates and the alias table: ingest.py versions, file --replaces and entities; the kb-ingest steps and preview that use them.
+   - 4b. Conflict lists and status-card review marks.
 5. kb-query: weak-tier card selection and quoted answers; kb-note on the new pipeline.
 6. prompt.md versions for ChatGPT; Drive libraries without a code environment refuse writes.
 7. kb-client pages "Build batch file" and "Waiting for confirmation".

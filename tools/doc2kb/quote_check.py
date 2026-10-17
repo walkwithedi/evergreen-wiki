@@ -8,8 +8,10 @@ A card is one claim taken from a source, written by the assistant as one JSON ob
      "conclusion": "Riverside Clinic hosts the pilot.", "topic": "Pilot",
      "entities": ["Riverside Clinic"], "event_date": "2026-03-03"}
 
-anchor may also be written ^s01-p2 or p2; event_date (YYYY-MM-DD) is optional. The card's date
-is not the assistant's to give: it is the source's last-modified time from the batch file.
+anchor may also be written ^s01-p2 or p2; event_date (YYYY-MM-DD) is optional, and so is
+entity_types, the assistant's suggested type for entities not yet in the spec's Table E
+({"Riverside Clinic": "organisation"}; one of ENTITY_TYPES). The card's date is not the
+assistant's to give: it is the source's last-modified time from the batch file.
 
 check: every card is checked against the batch files of its run (kb_batch.py format):
   - the fields are there and the source number exists;
@@ -21,7 +23,8 @@ check: every card is checked against the batch files of its run (kb_batch.py for
   - with --topics, a topic not in the list passes and is listed as a new topic to confirm;
     topics compare without regard to case and spacing, and a known one takes the list's spelling;
   - a card with the same source, quote and conclusion as an earlier one is dropped.
-  Cards that pass go to ACCEPTED (JSON lines, anchors corrected, date added); the report
+  Cards that pass go to ACCEPTED (JSON lines, anchors corrected, date added, entity_types kept
+  for the card's own entities and known types); the report
   (JSON) lists rejected cards with the reason, corrected anchors and new topics.
 
 write: the accepted cards go to one Markdown file per source in the cards folder, named like
@@ -53,6 +56,7 @@ LOG_FORMAT = '%(asctime)s [%(levelname)s] %(name)s.%(funcName)s:%(lineno)d - %(m
 QUOTE_MIN = 6
 QUOTE_MAX = 300
 REQUIRED = ('source', 'anchor', 'quote', 'conclusion', 'topic')
+ENTITY_TYPES = ('project', 'team', 'organisation', 'system', 'other')
 
 ANCHOR_RE = re.compile(r'^\^?(?:(s\d{2,})-)?p(\d+)$', re.I)
 END_ANCHOR_RE = re.compile(r' \^(s\d{2,}-p\d+)$')
@@ -190,6 +194,10 @@ def check_card(card, table, by_sid, qmin, qmax):
     ev = str(card.get('event_date') or '').strip()
     if ev and DATE_RE.match(ev):
         out['event_date'] = ev
+    types = card.get('entity_types') if isinstance(card.get('entity_types'), dict) else {}
+    types = {e: str(types[e]) for e in out['entities'] if str(types.get(e, '')) in ENTITY_TYPES}
+    if types:
+        out['entity_types'] = types
     return out, None, note
 
 
