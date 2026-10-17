@@ -23,17 +23,17 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 REFS = ["config.md", "environment.md", "backend-gdrive.md", "backend-local.md"]
 # (file under shared/, folders that receive a copy, relative to the repository root)
-PLAN = [(f"references/{r}", [f"skills/{s}/references" for s in ("kb-note", "kb-query", "kb-incremental")])
+PLAN = [(f"references/{r}", [f"skills/{s}/references" for s in ("kb-note", "kb-query", "kb-incremental", "kb-ingest")])
         for r in REFS]
-PLAN.append(("scripts/kbconf.py", ["skills/kb-incremental/scripts", "skills/kb-query/scripts"]))
-# the converter: used by kb-incremental (scripts/convert.py) and by the stand-alone tool
-PLAN.append(("scripts/doc2kb_core.py", ["skills/kb-incremental/scripts", "tools/doc2kb"]))
+PLAN.append(("scripts/kbconf.py", ["skills/kb-incremental/scripts", "skills/kb-query/scripts", "skills/kb-ingest/scripts"]))
+# the converter: used by kb-incremental (scripts/convert.py), kb-ingest (batch files) and the stand-alone tool
+PLAN.append(("scripts/doc2kb_core.py", ["skills/kb-incremental/scripts", "skills/kb-ingest/scripts", "tools/doc2kb"]))
 # knowledge-base batch files: written by doc2kb_core, split back by the skills
-PLAN.append(("scripts/kb_batch.py", ["skills/kb-incremental/scripts", "tools/doc2kb"]))
+PLAN.append(("scripts/kb_batch.py", ["skills/kb-incremental/scripts", "skills/kb-ingest/scripts", "tools/doc2kb"]))
 # checking cards against their batch file and writing them
-PLAN.append(("scripts/quote_check.py", ["skills/kb-incremental/scripts", "tools/doc2kb"]))
+PLAN.append(("scripts/quote_check.py", ["skills/kb-incremental/scripts", "skills/kb-ingest/scripts", "tools/doc2kb"]))
 # filing an intake run into a 2.0 library and rebuilding its topic pages
-PLAN.append(("scripts/ingest.py", ["skills/kb-incremental/scripts"]))
+PLAN.append(("scripts/ingest.py", ["skills/kb-incremental/scripts", "skills/kb-ingest/scripts"]))
 
 
 def copies():

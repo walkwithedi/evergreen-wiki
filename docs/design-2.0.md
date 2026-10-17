@@ -34,7 +34,14 @@ Both backends (local folder and Google Drive) use the same pipeline.
 
 ### 3.2 Ingest (kb-ingest)
 
-kb-ingest reads one batch file and processes it according to the tier.
+kb-ingest takes the batch files of one run (made with doc2kb where commands run, uploaded by the user otherwise) and processes them according to the tier. skills/kb-ingest/SKILL.md holds the procedure; the steps below are what it does.
+
+- Card extraction reads one source at a time in the weak tier and one batch file at a time in the strong tier (references/extract.md).
+- Cards the quote check rejects are written once more from the source with the reason given; a card rejected twice is dropped and reported.
+- New topics are put to the user one by one: under an existing topic (ingest.py retopic) or added to Table A (ingest.py add-topic: the fallback partition unless the user names one, one version step for the lot, a revision line per topic). The answer is the confirmation of the spec change.
+- One preview (sources, new versions, cards per source, topic pages to rebuild) is confirmed before anything is written.
+- Strong-tier pages (references/pages-strong.md) are checked by ingest.py check-page: every cited passage must be a current card of the topic and every such card must be cited. A page failing twice is built by the script instead.
+- A library in Google Drive is worked on a staging folder: _kb.json, the spec, the whole cards folder and the run's same-named sources are read into it, the scripts run there, and after the confirmation the changed files are written back, old copies first moved to the archive folder.
 
 1. Card extraction, both tiers: the model extracts cards for each source, one JSON object per line. A card holds the source number, the anchor, the quoted sentence, a conclusion, a topic, the entities it mentions and, when the quote states one, an event date. The card's date is not the model's to give: the script takes it from the source's last-modified time.
 2. Quote check, both tiers (quote_check.py check): a script checks every card against the batch files of its run.
@@ -198,7 +205,7 @@ Each step is a pull request; the 2.0 release comes after the last one.
 2. Card format and the quote-check script, with tests.
 3. kb-ingest, in three pull requests:
    - 3a. Scripts: library settings and topics in kbconf, ingest.py (file, pages), folder-qualified links in the cards files.
-   - 3b. The kb-ingest skill: both tiers' procedures, calling the scripts; Drive libraries through a staging folder.
+   - 3b. The kb-ingest skill: both tiers' procedures, calling the scripts; Drive libraries through a staging folder; ingest.py topics, add-topic, retopic and check-page. Not yet in the installer or the plugin manifests.
    - 3c. kb-incremental and the life preset removed; installer, kb-client, tests and documents updated; schema 2.
 4. Owner decisions: version candidates, alias table, conflict lists, status-card review marks.
 5. kb-query: weak-tier card selection and quoted answers; kb-note on the new pipeline.
