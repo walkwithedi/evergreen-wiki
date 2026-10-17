@@ -1,29 +1,33 @@
 # Methodology
 
-Why the skills work the way they do: every rule below exists because a looser one lets answers go stale or facts get lost.
+Why the skills work the way they do. Each rule below closes a way in which answers drift from what the documents say, go stale, or lose facts. The exact procedures are in the skills; [design-2.0.md](design-2.0.md) holds the design and its implementation steps. [中文](methodology.zh-CN.md)
 
 ## The problem
 
-An assistant can answer from your documents, but raw documents disagree with each other: an old plan, a newer decision, a meeting that changed it again. Searching them at question time returns whichever matches best, not whichever is current. The fix is to do the reconciling once, when material arrives, and keep the result: an LLM-maintained wiki rather than retrieval over a pile.
+An assistant can answer from your documents, but documents disagree with each other: an old plan, a newer decision, a meeting that changed it again. Searching them at question time returns whichever matches best, not whichever is current, and a model summarising them can state something no document says. The library therefore does the reconciling once, when material arrives, keeps the result as plain files, and ties every statement in it to the sentence it comes from.
 
-## Four layers
+## The evidence chain
 
-1. Source documents, cleaned but never shortened, one file each, named <partition>_<topic>_<type>_<short title>.md.
-2. Summary files: the status card (what is true now), the change log (how it changed), open items, the glossary. These answer most questions without opening a source document.
-3. Entity pages: one per person, organisation, system or project, with backlinks from every document that mentions it.
-4. The spec: the library's own rules (partitions, topics, terms, thresholds, entities). The skills hold the process; the spec holds the rules, and grows with the library.
+Every answer can be followed back, link by link, to a sentence in a document:
 
-## Rules that keep it evergreen
+1. Source: a document converted to Markdown (by doc2kb), one file in Sources/, every paragraph with an anchor (`^p3`). Sources are never edited.
+2. Card: one claim taken from a source. It holds a conclusion in the model's words and the exact sentence it rests on, linked to its paragraph (`[[Sources/<source>#^p3]]`), with its topic and entities. Cards live in Cards/, one file per source.
+3. Topic page: everything the cards say about one topic, newest first, each statement with its quote and link. Pages are built from cards only and rebuilt when their cards change.
+4. Status card: the library's home page, what is true now, one numbered item per fact, each citing its sources.
 
-- Name equals version. Documents carry no date in their name, so the next version of the same document lands on the same name and the previous one is archived. Two different documents must never share a name; when unsure, rename. This single rule removes most "which version is current?" questions.
-- Evidence or the conservative choice. Duplicate, new version or change of fact: each call needs a quote. No quote, no change.
-- Three questions before touching the status card. Does the new material carry this kind of fact; does the card have an entry for it; do they disagree. Only three yeses trigger a rewrite. Rolling process data (daily progress, single purchases) never does.
-- Rewrites are checked by a script. The old card and the new card are compared item by item; every missing item must be explained in a change list, and the new card may not shrink below 70% without the owner's consent.
-- Never delete, never edit sources. Older versions move to the archive with a time stamp; issues are recorded, not silently fixed. Personal identifiers are the one exception: masked before anything is written.
-- No silent growth. When material fits no topic, the skill adds a topic to the closest partition (never a new partition), rewrites the spec with a revision note, and lists the change for review.
-- Quote or no card. Every conclusion written into the library is a card that carries the exact sentence it rests on; a script finds that sentence in the source before the card is written, and topic pages are built only from cards.
-- Search caps and fixed reading order. The assistant reads the status card first, then the specific list, then sources, and stops after a fixed number of searches. Answers name their basis file.
+The spec holds the library's own rules beside them: partitions and topics (Table A), term fixes (Table B), open issues (Table C) and entities with their aliases (Table E).
 
-## What the preset gives you
+## Principles
 
-One starting point, editable during setup: a work library (goals and plans, projects and tasks, proposals and deliverables, meetings and decisions, policies and procedures, organisation and roles, data and reports, reference and templates).
+- Quote or no card. A card is written only when a script (quote_check.py) finds its quote in the cited paragraph, ignoring only white space, punctuation width and emphasis. A reworded quote fails. A rejected card is written once more from the source; one rejected twice is dropped and named.
+- Scripts check, the model proposes. Whatever can be checked mechanically is checked by a script, not by the model's judgement: quotes, topic pages written by the model (check-page: every cited passage is a current card of the topic and every such card is cited), status-card rewrites (status-check: nothing removed, changed or left uncited without the owner seeing it) and quotes in answers (answer.py check).
+- Name equals version. Source names carry no date, so the next version of a document arrives under the same name and replaces the previous one. Versions under different names are found as candidates (close names and shared paragraphs) and confirmed before they replace anything. Two different documents must never share a name.
+- Archive, never delete. A replaced source and its cards move to Archive/ with a time stamp. Cards of the old version that the new one no longer carries are listed, and the owner can restore them; a restored card cites the archived source and says it is from an earlier version.
+- The owner decides what changes. New topics, new entities, version pairs and lost cards are put to the owner before anything is written, together with one preview of the run; nothing grows silently. Status-card items that cite a replaced source get a review mark (⏳) and are not relied on until checked.
+- Two tiers. A library's tier says how much the model does. Weak (models with limited reasoning, such as local models run through OpenCode): small batches, one source at a time, topic pages and answer material assembled by scripts, every answer checked before the reply. Strong (Claude, ChatGPT): larger batches, topic pages written by the model and checked by check-page.
+- Answers quote. Every statement of fact in an answer is followed by the exact source sentence it rests on and its link. Reading order is fixed (status card, then topic pages and cards, then sources) and the number of searches is capped; what the library does not record is said to be not recorded.
+- No code, no writes. Every write goes through the scripts. Without a code environment (Python) the skills still read and answer, and write nothing to the library.
+
+## The work preset
+
+One starting point, adjusted during setup: a work library whose spec lists the partitions goals and plans, projects and tasks, proposals and deliverables, meetings and decisions, policies and procedures, organisation and roles, data and reports, reference and templates, each with its topics, and an empty status card of numbered items. Tables B, C and E start empty and grow as the owner confirms new terms, issues and entities; new topics are appended to their partition, never as a new partition.

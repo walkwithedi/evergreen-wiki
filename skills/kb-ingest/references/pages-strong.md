@@ -22,6 +22,7 @@ Every card of the topic, from the cards files (names.cards_dir) that hold one. E
 - Group the cards by subject when there are more than a few; within a group, newest first (event date, else the source's date).
 - When newer cards contradict older ones, say so in one line and cite both; never drop the older card, it is part of the record.
 - Every statement ends with the link of the card it rests on, exactly as the card gives it. A statement resting on two cards cites both.
+- Two cards can share one link (two claims from the same paragraph). Give each its own statement with the link: check-page compares links, so it cannot tell when one of them is left out.
 
 ## Rules
 

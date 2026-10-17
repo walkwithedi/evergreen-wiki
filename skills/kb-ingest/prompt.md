@@ -21,7 +21,7 @@ Ingest, with every script under kb-ingest/scripts/:
 1. Batch files: use the uploaded ones (made locally with doc2kb). Documents cannot be converted here: ask the user to make batch files with doc2kb and upload them.
 2. Cards: as kb-ingest/references/extract.md says; weak tier one source at a time, strong tier one batch file at a time.
 3. Quote check: ingest.py topics --out, then quote_check.py check; a rejected card is written once more, then dropped.
-4. New topics: ask about each (retopic or add-topic).
+4. New topics (of both quote-check reports, when cards were rewritten): ask about each (retopic or add-topic).
 5. Entities: ingest.py entities; new names go into the preview.
 6. New versions: ingest.py versions; the user confirms each pair (strong tier: judge each pair with one quoted sentence from each document).
 7. Conflicts: ingest.py conflicts; the user accepts or restores each.

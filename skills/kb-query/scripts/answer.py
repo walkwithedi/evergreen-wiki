@@ -106,7 +106,7 @@ def select(library, cfg, keywords, limit=LIMIT):
         if score:
             day = c.get('event_date') or c['date'][:10]
             scored.append((score, day, dict(c, link=c.get('link') or src, earlier=bool(c.get('link')))))
-    scored.sort(key=lambda s: (s[0], s[1]), reverse=True)
+    scored.sort(key=lambda s: (s[0], s[1], s[2]['date']), reverse=True)  # newer source first on the same day
     cards = [s[2] for s in scored[:limit]]
 
     status = []
