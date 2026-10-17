@@ -88,10 +88,8 @@ load_hints(){
   done < "$HINTS_FILE"
 }
 
-mask(){
-  local s="$1"
-  if [ "${#s}" -le 10 ]; then printf '%s' "${s//?/*}"; else printf '%s…%s（共 %d 位）' "${s:0:4}" "${s: -4}" "${#s}"; fi
-}
+# AK 只显示长度，不显示其中任何字符
+mask(){ printf '已设置（共 %d 位）' "${#1}"; }
 
 ask_ak(){
   [ -n "$AK" ] && return 0

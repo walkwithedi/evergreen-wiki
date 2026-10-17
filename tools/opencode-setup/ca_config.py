@@ -86,7 +86,7 @@ class JsoncParser:
         if m:
             self.i = m.end()
             return json.loads(m.group())
-        self.error(f"无法识别的字符 {c!r}")
+        return self.error(f"无法识别的字符 {c!r}")  # error() 总是抛出异常
 
     def string(self):
         t = self.text
@@ -187,13 +187,14 @@ def as_dict(value):
 
 
 def mask(value):
+    """AK 的显示：只说有没有、多长或引用自哪里，不显示其中任何字符。"""
     if not isinstance(value, str) or not value:
         return "（未设置）"
-    if value.startswith("{env:") or value.startswith("{file:"):
-        return value
-    if len(value) <= 10:
-        return "*" * len(value)
-    return f"{value[:4]}…{value[-4:]}（共 {len(value)} 位）"
+    if value.startswith("{env:"):
+        return "取自环境变量"
+    if value.startswith("{file:"):
+        return "取自文件"
+    return f"已设置（共 {len(value)} 位）"
 
 
 def read_token():

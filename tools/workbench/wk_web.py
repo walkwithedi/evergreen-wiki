@@ -35,6 +35,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 WEB = os.path.join(HERE, "web")
 STATIC = {"index.html": "text/html; charset=utf-8", "app.js": "text/javascript; charset=utf-8",
           "style.css": "text/css; charset=utf-8"}
+FILES = {name: os.path.join(WEB, name) for name in STATIC}  # 只发送这几个固定文件
 KB_ARGS = ["--lang", "zh", "--agent", "opencode", "--chat-first", "--no-browser"]
 KB_START_TIMEOUT = 60  # 秒：等知识库客户端打印页面地址
 URL_RE = re.compile(r"http://127\.0\.0\.1:\d+/\?t=\S+")
@@ -261,10 +262,10 @@ def make_handler_class():
                 data["wizard"]["kb_running"] = self.app.kb_running()
                 return self.send(200, data)
             name = "index.html" if path == "/" else path[1:]
-            if name in STATIC:
+            if name in FILES:
                 if self.guard() is None:
                     return None
-                with open(os.path.join(WEB, name), "rb") as f:
+                with open(FILES[name], "rb") as f:
                     return self.send(200, f.read(), STATIC[name])
             return super().do_GET()
 

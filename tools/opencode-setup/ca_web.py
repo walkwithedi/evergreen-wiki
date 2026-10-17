@@ -33,6 +33,7 @@ SCRIPT = os.path.join(HERE, "codeagent-setup.sh")
 WEB = os.path.join(HERE, "web")
 STATIC = {"index.html": "text/html; charset=utf-8", "app.js": "text/javascript; charset=utf-8",
           "style.css": "text/css; charset=utf-8"}
+FILES = {name: os.path.join(WEB, name) for name in STATIC}  # 只发送这几个固定文件
 # 页面上的动作 -> codeagent-setup.sh 的参数；need_ak 表示要从页面带 AK
 ACTIONS = {
     "check": (["check"], False),
@@ -251,8 +252,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/events":
             return self.events(query)
         name = "index.html" if path == "/" else path[1:]
-        if name in STATIC:
-            with open(os.path.join(WEB, name), "rb") as f:
+        if name in FILES:
+            with open(FILES[name], "rb") as f:
                 return self.send(200, f.read(), STATIC[name])
         return self.send(404, {"error": "not found"})
 

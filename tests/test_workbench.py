@@ -100,6 +100,10 @@ class OpencodeSetupTest(unittest.TestCase):
         path, auth, body = self.api.seen[-1]
         self.assertEqual((path, auth, body["model"]), ("/v1/chat/completions", "Bearer good-key-1234567890", "m1"))
         self.assertNotIn("good-key-1234567890", p.stderr)  # only the masked form is shown
+        out = subprocess.run([sys.executable, os.path.join(SETUP, "ca_config.py"), "summary-opencode", self.conf],
+                             capture_output=True, text=True, encoding="utf-8").stdout
+        self.assertIn("AK 已设置（共 19 位）", out)
+        self.assertNotIn("good", out)  # not even the first characters
 
     def test_a_failing_test_writes_nothing(self):
         before = read(self.conf)
