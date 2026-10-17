@@ -534,3 +534,14 @@ body.kb-open .kb-toggle { background: var(--soft); color: var(--accent); }
   .side-strip-mark { font-size: 15px; line-height: 1.2; position: sticky; top: 10px; }
   .side-strip-label { writing-mode: vertical-rl; font-size: 13px; letter-spacing: .08em; position: sticky; top: 36px; }
 }
+
+/* waiting for confirmation: one form per ingest run, then the status-card items to review */
+.pending-run { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 8px; }
+.pending-run h3, #pending-review h3 { font-size: 14px; margin: 0 0 6px; }
+.pending-group { border: 0; margin: 0 0 8px; padding: 0; }
+.pending-group legend { font-weight: 600; font-size: 13px; padding: 0; margin-bottom: 4px; }
+.pending-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 2px 0; }
+.pending-what { flex: 1 1 240px; overflow-wrap: anywhere; font-size: 13.5px; }
+.pending-check { display: block; font-size: 13.5px; margin: 2px 0; overflow-wrap: anywhere; }
+.pending-items { margin: 0; padding-left: 18px; font-size: 13.5px; }
+.pending-items li { overflow-wrap: anywhere; margin: 2px 0; }

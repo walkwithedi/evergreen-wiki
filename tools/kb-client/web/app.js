@@ -14,6 +14,27 @@
       backup: "Back up",
       rollback: "Roll back",
       move: "Move a library",
+      batch: "Build batch files",
+      material: "Material",
+      batch_hint: "Turn a folder of documents into batch files for ingesting; upload them to claude.ai, or ingest them here.",
+      batch_copy: "Copy path", batch_ingest: "Ingest these",
+      say_batch: "ingest these batch files: {path}",
+      pending_title: "Waiting for confirmation",
+      pending_intro: "Decisions an ingest run needs before it writes. Answering here or in the conversation both work.",
+      pending_run: "{lib} \u00b7 run {run} \u00b7 {created}",
+      pending_topics: "New topics", pending_topic_add: "add as a new topic", pending_topic_under: "under {topic}",
+      pending_entities: "New entities", pending_entity_add: "add as new", pending_entity_alias: "alias of {name}",
+      type_project: "project", type_team: "department or team", type_organisation: "organisation",
+      type_system: "system or product", type_other: "other",
+      pending_versions: "Possible new versions", pending_version: "{new} is a new version of {old}",
+      pending_version_score: "name {name}, shared paragraphs {overlap}",
+      pending_conflicts: "Conclusions the new versions change or drop",
+      conflict_changed: "changed", conflict_removed: "removed", conflict_not_carried: "not carried over",
+      pending_accept: "accept the change", pending_restore: "restore the old card",
+      pending_save: "Save decisions", pending_saved: "Saved; the conversation goes on with the run.",
+      pending_saved_quiet: "Saved. Tell the assistant: \"{text}\"",
+      pending_review: "Status-card items to review", pending_ask: "Ask",
+      say_review: "Check this status-card item against the sources and propose an update: {item}",
       uninstall: "Uninstall",
       move_this: "Move",
       graph: "Graph",
@@ -219,6 +240,27 @@
       backup: "备份",
       rollback: "回滚",
       move: "移动知识库",
+      batch: "生成批文件",
+      material: "材料",
+      batch_hint: "把一个文件夹里的文档转成入库用的批文件；可以上传到 claude.ai，也可以在这里入库。",
+      batch_copy: "复制路径", batch_ingest: "入库这些",
+      say_batch: "入库这些批文件：{path}",
+      pending_title: "等待确认",
+      pending_intro: "入库写入前需要你决定的事项。在这里或在对话里回答都可以。",
+      pending_run: "{lib} \u00b7 第 {run} 轮 \u00b7 {created}",
+      pending_topics: "新主题", pending_topic_add: "作为新主题加入", pending_topic_under: "并入「{topic}」",
+      pending_entities: "新实体", pending_entity_add: "作为新实体加入", pending_entity_alias: "作为「{name}」的别名",
+      type_project: "项目", type_team: "部门或团队", type_organisation: "单位",
+      type_system: "系统或产品", type_other: "其他",
+      pending_versions: "可能的新版本", pending_version: "{new} 是 {old} 的新版本",
+      pending_version_score: "名称相似度 {name}，段落重合 {overlap}",
+      pending_conflicts: "新版本改变或去掉的结论",
+      conflict_changed: "已改变", conflict_removed: "已删除", conflict_not_carried: "未带过来",
+      pending_accept: "接受改动", pending_restore: "恢复旧卡片",
+      pending_save: "保存决定", pending_saved: "已保存，对话会接着完成这一轮。",
+      pending_saved_quiet: "已保存。请告诉助手：「{text}」",
+      pending_review: "待复核的状态卡条目", pending_ask: "问一下",
+      say_review: "请对照来源核实这条状态卡条目并提议更新：{item}",
       uninstall: "卸载",
       move_this: "移动",
       graph: "关系图",
@@ -557,7 +599,7 @@
     }
     return fetch(path, opts).then(function (r) {
       return r.json().then(function (data) {
-        if (!r.ok) { var err = new Error(data.error || r.status); err.status = r.status; throw err; }
+        if (!r.ok) { var err = new Error(data.error || r.status); err.status = r.status; err.data = data; throw err; }
         return data;
       });
     });
@@ -580,6 +622,7 @@
       if (first && s.lang !== lang) { lang = s.lang; translate(); }
       if (first) { carousel($("ideas"), false); carousel($("ideas-mini"), true); }
       render();
+      loadPending();
       if (first && s.job && !s.job.done) follow(s.job.id, s.job.action);
     }).catch(lost);
   }
@@ -812,6 +855,7 @@
       if (ev.type === "out") appendLog(ev.text);
       else if (ev.type === "ask") ask(ev);
       else if (ev.type === "answered") { if (job.asking === ev.of) { job.asking = null; clearAsk(); } }
+      else if (ev.type === "batch") job.batch = ev;
       else if (ev.type === "end") { src.close(); finish(ev.result); }
     };
     src.onerror = function () {
@@ -829,15 +873,165 @@
   function finish(res) {
     clearAsk();
     var action = job && job.action;
+    var batch = job && job.batch;
     job = null;
     setBusy(false);
     result(res, t("result_" + res));
+    if (batch) batchButtons(batch);
     var after = afterJob;
     afterJob = null;
     if (res === "ok" && after) after($("log").textContent);
     if (action) loadSkills();  // Set up, Uninstall and Roll back change the skills too
     foldStep(res === "ok");
     refresh();
+  }
+
+  // After Build batch files: where they are, Copy path, and Ingest these, which fills the box.
+  function batchButtons(b) {
+    var r = $("result");
+    r.appendChild(document.createTextNode(" " + b.files.length + " \u00b7 "));
+    r.appendChild(el("code", {}, b.out));
+    var copy = el("button", { type: "button", "class": "quiet small" }, t("batch_copy"));
+    copy.addEventListener("click", function () { copyText(b.out, copy); });
+    r.appendChild(copy);
+    var go = el("button", { type: "button", "class": "small" }, t("batch_ingest"));
+    go.addEventListener("click", function () { fillInput(t("say_batch", { path: b.out })); });
+    r.appendChild(go);
+  }
+
+  function fillInput(text) {
+    var box = $("input");
+    box.value = text;
+    box.focus();
+    $("chat").scrollIntoView({ block: "nearest" });
+  }
+
+  // ---------- waiting for confirmation ----------
+  // Ingest runs of local libraries that wait for the owner's decisions (kb-ingest writes
+  // _pending/<run>.json; ingest.py pending), shown as forms, and status-card items marked for review.
+
+  var pendingShown = "";
+
+  function loadPending() {
+    return api("GET", "/api/pending").then(function (p) {
+      var key = JSON.stringify(p);
+      if (key === pendingShown) return;  // a form being filled in is not redrawn
+      pendingShown = key;
+      drawPending(p);
+    }).catch(function () {});
+  }
+
+  function choiceSelect(options, value) {
+    var s = el("select");
+    options.forEach(function (o) {
+      var opt = el("option", { value: o[0] }, o[1]);
+      if (o[0] === value) opt.selected = true;
+      s.appendChild(opt);
+    });
+    return s;
+  }
+
+  function pendingGroup(form, title) {
+    var g = el("fieldset", { "class": "pending-group" });
+    g.appendChild(el("legend", {}, title));
+    form.appendChild(g);
+    return g;
+  }
+
+  function pendingRow(group, label, controls) {
+    var row = el("div", { "class": "pending-row" });
+    row.appendChild(el("span", { "class": "pending-what" }, label));
+    controls.forEach(function (c) { row.appendChild(c); });
+    group.appendChild(row);
+  }
+
+  function drawPending(p) {
+    var box = $("pending-runs");
+    box.textContent = "";
+    p.runs.forEach(function (r) { box.appendChild(pendingForm(r)); });
+    var rev = $("pending-review");
+    rev.textContent = "";
+    if (p.review.length) {
+      rev.appendChild(el("h3", {}, t("pending_review")));
+      var ul = el("ul", { "class": "pending-items" });
+      p.review.forEach(function (it) {
+        var li = el("li", {}, it.label + ": " + it.item + " ");
+        var ask = el("button", { type: "button", "class": "quiet small" }, t("pending_ask"));
+        ask.addEventListener("click", function () { fillInput(t("say_review", { item: it.item })); });
+        li.appendChild(ask);
+        ul.appendChild(li);
+      });
+      rev.appendChild(ul);
+    }
+    show($("pending"), p.runs.length > 0 || p.review.length > 0);
+  }
+
+  function pendingForm(r) {
+    var pd = r.pending, reads = [];
+    var form = el("form", { "class": "pending-run" });
+    form.appendChild(el("h3", {}, t("pending_run", { lib: r.label, run: r.run, created: pd.created || "" })));
+    if ((pd.new_topics || []).length) {
+      var g = pendingGroup(form, t("pending_topics"));
+      pd.new_topics.forEach(function (name) {
+        var s = choiceSelect([["", t("pending_topic_add")]].concat(pd.topics.map(function (x) {
+          return [x, t("pending_topic_under", { topic: x })]; })), "");
+        pendingRow(g, name, [s]);
+        reads.push(function (d) { d.topics[name] = s.value ? { under: s.value } : { add: true }; });
+      });
+    }
+    if ((pd.entities || []).length) {
+      var ge = pendingGroup(form, t("pending_entities"));
+      pd.entities.forEach(function (e) {
+        var to = choiceSelect([["", t("pending_entity_add")]].concat(pd.entity_names.map(function (x) {
+          return [x, t("pending_entity_alias", { name: x })]; })), "");
+        var kind = choiceSelect(["project", "team", "organisation", "system", "other"].map(function (k) {
+          return [k, t("type_" + k)]; }), e.type || "other");
+        to.addEventListener("change", function () { kind.disabled = !!to.value; });
+        pendingRow(ge, e.name, [to, kind]);
+        reads.push(function (d) { d.entities[e.name] = to.value ? { alias: to.value } : { add: true, type: kind.value }; });
+      });
+    }
+    if ((pd.versions || []).length) {
+      var gv = pendingGroup(form, t("pending_versions"));
+      pd.versions.forEach(function (v) {
+        var cb = el("input", { type: "checkbox" });
+        var label = el("label", { "class": "pending-check" });
+        label.appendChild(cb);
+        label.appendChild(document.createTextNode(" " + t("pending_version", { "new": v["new"], old: v.old }) + " (" +
+          t("pending_version_score", { name: v.name_score, overlap: v.overlap === null ? "?" : v.overlap }) + ")"));
+        gv.appendChild(label);
+        reads.push(function (d) { if (cb.checked) d.versions.push(v["new"] + "=" + v.old); });
+      });
+    }
+    if ((pd.conflicts || []).length) {
+      var gc = pendingGroup(form, t("pending_conflicts"));
+      pd.conflicts.forEach(function (c) {
+        var s = choiceSelect([["accept", t("pending_accept")], ["restore", t("pending_restore")]], "accept");
+        var what = c.id + " \u00b7 " + t("conflict_" + c.kind) + " \u00b7 " + c.old.conclusion +
+          (c["new"] ? " \u2192 " + c["new"].conclusion : "");
+        pendingRow(gc, what, [s]);
+        reads.push(function (d) { d.conflicts[c.id] = s.value; });
+      });
+    }
+    var msg = el("p", { "class": "hint" });
+    var save = el("button", { type: "submit", "class": "primary small" }, t("pending_save"));
+    form.appendChild(save);
+    form.appendChild(msg);
+    form.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var d = { topics: {}, entities: {}, versions: [], conflicts: {} };
+      reads.forEach(function (f) { f(d); });
+      save.disabled = true;
+      api("POST", "/api/pending", { library: r.library, run: r.run, decisions: d }).then(function (res) {
+        msg.textContent = res.said ? t("pending_saved") : t("pending_saved_quiet", { text: res.text });
+        pendingShown = "";
+        setTimeout(loadPending, 3000);
+      }).catch(function (e) {
+        save.disabled = false;
+        msg.textContent = (e.data && e.data.problems ? e.data.problems.join("; ") : String(e.message));
+      });
+    });
+    return form;
   }
 
   function result(kind, text) {
@@ -1715,7 +1909,7 @@
     } else if (ev.type === "status") {
       chat.busy = ev.status !== "idle";
       chatEnable();
-      if (!chat.busy) { compactTurns(); stagesIdle(); }
+      if (!chat.busy) { compactTurns(); stagesIdle(); loadPending(); }
     }
     else if (ev.type === "auto") {
       autoNote((ev.child ? t("child") : "") + t("auto", { what: permName(ev.permission) + " " + permWhat(ev).join(", ") }));

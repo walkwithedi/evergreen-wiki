@@ -827,6 +827,76 @@ class NoteTest(LibraryCase):
         self.assertEqual(p.returncode, 2)
 
 
+class PendingTest(LibraryCommandsTest):
+    def inputs(self):
+        files = {
+            "report": {"new_topics": ["Risks", "Vendor contracts"]},
+            "entities": {"merged": {}, "new": [{"name": "Harbour Team", "type": "team", "cards": 1, "closest": []},
+                                               {"name": "Atlass", "type": "other", "cards": 2, "closest": ["Project Atlas"]}]},
+            "versions": {"same_name": ["plan.md"], "candidates": [{"new": "plan final.md", "old": "plan draft.md",
+                                                                  "name_score": 1.0, "overlap": 0.8, "read": False}]},
+            "conflicts": [{"id": "c1", "kind": "removed", "source": "plan.md", "old_source": "plan.md",
+                           "old": {"conclusion": "Budget unchanged", "quote": "Budget stays.", "anchor": "p1",
+                                   "topic": "work plans", "entities": [], "date": ""}, "new": None},
+                          {"id": "c2", "kind": "not_carried", "source": "plan.md", "old_source": "plan.md",
+                           "old": {"conclusion": "Riverside hosts", "quote": "Riverside hosts.", "anchor": "p2",
+                                   "topic": "work plans", "entities": [], "date": ""}, "new": None, "new_anchor": "p3"}]}
+        args = []
+        for k, v in files.items():
+            with open(self.p(k + ".json"), "w", encoding="utf-8") as f:
+                json.dump(v, f)
+            args += ["--" + k, self.p(k + ".json")]
+        return args
+
+    def test_write_read_done(self):
+        self.library(SPEC_E)
+        p = cli("pending", "write", "--library", self.p("lib"), "--run", "20260401-090000", *self.inputs())
+        self.assertEqual(p.returncode, 0, p.stderr)
+        path = self.p("lib", "_pending", "20260401-090000.json")
+        self.assertEqual(p.stdout.strip(), path)
+        pend = json.loads(read(path))
+        self.assertEqual(pend["new_topics"], ["Risks", "Vendor contracts"])
+        self.assertIn("work plans", pend["topics"])
+        self.assertEqual(pend["entity_names"], ["Project Atlas", "Riverside Clinic"])
+        self.assertEqual([c["id"] for c in pend["conflicts"]], ["c1", "c2"])
+        p = cli("pending", "read", "--library", self.p("lib"), "--run", "20260401-090000", "--work", self.p("work"))
+        self.assertEqual(p.returncode, 2)                    # no decisions yet
+        self.assertIn("no decisions", p.stderr)
+        decisions = {"topics": {"Risks": {"under": "work plans"}},
+                     "entities": {"Atlass": {"alias": "Project Atlas"}, "Harbour Team": {"add": True, "type": "team"}},
+                     "versions": ["plan final.md=plan draft.md"],
+                     "conflicts": {"c2": "restore"}}
+        self.assertEqual(ingest.check_decisions(pend, decisions), [])
+        with open(self.p("lib", "_pending", "20260401-090000.decisions.json"), "w", encoding="utf-8") as f:
+            json.dump(decisions, f)
+        p = cli("pending", "read", "--library", self.p("lib"), "--run", "20260401-090000", "--work", self.p("work"))
+        self.assertEqual(p.returncode, 0, p.stderr)
+        got = json.loads(p.stdout)
+        self.assertEqual(got["add_topics"], ["Vendor contracts"])            # left out: added
+        self.assertEqual(got["retopic"], {"Risks": "work plans"})
+        self.assertEqual(got["replaces"], ["plan final.md=plan draft.md"])
+        self.assertEqual(json.loads(read(got["entity_map"])), {"Atlass": "Project Atlas", "Harbour Team": {"type": "team"}})
+        self.assertEqual([c["id"] for c in json.loads(read(got["restore"]))], ["c2"])
+        p = cli("pending", "done", "--library", self.p("lib"), "--run", "20260401-090000")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertFalse(os.path.exists(self.p("lib", "_pending")))
+
+    def test_bad_decisions_and_run_names(self):
+        self.library(SPEC_E)
+        cli("pending", "write", "--library", self.p("lib"), "--run", "r1", *self.inputs())
+        pend = json.loads(read(self.p("lib", "_pending", "r1.json")))
+        bad = {"topics": {"Risks": {"under": "No such topic"}, "Elsewhere": {"add": True}},
+               "entities": {"Atlass": {"alias": "Nobody"}, "Harbour Team": {"add": True, "type": "planet"}},
+               "versions": ["x.md=y.md"], "conflicts": {"c9": "restore", "c1": "maybe"}}
+        problems = ingest.check_decisions(pend, bad)
+        self.assertEqual(len(problems), 7, problems)
+        p = cli("pending", "write", "--library", self.p("lib"), "--run", "../out", *self.inputs())
+        self.assertEqual(p.returncode, 2)
+        p = cli("pending", "write", "--library", self.p("lib"))       # a run name is made when none is given
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertRegex(os.path.basename(p.stdout.strip()), r"^\d{8}-\d{6}\.json$")
+
+
 INGEST_SCRIPTS = os.path.join(ROOT, "skills", "kb-ingest", "scripts")
 
 

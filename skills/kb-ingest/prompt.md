@@ -25,7 +25,7 @@ Ingest, with every script under kb-ingest/scripts/:
 5. Entities: ingest.py entities; new names go into the preview.
 6. New versions: ingest.py versions; the user confirms each pair (strong tier: judge each pair with one quoted sentence from each document).
 7. Conflicts: ingest.py conflicts; the user accepts or restores each.
-8. One preview, then wait for the confirmation.
+8. One preview, then wait for the confirmation. A local library can also take the answers on the knowledge base client: ingest.py pending write before the preview, pending read once they are saved, pending done after filing.
 9. File: ingest.py entities --apply, then ingest.py file (with --replaces and --restore).
 10. Topic pages: ingest.py pages (weak tier) or written and checked with check-page (strong tier).
 11. Report. A library in Google Drive is worked on a staging folder and written back after the confirmation (kb-ingest/SKILL.md, "Libraries in Google Drive").
