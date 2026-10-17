@@ -10,7 +10,7 @@ sample-work-kb/ is a small, entirely fictional 2.0 work library (tier weak) abou
 
 Try, in order:
 1. "When does the Atlas pilot end?" (kb-query: the topic pages and cards; the extension is on the decision logs page)
-2. "Note this: the pilot review moved to Thursday." (kb-note writes to Quick-Notes/)
+2. "Note this: the pilot review moved to Thursday." (kb-note: the note becomes a source in Sources/ with its cards, and the topic page it touches is rebuilt)
 3. "Ingest this" with new-material/Atlas weekly status 2026-03-16.eml (kb-ingest: batch file, cards, quote check, then the pages of the topics touched are rebuilt)
 
 Work on a copy if you want to keep the sample unchanged.

@@ -63,6 +63,10 @@ kb-ingest takes the batch files of one run (made with doc2kb where commands run,
 
 A note recorded with kb-note becomes a source on the spot: cards are extracted and filed through the same pipeline (quote check, topic pages, status-card checks).
 
+- ingest.py note writes the user's words as the batch file of a one-source run, "Note <YYYYMMDD-HHMM> <title>" ("随手记 ..." in Chinese): the words are the source text, anchored by paragraph; where it came from, when and the context are note lines, which cards cannot quote.
+- The run then goes through quote_check, entities, file and the topic pages. The user is asked first only when the note brings a new topic or a new entity; otherwise it is written at once, since it only adds files and rebuilds generated pages.
+- There is no quick-notes folder: new libraries do not get one, and questions do not search one.
+
 ## 4. Decisions that need the owner
 
 Scripts prepare each decision; the owner confirms. Nothing in this section is written without confirmation.
@@ -102,6 +106,10 @@ Scripts prepare each decision; the owner confirms. Nothing in this section is wr
 - Every answer quotes the source sentences it rests on, with `[[source#anchor]]` links.
 - Weak tier: a script selects the relevant cards and status-card entries by keyword, entity and topic; the model only organises the answer from what it is given and quotes the sentences.
 - Strong tier: the model searches and reads the library itself, under the same quoting rule.
+- Answer format: each statement is followed by a quote line, `> <exact sentence> [[Sources/<source>#^pN]]`.
+- Selection (answer.py select): a keyword naming an entity of Table E stands for all its names; a card scores one point per keyword in its conclusion or quote, two per entity a keyword names and two when a keyword names its topic; the best 12 are listed, newest first among equals (event date, else the source's date), with status-card items that hold a keyword and their review marks. When no card matches, up to five source paragraphs holding a keyword are listed as not on a card.
+- Check (answer.py check): every quote line must hold a sentence of its linked paragraph, compared as the quote check does. The weak tier checks every answer before replying; a quote that fails is copied again once, then dropped with its statement.
+- Status card: an item marked for review, or a missing one, is answered from the cards and sources; kb-query then proposes the item and writes it only after the user confirms, through ingest.py status-check --write --confirmed (the owner has seen what is removed or changed). It is the only file kb-query writes.
 
 ## 6. Runtime
 
@@ -252,7 +260,7 @@ Each step is a pull request; the 2.0 release comes after the last one.
 4. Owner decisions, in two pull requests:
    - 4a. Version candidates and the alias table: ingest.py versions, file --replaces and entities; the kb-ingest steps and preview that use them.
    - 4b. Conflict lists with restore, status-card review marks and the status-card rewrite check (ingest.py conflicts, file --restore, status-check); the kb-ingest step and preview that use them.
-5. kb-query: weak-tier card selection and quoted answers; kb-note on the new pipeline.
+5. kb-query: weak-tier card selection, quoted answers checked by a script and confirmed status-card updates; kb-note on the new pipeline, without a quick-notes folder.
 6. prompt.md versions for ChatGPT; Drive libraries without a code environment refuse writes.
 7. kb-client pages "Build batch file" and "Waiting for confirmation".
 8. Documentation (README, methodology) and the 2.0 release.

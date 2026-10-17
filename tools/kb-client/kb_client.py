@@ -511,20 +511,8 @@ def libraries():
         out.append({"id": lib.get("id", ""), "label": lib.get("label") or lib.get("id", ""),
                     "scope": lib.get("scope", ""), "type": kind, "root": root,
                     "exists": bool(root) and os.path.isdir(root),
-                    "movable": bool(root) and kb_manage.lib_check(root, install.MANAGE_DEFAULTS) is None,
-                    "notes": quick_notes(root) if root else 0})
+                    "movable": bool(root) and kb_manage.lib_check(root, install.MANAGE_DEFAULTS) is None})
     return out
-
-
-def quick_notes(root):
-    """How many quick notes wait in a local library's notes folder (names.notes_dir) to be ingested."""
-    cfg = kb_manage.read_json(os.path.join(root, "_kb.json"), {})
-    names = cfg.get("names") if isinstance(cfg, dict) else None
-    folder = os.path.join(root, (names or {}).get("notes_dir") or "Quick-Notes")
-    try:
-        return sum(1 for f in os.listdir(folder) if f.endswith(".md") and not f.startswith((".", "_")))
-    except OSError:
-        return 0
 
 
 GRAPH_MAX_NODES = 2000

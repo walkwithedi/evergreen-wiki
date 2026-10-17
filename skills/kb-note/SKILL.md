@@ -1,23 +1,23 @@
 ---
 name: kb-note
-description: Saves a small piece of information from the conversation into the user's knowledge base as a quick note, to be ingested properly later with kb-ingest. Use when the user says "note this", "save this", "add this to my knowledge base", "jot this down" or similar, for example "note this: send the draft plan to Alex by Friday". Writes the user's words, key points and context to one new file in the library's quick-notes folder, replies with the file name and the key point, and when notes pile up suggests saying "file my quick notes". Only creates files, never changes existing ones. Use only when the user asks; never save on your own or ask whether to save. Requests aimed at the assistant's own memory ("remember that", "from now on") are not for this skill. Ingesting material and setting up libraries belong to kb-ingest; questions belong to kb-query.
+description: Saves a small piece of information from the conversation into the user's knowledge base (an evergreen 2.0 library) at once, as a source with cards, so it can be found right away. Use when the user says "note this", "save this", "add this to my knowledge base", "jot this down" or similar, for example "note this: send the draft plan to Alex by Friday". Keeps the user's words as a new source, takes cards from them (each a conclusion with the exact sentence it rests on, checked by a script), files them and rebuilds the topic pages they touch; asks first only when the note brings a new topic or entity. Use only when the user asks; never save on your own or ask whether to save. Requests aimed at the assistant's own memory ("remember that", "from now on") are not for this skill. Ingesting documents and setting up libraries belong to kb-ingest; questions belong to kb-query.
 ---
 
 # Quick notes: save a piece of the conversation
 
 Version: 1.22.1
 
-This skill does one thing: create one new file in a library's quick-notes folder. It never edits, moves or deletes any file, and never touches the library root, archive, entities or inbox.
+A note becomes a source of the library on the spot: the user's words are the source text, cards are taken from them and checked like any other, and the topic pages they touch are rebuilt. It only adds files and rebuilds generated pages; it never edits or deletes an existing source or card.
 
-Read references/config.md and references/environment.md once before starting.
+Read references/config.md and references/environment.md once before starting. Scripts are run as references/environment.md says; paths such as scripts/ingest.py are relative to this skill's folder.
 
 ## Step 1: what to save
 
 1. If the request carries content, save that.
 2. If it is only the command ("note this"), save the most recent information the user gave or confirmed. If it includes your own answer, save only what the user accepted.
-3. If it could refer to several places, ask in one sentence which one. Do not guess.
-4. Unrelated things in one request: one file each.
-5. Tentative or unconfirmed statements are saved as they are, marked "unconfirmed" in the key points.
+3. If it could refer to several things, ask in one sentence which one. Do not guess.
+4. Unrelated things in one request: one note each.
+5. Tentative or unconfirmed statements are saved as they are; their cards say "unconfirmed" in the conclusion.
 
 ## Step 2: which library
 
@@ -25,48 +25,35 @@ Load the registry. Match the content against each library's scope.
 1. The user named a library: use it.
 2. Exactly one scope fits: use it.
 3. None or several fit: ask "Which library: <labels>?" in one sentence. Never default.
-Then read that library's backend file (references/backend-gdrive.md or references/backend-local.md) and its _kb.json (for language, timezone and names).
+Then read that library's backend file (references/backend-gdrive.md or references/backend-local.md), its _kb.json (language, timezone, tier, names; schema 1 is a 1.x library this release does not write: say so) and its spec.
 
-## Step 3: write the note
+Writing needs Python. Without it (or a library in Google Drive used without a code environment), do not write: show the note in the reply so nothing is lost, and say that saving needs a code environment.
 
-Plain text inside the file, no Markdown, in this fixed layout (labels in the library language):
+## Step 3: the note as a source
 
-Quick note
-Time: YYYY-MM-DD HH:MM (<timezone>)
-Library: <label>
-Suggested partition and topic: <partition topic> / not judged
-Source: assistant conversation
----
-Words:
-<the user's words, exactly; include needed context lines marked "<user_label>:" and "<assistant_label>:">
+1. Write the user's words, exactly, to <work>/note.txt: one paragraph per thought, no Markdown. Lines of the conversation needed to understand them are marked "<user_label>: " and "<assistant_label>: " (_kb.json names). Dates, numbers and names as the user wrote them; a relative date ("next Wednesday") stays as written.
+2. python3 scripts/ingest.py note --library <library> --title "<a few words>" --text <work>/note.txt --context "<one sentence: what conversation this came up in>" -o <work>/note
 
-Key points:
-1. <one point per line, only what the words say, nothing inferred or added>
+It prints the batch file of a one-source run: the source "Note <YYYYMMDD-HHMM> <title>" ("随手记 ..." in Chinese), the words anchored by paragraph, and where it came from, when and the context as note lines, which cannot be quoted.
 
-Context:
-<one to three sentences: what conversation or question this came up in, so it makes sense later>
+## Step 4: cards and checks
 
-Rules:
-1. Suggested partition and topic: only if this conversation already read the library spec's Table A; otherwise "not judged". Do not fetch the spec just for this. It is only a hint.
-2. With sensitivity enabled: mask ID numbers, card and account numbers, passwords and one-time codes with asterisks, keeping at most the last keep_last characters, in words and key points alike. Never add health, money or investment advice or interpretation.
-4. Dates, numbers, names and organisations exactly as the user wrote them. A relative date ("next Wednesday") gets the computed date in brackets in the key points, marked "computed".
+1. Write the cards from the words, as references/extract.md says, to <work>/cards.jsonl. A relative date gets the computed date in the conclusion, marked "computed"; never put it in the quote.
+2. python3 scripts/ingest.py topics --library <library> --out <work>/topics.txt, then python3 scripts/quote_check.py check <work>/cards.jsonl <batch file> --accepted <work>/accepted.jsonl --report <work>/report.json --topics <work>/topics.txt. A rejected card is written once more from the words; one rejected twice is dropped and named in the reply.
+3. python3 scripts/ingest.py entities <work>/accepted.jsonl --library <library>.
+4. Only when the report lists new topics or the entity report lists new names, ask before writing, in one question: each new topic under an existing topic or as a new one (ingest.py retopic, add-topic), each new name as a new entity or as an alias of an existing one (--map). Otherwise go on without asking.
 
-## Step 4: save it
+## Step 5: file
 
-1. Find the notes folder (names.notes_dir) in the library root with find_folder.
-   - One: use it.
-   - Several (Drive): use the oldest and mention the duplicates in the reply.
-   - None: ensure_folder, and mention "notes folder created" in the reply.
-2. File name: YYYYMMDD-HHMM_<short-topic>.md in the library timezone. The short topic is a few words summing up the content, no punctuation or slashes; in a family library include who it concerns. Several notes in the same minute: add -2, -3.
-3. write_new in the notes folder with the content from step 3.
-4. On failure retry once. If it still fails, give the reason and show the full note in the reply so the user can save it or ask again later.
+1. When the entity report listed any name: python3 scripts/ingest.py entities <work>/accepted.jsonl --library <library> --apply (with --map when the user chose aliases or types).
+2. python3 scripts/ingest.py file <batch file> --cards <work>/accepted.jsonl --library <library>
+3. Topic pages, for the topics in the record: weak tier, python3 scripts/ingest.py pages --library <library> --topic "<topic>" (repeat --topic); strong tier, write each page as references/pages-strong.md says and run python3 scripts/ingest.py check-page --library <library> --topic "<topic>" --page <work>/pages/<topic>.md --write (a page that fails twice is built with pages instead).
 
-## Step 5: confirm
+A library in Google Drive is worked on a staging folder and written back after the scripts ran, as references/backend-gdrive.md, "Writing an ingest run", describes. On a write failure, retry once; if it still fails, give the reason and show the note's words in the reply.
 
-Reply in one or two lines:
-  Saved to <label> quick notes: <file name>
-  Key point: <one sentence>
+## Step 6: reply
 
-Then check the backlog: list the notes folder (one level, paging until done), count .md files and find the oldest. More than 20, or the oldest older than 14 days: add a line "N quick notes waiting (oldest YYYY-MM-DD); say 'file my quick notes' to file them." Otherwise say nothing about it.
-
-Replies follow the library language and preferences.output.
+In two or three lines, in the library language and preferences.output:
+  Saved to <label>: <source name>
+  Cards: <the conclusions, one line each>
+  Topic pages rebuilt: <topics>

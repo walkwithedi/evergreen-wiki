@@ -5,7 +5,6 @@ import os
 import subprocess
 import sys
 import tempfile
-import time
 import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -175,7 +174,7 @@ class InitLibraryTest(Tmp):
         root = self.p("kb", "work")
         out = run("init_library.py", "write", "--root", root, "--preset", "work", "--language", "zh",
                   "--timezone", "+08:00", "--scope", "工作资料", "--date", "2026-10-10").stdout
-        self.assertIn("result: written 3 files and 5 folders", out)
+        self.assertIn("result: written 3 files and 4 folders", out)
         cfg = kbconf.load_library(root)
         self.assertEqual((cfg["label"], cfg["language"], cfg["timezone"], cfg["tier"]), ("工作", "zh", "+08:00", "weak"))
         self.assertEqual(kbconf.validate(json.loads(read(os.path.join(root, "_kb.json")))), [])
@@ -184,7 +183,7 @@ class InitLibraryTest(Tmp):
         self.assertIn("最后更新：2026-10-10", spec)
         self.assertNotIn("{{", spec)
         self.assertIn("2026-10-10", read(os.path.join(root, names["status_card"])))
-        for d in ("sources_dir", "cards_dir", "topics_dir", "archive_dir", "notes_dir"):
+        for d in ("sources_dir", "cards_dir", "topics_dir", "archive_dir"):
             self.assertTrue(os.path.isdir(os.path.join(root, names[d])), d)
 
     def test_work_preset_follows_language(self):
@@ -209,7 +208,8 @@ class InitLibraryTest(Tmp):
     def test_render_for_upload(self):
         out = run("init_library.py", "render", "--out", self.p("out"), "--preset", "work", "--language", "en",
                   "--timezone", "UTC", "--tier", "strong").stdout
-        self.assertIn("create the folders in the library: Sources, Cards, Topics, Archive, Quick-Notes", out)
+        self.assertIn("create the folders in the library: Sources, Cards, Topics, Archive", out)
+        self.assertNotIn("Quick-Notes", out)
         self.assertEqual(sorted(os.listdir(self.p("out"))), ["00_Spec.md", "00_Status-Card.md", "_kb.json"])
         self.assertEqual(json.loads(read(self.p("out", "_kb.json")))["tier"], "strong")
 

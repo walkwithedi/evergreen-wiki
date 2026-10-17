@@ -4,9 +4,9 @@ An LLM-maintained knowledge base that stays current, cites its sources and is ea
 
 | Skill | You say | It does |
 | --- | --- | --- |
-| kb-note | "note this" | saves a piece of the conversation as a quick note |
+| kb-note | "note this" | saves a piece of the conversation as a source with checked cards, searchable at once |
 | kb-ingest | "ingest these", "add to the knowledge base", "set up a knowledge base" | turns documents into cards, each a conclusion with the exact source sentence it rests on, checks every quote with a script, files sources and cards, archives older versions and rebuilds the topic pages; sets up new libraries |
-| kb-query | any question the library may answer | searches the library first and answers with the file it came from, never from memory |
+| kb-query | any question the library may answer | searches the library first and follows every fact with the exact source sentence and its link, never from memory |
 
 [中文说明](README.zh-CN.md)
 
@@ -113,7 +113,6 @@ work-kb/
   Cards/                   one cards file per source: conclusion, exact quote, link, topic, date
   Topics/                  one page per topic, built from the cards, newest first
   Archive/                 older versions of sources and cards
-  Quick-Notes/             quick notes
 ```
 
 Every name is configurable in `_kb.json`, so an existing library in another language keeps its own file names.
@@ -132,7 +131,7 @@ Details: [docs/backends.md](docs/backends.md).
 
 | Environment | Status |
 | --- | --- |
-| Claude Code, local backend | kb-query and kb-note tested end to end; kb-ingest covered by the script tests and the sample library, an end-to-end run is still to do |
+| Claude Code, local backend | the 2.0 skills are covered by the script tests and the sample library; end-to-end runs are still to do |
 | claude.ai / Claude apps, Drive backend | supported; English build not yet re-tested |
 | Codex, Gemini CLI, OpenCode | not yet verified; reports welcome |
 

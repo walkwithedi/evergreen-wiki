@@ -1,7 +1,7 @@
 # Init mode: get started or set up a new library
 
 Trigger: "get started with the knowledge base", "first time", "set up a knowledge base", "new library", "init". Also entered when kb-query or kb-note found no registry and the user accepted the offer to set one up.
-Result: the library folder holds _kb.json (schema 2), the spec, the status card and the folders for sources, cards, topics, the archive and quick notes; the library is in the registry; the assistant's always-read instructions say the library exists.
+Result: the library folder holds _kb.json (schema 2), the spec, the status card and the folders for sources, cards, topics and the archive; the library is in the registry; the assistant's always-read instructions say the library exists.
 
 The preset lives in assets/presets/work/: _kb.json, 00_Spec.md and summary/00_Status-Card.md, with a Chinese translation in zh/. The placeholder {{DATE}} is filled when writing.
 
@@ -51,7 +51,7 @@ Fixed structure:
   1. _kb.json: new
   2. Spec: new from the preset (version v1, today), partitions: <number name, one line each>
   3. Status card: new, empty
-  4. Folders to create: sources, cards, topics, archive, quick notes (with their names)
+  4. Folders to create: sources, cards, topics, archive (with their names)
   5. Registry: entry to add, and where (a file path, or kb-libraries.json in Google Drive: which folder, new or updated)
   6. Instructions line: the line, and the file it goes into; in claude.ai "one line to paste, once" or "already in the Project instructions, nothing to paste"
 End with: reply "confirm" to write, or name any item to change. The turn ends here.

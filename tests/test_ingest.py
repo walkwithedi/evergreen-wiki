@@ -775,6 +775,12 @@ Last updated: 2026-05-01
                 "--write", "--library", self.p("lib"))
         self.assertEqual(p.returncode, 3)
         self.assertEqual(read(self.p("lib", "00_Status-Card.md")), STATUS)
+        p = cli("status-check", "--old", self.p("lib", "00_Status-Card.md"), "--new", self.p("new.md"),
+                "--write", "--confirmed", "--library", self.p("lib"))      # the owner has seen the list
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(read(self.p("lib", "00_Status-Card.md")), self.NEW)
+        with open(self.p("lib", "00_Status-Card.md"), "w", encoding="utf-8") as f:
+            f.write(STATUS)
         grown = STATUS + "4. A new review board meets monthly. [[Sources/board#^p4]]\n"
         with open(self.p("new.md"), "w", encoding="utf-8") as f:
             f.write(grown)
@@ -783,6 +789,42 @@ Last updated: 2026-05-01
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertEqual(json.loads(p.stdout)["added"], ["4. A new review board meets monthly. [[Sources/board#^p4]]"])
         self.assertEqual(read(self.p("lib", "00_Status-Card.md")), grown)
+
+
+class NoteTest(LibraryCase):
+    WORDS = "The pilot review moved to Thursday.\n\nRiverside Clinic asked for the slides a day earlier."
+
+    def test_note_becomes_a_one_source_batch(self):
+        [path] = ingest.note_batch(self.cfg, "Pilot review", self.WORDS, self.p("work"),
+                                 context="Came up while planning the pilot review.")
+        self.assertRegex(os.path.basename(path), r"^note_\d{8}-\d{4}_b01\.md$")
+        table, by_sid = quote_check.load_batches([path])
+        self.assertRegex(table["S01"]["name"], r"^Note \d{8}-\d{4} Pilot review\.md$")
+        acc, rep = quote_check.check([
+            json.dumps(card("S01", "p1", "The pilot review moved to Thursday.", "Review on Thursday", "Pilot")),
+            json.dumps(card("S01", "p1", "Came up while planning the pilot review.", "Context", "Pilot"))], table, by_sid)
+        self.assertEqual(len(acc), 1)
+        self.assertEqual([r["card"]["conclusion"] for r in rep["rejected"]], ["Context"])   # notes are not source text
+        rec = ingest.file_run([path], acc, self.p("lib"), self.cfg)
+        src = read(self.p("lib", "Sources", rec["sources"][0]))
+        self.assertIn("> Context: Came up while planning the pilot review.", src)
+        self.assertIn("The pilot review moved to Thursday. ^p1", src)
+        self.assertIn("Review on Thursday", read(self.p("lib", "Cards", rec["sources"][0])))
+
+    def test_chinese_note_and_command_line(self):
+        os.makedirs(self.p("lib"))
+        with open(self.p("lib", "_kb.json"), "w", encoding="utf-8") as f:
+            json.dump({"schema": 2, "language": "zh"}, f)
+        with open(self.p("words.txt"), "w", encoding="utf-8") as f:
+            f.write("试点评审改到周四。")
+        p = cli("note", "--library", self.p("lib"), "--title", "试点评审", "--text", self.p("words.txt"), "-o", self.p("work"))
+        self.assertEqual(p.returncode, 0, p.stderr)
+        table, _ = quote_check.load_batches([p.stdout.strip()])
+        self.assertRegex(table["S01"]["name"], r"^随手记 \d{8}-\d{4} 试点评审\.md$")
+        with open(p.stdout.strip(), encoding="utf-8") as f:
+            self.assertIn("> 记录时间：", f.read())
+        p = cli("note", "--library", self.p("lib"), "--title", "x/y", "--text", self.p("nowhere.txt"), "-o", self.p("work"))
+        self.assertEqual(p.returncode, 2)
 
 
 INGEST_SCRIPTS = os.path.join(ROOT, "skills", "kb-ingest", "scripts")
@@ -804,7 +846,7 @@ class InitTest(Tmp):
         self.assertEqual((kb["schema"], kb["tier"], kb["label"]), (2, "weak", "Work"))
         self.assertEqual(kbconf.validate(kb), [])
         self.assertEqual(sorted(os.listdir(self.p("lib"))),
-                         ["00_Spec.md", "00_Status-Card.md", "Archive", "Cards", "Quick-Notes", "Sources", "Topics", "_kb.json"])
+                         ["00_Spec.md", "00_Status-Card.md", "Archive", "Cards", "Sources", "Topics", "_kb.json"])
         self.assertIn("Version: v1", read(self.p("lib", "00_Spec.md")))
         self.assertNotIn("{{", read(self.p("lib", "00_Spec.md")))
         cfg = kbconf.load_library(self.p("lib"))

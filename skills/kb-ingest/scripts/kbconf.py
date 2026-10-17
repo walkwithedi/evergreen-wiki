@@ -49,11 +49,8 @@ DEFAULT_NAMES = {
     "sources_dir": "Sources",
     "cards_dir": "Cards",
     "topics_dir": "Topics",
-    "notes_dir": "Quick-Notes",
-    "notes_done_dir": "Filed",
     "old_suffix": "_old",
     "snapshot_prefix": "snapshot_",
-    "note_marker": "Quick note:",
     "assistant_label": "Assistant",
     "user_label": "User",
 }

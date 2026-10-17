@@ -19,8 +19,8 @@ Subcommands (results on stdout, logs on stderr):
 
 Options for plan/write/render: --label --id --scope --language --timezone --tier weak|strong --date.
 Missing options take the values printed by defaults (tier: the preset's, weak). A new library is a 2.0
-library: _kb.json (schema 2), the spec, the status card and the folders for sources, cards, topics,
-the archive and quick notes.
+library: _kb.json (schema 2), the spec, the status card and the folders for sources, cards, topics
+and the archive.
 
 Exit codes: 0 ok, 2 bad input, 3 refused (folder holds Markdown files, id already used).
 Only the Python 3 standard library is used. Python 3.8 or newer.
@@ -192,7 +192,7 @@ def build_files(s):
     files = [(kbconf.KB_JSON, json.dumps(kb, ensure_ascii=False, indent=2) + "\n"),
              (names["spec"], filled(src(kbconf.DEFAULT_NAMES["spec"]))),
              (names["status_card"], filled(src("summary", kbconf.DEFAULT_NAMES["status_card"])))]
-    folders = [names[k] for k in ("sources_dir", "cards_dir", "topics_dir", "archive_dir", "notes_dir")]
+    folders = [names[k] for k in ("sources_dir", "cards_dir", "topics_dir", "archive_dir")]
     return files, folders
 
 

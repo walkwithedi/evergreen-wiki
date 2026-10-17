@@ -42,7 +42,7 @@ A registry in Google Drive is the same JSON, kept by kb-ingest (init mode adds e
 
 ## 2. Library files: how one library works
 
-A 2.0 library holds, in its root, _kb.json (settings; its name starts with an underscore, so searches for knowledge files skip it), the spec and the status card, and beside them the folders for sources, cards, topics, the archive and quick notes.
+A 2.0 library holds, in its root, _kb.json (settings; its name starts with an underscore, so searches for knowledge files skip it), the spec and the status card, and beside them the folders for sources, cards, topics and the archive. A quick note (kb-note) is a source like any other, named "Note <YYYYMMDD-HHMM> <title>".
 
 | File or folder | Content |
 | --- | --- |
@@ -53,7 +53,6 @@ A 2.0 library holds, in its root, _kb.json (settings; its name starts with an un
 | names.cards_dir (Cards) | one cards file per source, with the same name: each card a conclusion with its exact source sentence |
 | names.topics_dir (Topics) | one page per topic, every statement citing its card's source passage |
 | names.archive_dir (Archive) | older versions of sources and cards, never deleted |
-| names.notes_dir (Quick-Notes) | quick notes written by kb-note |
 
 The spec is the source of every rule about partitions, topics, terms and entities. Read it from the library each time; never fill it in from memory or from these instructions.
 
@@ -96,12 +95,9 @@ The status card holds numbered items ("1. ..."), each citing the source passage 
 | topics_dir | Topics | topic pages |
 | archive_dir | Archive | where older versions go |
 | entities_dir | Entities | entity pages |
-| notes_dir | Quick-Notes | quick notes waiting to be ingested |
-| notes_done_dir | Filed | quick notes already ingested (inside notes_dir) |
 | old_suffix | _old | archived copies: <stem>_old<YYYYMMDDHHMMSS>.md |
 | snapshot_prefix | snapshot_ | temporary snapshots, never used as sources |
-| note_marker | Quick note: | first line of each quick note |
-| assistant_label, user_label | Assistant, User | speaker labels in quick notes |
+| assistant_label, user_label | Assistant, User | speaker labels in a quick note's words |
 
 Each summary file also has a search key, the file name without its number prefix and extension (00_Status-Card.md → Status-Card). A library may set spec_key, status_card_key and so on in names. Search with the key, not the full name, and always use the name actually found in the library when you write the file back.
 
