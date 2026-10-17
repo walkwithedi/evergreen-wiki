@@ -30,6 +30,13 @@
       <p class="empty" id="libs-empty" data-t="no_libraries" hidden>No library yet.</p>
     </section>
     <section class="kb-part">
+      <h2 data-t="material">Material</h2>
+      <p class="hint" data-t="batch_hint">Turn a folder of documents into batch files for ingesting.</p>
+      <div class="actions">
+        <button type="button" data-action="batch" data-t="batch">Build batch files</button>
+      </div>
+    </section>
+    <section class="kb-part">
       <h2 data-t="manage">Manage</h2>
       <div class="actions">
         <button type="button" data-action="setup" data-t="setup">Set up</button>
@@ -85,6 +92,12 @@
       <pre class="log" id="log" hidden></pre>
       <form class="ask" id="ask" hidden></form>
       <p class="result" id="result" hidden></p>
+    </div>
+    <div class="panel pending" id="pending" hidden>
+      <div class="panel-head"><h2 data-t="pending_title">Waiting for confirmation</h2></div>
+      <p class="hint" data-t="pending_intro">Decisions an ingest run needs before it writes.</p>
+      <div id="pending-runs"></div>
+      <div id="pending-review"></div>
     </div>
     <div class="panel chat" id="chat">
       <div class="panel-head">

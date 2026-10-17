@@ -33,6 +33,18 @@ note: a quick note (the user's words, in a text file) as the batch file of a run
   note lines (">"), which cards cannot quote. Prints the batch file paths; the run then goes on as
   any other (quote_check.py check, file, pages).
 
+pending: the owner's decisions of a run of a local library through a file, so that the knowledge base
+  client can show them as a form. "write" puts the run's new topics (--report, quote_check.py's
+  report), new entities (--entities, the entities report), version candidates (--versions) and
+  conflicts (--conflicts) into <library>/_pending/<run>.json, with the spec's topics and entity names
+  to choose from; it prints the file's path. The decisions come back as <run>.decisions.json:
+  {"topics": {name: {"add": true} | {"under": topic}}, "entities": {name: {"add": true, "type": T} |
+  {"alias": table name}}, "versions": ["new=old", ...], "conflicts": {id: "accept" | "restore"}};
+  what is left out takes the default (topics and entities added, pairs not new versions, conflicts
+  accepted). "read" checks them and turns them into what the next commands take: topics to add,
+  topics to put under others, --replaces pairs, an entity map (--map) and a restore file (--restore)
+  in --work. "done" removes both files once the run is filed.
+
 status-check: the numbered items of a rewritten status card against the current one. Items pair
   by their text (review marks left out), else by a source link they share. Lists removed and
   changed items, source links no longer cited and added items; exit 3 when anything was removed,
@@ -85,6 +97,9 @@ Usage:
                  [--replaces NEW.md=OLD.md ...]
   ingest.py status-check --old CURRENT.md --new REWRITE.md [--write [--confirmed] --library DIR]
   ingest.py note --library DIR --title TITLE --text WORDS.txt [--context TEXT] -o DIR
+  ingest.py pending write --library DIR [--run NAME] [--report F] [--entities F] [--versions F] [--conflicts F]
+  ingest.py pending read --library DIR --run NAME --work DIR
+  ingest.py pending done --library DIR --run NAME
   ingest.py versions BATCH.md [BATCH.md ...] --library DIR [--target DIR] [--known NAMES.txt]
   ingest.py entities ACCEPTED.jsonl --library DIR [--apply [--map MAP.json]]
   ingest.py pages --library DIR [--target DIR] (--topic NAME ... | --all)
@@ -713,6 +728,111 @@ def note_batch(cfg, title, text, outdir, context=None):
     return paths
 
 
+PENDING_DIR = '_pending'
+RUN_RE = re.compile(r'^[0-9A-Za-z_-]{1,64}$')
+
+
+def pending_paths(library, run):
+    """(pending file, decisions file) of a run; refuses a run name that is not a plain name."""
+    if not RUN_RE.match(run or ''):
+        raise ValueError('a run name is letters, digits, - and _ only, got %r' % run)
+    base = os.path.join(library, PENDING_DIR, run)
+    return base + '.json', base + '.decisions.json'
+
+
+def _load(path, default):
+    if not path:
+        return default
+    with open(path, encoding='utf-8') as f:
+        return json.load(f)
+
+
+def pending_write(library, cfg, run=None, report=None, entities=None, versions=None, conflicts_found=None):
+    """Write the run's decisions to be made to <library>/_pending/<run>.json; returns its path."""
+    run = run or kbconf.now(cfg['timezone']).strftime('%Y%m%d-%H%M%S')
+    path, _ = pending_paths(library, run)
+    spec = read_spec(library, cfg)
+    pend = {'run': run, 'label': cfg.get('label', ''), 'created': kbconf.now(cfg['timezone']).strftime('%Y-%m-%d %H:%M'),
+            'new_topics': (report or {}).get('new_topics', []), 'topics': kbconf.topics(spec, cfg),
+            'entities': (entities or {}).get('new', []), 'entity_names': [r['name'] for r in kbconf.entities(spec)],
+            'same_name': (versions or {}).get('same_name', []), 'versions': (versions or {}).get('candidates', []),
+            'conflicts': conflicts_found or []}
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(pend, f, ensure_ascii=False, indent=1)
+    return path
+
+
+def check_decisions(pend, decisions):
+    """Problems with the owner's decisions for a pending run; [] when they can be used."""
+    out = []
+    d = decisions if isinstance(decisions, dict) else {}
+    topics = {kbconf.topic_key(t) for t in pend['topics']}
+    for name, v in (d.get('topics') or {}).items():
+        if name not in pend['new_topics']:
+            out.append('topic %s is not a new topic of this run' % name)
+        elif not isinstance(v, dict) or not (v.get('add') or kbconf.topic_key(str(v.get('under', ''))) in topics):
+            out.append('topic %s: add it or put it under a topic of the spec' % name)
+    names = {kbconf.topic_key(n) for n in pend['entity_names']}
+    new_names = [e['name'] for e in pend['entities']]
+    for name, v in (d.get('entities') or {}).items():
+        if name not in new_names:
+            out.append('entity %s is not a new name of this run' % name)
+        elif not isinstance(v, dict):
+            out.append('entity %s: add it or record it as an alias' % name)
+        elif 'alias' in v and kbconf.topic_key(str(v['alias'])) not in names:
+            out.append('entity %s: %s is not in Table E' % (name, v['alias']))
+        elif 'alias' not in v and v.get('type', 'other') not in quote_check.ENTITY_TYPES:
+            out.append('entity %s: unknown type %s' % (name, v.get('type')))
+    pairs = {'%s=%s' % (c['new'], c['old']) for c in pend['versions']}
+    for pair in d.get('versions') or []:
+        if pair not in pairs:
+            out.append('%s is not a version candidate of this run' % pair)
+    ids = {c['id'] for c in pend['conflicts']}
+    for cid, v in (d.get('conflicts') or {}).items():
+        if cid not in ids:
+            out.append('conflict %s is not one of this run' % cid)
+        elif v not in ('accept', 'restore'):
+            out.append('conflict %s: accept or restore, not %s' % (cid, v))
+    return out
+
+
+def pending_read(library, run, work):
+    """The decisions of a run as the next commands take them; writes entity-map.json and restore.json."""
+    path, dpath = pending_paths(library, run)
+    pend = _load(path, None)
+    if not os.path.isfile(dpath):
+        raise ValueError('no decisions for run %s yet (%s)' % (run, dpath))
+    d = _load(dpath, {})
+    problems = check_decisions(pend, d)
+    if problems:
+        raise ValueError('the decisions cannot be used: ' + '; '.join(problems))
+    topics = d.get('topics') or {}
+    retopic_to = {n: v['under'] for n, v in topics.items() if not v.get('add')}
+    emap = {}
+    for name, v in (d.get('entities') or {}).items():
+        emap[name] = v['alias'] if 'alias' in v else {'type': v.get('type', 'other')}
+    restore = [c for c in pend['conflicts'] if (d.get('conflicts') or {}).get(c['id']) == 'restore']
+    os.makedirs(work, exist_ok=True)
+    out = {'add_topics': [t for t in pend['new_topics'] if t not in retopic_to], 'retopic': retopic_to,
+           'replaces': list(d.get('versions') or []),
+           'entity_map': os.path.join(work, 'entity-map.json'), 'restore': os.path.join(work, 'restore.json')}
+    for key, data in (('entity_map', emap), ('restore', restore)):
+        with open(out[key], 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=1)
+    return out
+
+
+def pending_done(library, run):
+    """Remove a filed run's pending and decisions files (and the folder when it is empty)."""
+    for path in pending_paths(library, run):
+        if os.path.isfile(path):
+            os.remove(path)
+    folder = os.path.join(library, PENDING_DIR)
+    if os.path.isdir(folder) and not os.listdir(folder):
+        os.rmdir(folder)
+
+
 def status_items(text):
     return [ln.strip() for ln in text.replace('\r\n', '\n').split('\n') if ITEM_RE.match(ln)]
 
@@ -771,6 +891,12 @@ def main(argv=None):
     sc.add_argument('--write', action='store_true', help='when nothing was removed, changed or lost, put it in the library')
     sc.add_argument('--confirmed', action='store_true', help='write even with changes: the owner accepted the list')
     sc.add_argument('--library', default=None, help='library root, for --write')
+    pd = sub.add_parser('pending', help="the owner's decisions of a run through a file (knowledge base client)")
+    pd.add_argument('what', choices=['write', 'read', 'done'])
+    pd.add_argument('--run', default=None, help='run name (write makes one when none is given)')
+    for opt in ('report', 'entities', 'versions', 'conflicts'):
+        pd.add_argument('--' + opt, default=None, help='JSON output of the %s step (write)' % opt)
+    pd.add_argument('--work', default=None, help='work folder for entity-map.json and restore.json (read)')
     nt = sub.add_parser('note', help='a quick note as the batch file of a one-source run')
     nt.add_argument('--title', required=True, help='a few words naming the note')
     nt.add_argument('--text', required=True, help="text file with the user's words")
@@ -796,7 +922,7 @@ def main(argv=None):
     cp.add_argument('--topic', required=True)
     cp.add_argument('--page', required=True, help='the page as written')
     cp.add_argument('--write', action='store_true', help='when it passes, write it to the topics folder')
-    for p in (f, pg, tp, at, cp, vs, en, cf, nt):
+    for p in (f, pg, tp, at, cp, vs, en, cf, nt, pd):
         p.add_argument('--library', required=True, help='library root (its _kb.json gives the names)')
     for p in (f, pg, cp, vs, cf):
         p.add_argument('--target', default=None, help='write here instead of the library (a staging folder)')
@@ -836,6 +962,17 @@ def main(argv=None):
             if a.out:
                 with open(a.out, 'w', encoding='utf-8') as fh:
                     fh.write(''.join(t + '\n' for t in found))
+            return 0
+        if a.cmd == 'pending':
+            if a.what == 'write':
+                print(pending_write(a.library, cfg, a.run, _load(a.report, None), _load(a.entities, None),
+                                    _load(a.versions, None), _load(a.conflicts, None)))
+            elif a.what == 'read':
+                if not (a.run and a.work):
+                    raise ValueError('pending read needs --run and --work')
+                print(json.dumps(pending_read(a.library, a.run, a.work), ensure_ascii=False))
+            else:
+                pending_done(a.library, a.run)
             return 0
         if a.cmd == 'note':
             with open(a.text, encoding='utf-8') as fh:

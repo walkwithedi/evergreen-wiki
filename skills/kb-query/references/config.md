@@ -105,7 +105,7 @@ Where scripts run, scripts/kbconf.py prints the resolved configuration: python3 
 
 ### Ignored files
 
-Every search and every read of knowledge files skips: the archive folder; names that start with an underscore (_kb.json and other settings); names that start with snapshot_prefix; names that contain old_suffix followed by a time stamp.
+Every search and every read of knowledge files skips: the archive folder; names that start with an underscore (_kb.json and other settings, the _pending folder of decisions waiting for the owner); names that start with snapshot_prefix; names that contain old_suffix followed by a time stamp.
 
 ## 3. Library folder and material: words to use with the user
 

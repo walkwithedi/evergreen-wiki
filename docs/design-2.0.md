@@ -142,6 +142,9 @@ ChatGPT uses the same skills; each skill also ships a prompt version (prompt.md)
 | tools/doc2kb | Builds batch files locally |
 | tools/kb-client | Gains two pages: "Build batch file" and "Waiting for confirmation" (the decisions of section 4) |
 
+- Build batch files is a step of the client: the material folder, the library whose tier sets the batch size, and a new or empty output folder outside every library (default ~/kb-batches/<material>_<date>, kept after the client closes); doc2kb writes the batch files there, and the page offers Copy path and Ingest these.
+- Waiting for confirmation reads `_pending/<run>.json` in local libraries, which kb-ingest writes before its preview (ingest.py pending write: new topics, new entities, version candidates, conflicts), and shows each run as a form. The answers are checked (ingest.py check_decisions) and written as `<run>.decisions.json`; the client says in the conversation that they are saved, and kb-ingest reads them (ingest.py pending read) and removes both files after filing (pending done). Answers given in the conversation work as before. The page also lists status-card items marked for review, each with a button that asks kb-query about it.
+
 - All links in the library are Obsidian wiki links (`[[page]]`, `[[source#anchor]]`).
 - Shells that bundle the skills only update the version they bundle.
 
@@ -267,5 +270,5 @@ Each step is a pull request; the 2.0 release comes after the last one.
    - 4b. Conflict lists with restore, status-card review marks and the status-card rewrite check (ingest.py conflicts, file --restore, status-check); the kb-ingest step and preview that use them.
 5. kb-query: weak-tier card selection, quoted answers checked by a script and confirmed status-card updates; kb-note on the new pipeline, without a quick-notes folder.
 6. prompt.md versions for ChatGPT, with -chatgpt.zip release assets and check_repo checks; no write without a code environment, for every skill and backend.
-7. kb-client pages "Build batch file" and "Waiting for confirmation".
+7. kb-client pages "Build batch file" and "Waiting for confirmation", with ingest.py pending (write, read, done) between kb-ingest and the page.
 8. Documentation (README, methodology) and the 2.0 release.

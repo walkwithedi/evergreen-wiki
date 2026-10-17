@@ -16,8 +16,19 @@ TOOL = os.path.join(ROOT, "tools", "kb-client", "kb_client.py")
 FAKE = os.path.join(ROOT, "tests", "kb_client_fake_opencode.py")
 CANCEL = object()
 sys.path.insert(0, os.path.join(ROOT, "tools", "kb-client"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import agent  # noqa: E402
+import doc2kb_fixtures as fx  # noqa: E402
 import kb_client  # noqa: E402
+
+PENDING = {"run": "r1", "label": "Work", "created": "2026-04-01 09:00", "new_topics": ["Risks"],
+           "topics": ["work plans", "milestones"], "entities": [{"name": "Harbour Team", "type": "team", "cards": 1,
+                                                               "closest": []}],
+           "entity_names": ["Project Atlas"], "same_name": [],
+           "versions": [{"new": "plan final.md", "old": "plan.md", "name_score": 1.0, "overlap": 0.8, "read": False}],
+           "conflicts": [{"id": "c1", "kind": "removed", "source": "plan.md", "old_source": "plan.md",
+                          "old": {"conclusion": "Budget unchanged", "quote": "Budget stays.", "anchor": "p1",
+                                  "topic": "work plans", "entities": [], "date": ""}, "new": None}]}
 
 
 def write(path, text):
@@ -82,7 +93,7 @@ class Server:
         job = r["job"]
         answers = list(answers)
         out, asked = [], []
-        self.asked = asked
+        self.asked, self.extra = asked, []
         c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=30)
         c.request("GET", f"/api/events?job={job}&t={self.token}")
         resp = c.getresponse()
@@ -109,6 +120,8 @@ class Server:
                         assert status == 200, status
                 elif ev["type"] == "end":
                     return ev["result"], "".join(out), asked
+                else:
+                    self.extra.append(ev)
         finally:
             c.close()
 
@@ -434,6 +447,60 @@ class KbClientTest(unittest.TestCase):
         self.assertIn("kb-note " + self.release(), out)
         self.assertIn("No library set up", out)
 
+    def test_batch_files_step(self):
+        self.assertEqual(self.setup_library()[0], "ok")
+        material = self.p("home", "Documents", "Atlas")
+        os.makedirs(material)
+        fx.docx(os.path.join(material, "report.docx"), english=True)
+        out = self.p("home", "kb-batches", "Atlas_run")
+        result, text, asked = self.server.run("batch", [material, "work", out])
+        self.assertEqual(result, "ok", text)
+        self.assertEqual([q["kind"] for q in asked], ["folder", "choose", "folder"])
+        self.assertIn("work", [o["value"] for o in asked[1]["options"]])
+        self.assertRegex(asked[2]["default"], r"kb-batches/Atlas_\d{8}$")
+        files = [n for n in os.listdir(out) if n.endswith("_b01.md")]
+        self.assertEqual(len(files), 1)
+        self.assertEqual(self.server.extra[-1]["type"], "batch")
+        self.assertEqual((self.server.extra[-1]["out"], self.server.extra[-1]["files"]), (out, files))
+        # refused: an output folder that is not empty, or one inside a library
+        result, text, _ = self.server.run("batch", [material, "work", out])
+        self.assertEqual(result, "stopped", text)
+        self.assertIn("not empty", text)
+        result, text, _ = self.server.run("batch", [material, "", self.p("home", "kb", "work", "batches")])
+        self.assertEqual(result, "stopped", text)
+        self.assertIn("inside the library", text)
+        result, text, _ = self.server.run("batch", [self.p("nowhere")])
+        self.assertEqual(result, "stopped", text)
+
+    def test_pending_decisions_and_review_items(self):
+        self.assertEqual(self.setup_library()[0], "ok")
+        lib = self.p("home", "kb", "work")
+        write(os.path.join(lib, "_pending", "r1.json"), json.dumps(PENDING))
+        write(os.path.join(lib, "_pending", "broken.json"), "{")
+        card = os.path.join(lib, "00_Status-Card.md")
+        write(card, read(card) + "\n1. The pilot ends in April. [[Sources/plan#^p1]] ⏳ review: plan has a new version (2026-04-01)\n")
+        status, got = self.server.get("/api/pending")
+        self.assertEqual(status, 200)
+        self.assertEqual([(r["library"], r["run"]) for r in got["runs"]], [("work", "r1")])
+        self.assertEqual(got["runs"][0]["pending"]["new_topics"], ["Risks"])
+        self.assertEqual(got["review"], [{"library": "work", "label": "Work",
+                                          "item": "1. The pilot ends in April. [[Sources/plan#^p1]]"}])
+        status, r = self.server.post("/api/pending", {"library": "work", "run": "r1",
+                                                      "decisions": {"topics": {"Risks": {"under": "nothing"}}}})
+        self.assertEqual(status, 400)
+        self.assertEqual(len(r["problems"]), 1)
+        self.assertEqual(self.server.post("/api/pending", {"library": "work", "run": "../x", "decisions": {}})[0], 400)
+        self.assertEqual(self.server.post("/api/pending", {"library": "other", "run": "r1", "decisions": {}})[0], 404)
+        good = {"topics": {"Risks": {"under": "milestones"}}, "entities": {"Harbour Team": {"add": True, "type": "team"}},
+                "versions": ["plan final.md=plan.md"], "conflicts": {"c1": "restore"}}
+        status, r = self.server.post("/api/pending", {"library": "work", "run": "r1", "decisions": good})
+        self.assertEqual(status, 200, r)
+        self.assertFalse(r["said"])                                   # no conversation to tell
+        self.assertIn("r1", r["text"])
+        self.assertEqual(json.loads(read(os.path.join(lib, "_pending", "r1.decisions.json"))), good)
+        self.assertEqual(self.server.get("/api/pending")[1]["runs"], [])
+        self.assertEqual(self.server.post("/api/pending", {"library": "work", "run": "r1", "decisions": good})[0], 409)
+
     def test_quit(self):
         work = self.server.get("/api/state")[1]["work"]
         self.assertTrue(os.path.isdir(work))
@@ -595,6 +662,18 @@ class ChatTest(unittest.TestCase):
         win = self.server.get("/api/chat/state")[1]["agent"]["current"]
         self.assertEqual(saved, {"session": new, "always": {}, "current": win,
                                  "windows": [{"id": win, "session": new, "title": ""}]})
+
+    def test_saved_decisions_are_said_in_the_conversation(self):
+        ev = self.ready()
+        result, out, _ = self.server.run("setup", ["opencode", True, True, self.p("home", "kb", "work"),
+                                                   "team projects", "", True])
+        self.assertEqual(result, "ok", out)
+        ev.until(lambda e: e["type"] == "agent" and e["state"] == "starting" and e.get("restart"), "restart")
+        ev.until(lambda e: e["type"] == "agent" and e["state"] == "ready", "ready again", timeout=60)
+        write(self.p("home", "kb", "work", "_pending", "r1.json"), json.dumps(PENDING))
+        status, r = self.server.post("/api/pending", {"library": "work", "run": "r1", "decisions": {}})
+        self.assertEqual((status, r["said"]), (200, True), r)
+        ev.until(lambda e: e["type"] == "part" and e["role"] == "assistant" and "r1" in e["text"], "the sentence said")
 
     def test_setup_restarts_opencode(self):
         ev = self.ready()

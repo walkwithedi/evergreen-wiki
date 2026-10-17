@@ -67,13 +67,13 @@ The user's answer to this question is their confirmation of the spec change.
 
 ## Step 5: entities
 
-python3 scripts/ingest.py entities <work>/accepted.jsonl --library <library>
+python3 scripts/ingest.py entities <work>/accepted.jsonl --library <library> > <work>/entities.json
 
 It compares the cards' entity names with the spec's Table E (the alias table). Names under merged are names or aliases of the table and are merged without asking. Each name under new goes into the preview with its suggested type and the closest names of the table; by default it is added as a new entity. When the user puts a name under an existing entity, or changes a type, write the decisions to <work>/entity-map.json: {"<name>": "<table name>"} records it as an alias, {"<name>": {"type": "<type>"}} sets the type (project, team, organisation, system or other).
 
 ## Step 6: new versions
 
-python3 scripts/ingest.py versions <batch files> --library <library>
+python3 scripts/ingest.py versions <batch files> --library <library> > <work>/versions.json
 
 - same_name: sources whose name is already in the library. They are new versions anyway: the old source and cards file go to the archive folder.
 - candidates: library sources with a close name and shared paragraphs, which may be older versions of a source of the run under another name.
@@ -84,7 +84,7 @@ Each confirmed pair is passed to step 9 as --replaces "<new>=<old>": the old sou
 
 ## Step 7: conflicts
 
-python3 scripts/ingest.py conflicts <batch files> --cards <work>/accepted.jsonl --library <library>, with --replaces "<new>=<old>" for each pair proposed in step 6. In the preview, the conflicts of a pair the user does not confirm are dropped.
+python3 scripts/ingest.py conflicts <batch files> --cards <work>/accepted.jsonl --library <library> > <work>/conflicts.json, with --replaces "<new>=<old>" for each pair proposed in step 6. In the preview, the conflicts of a pair the user does not confirm are dropped.
 
 For each source the run replaces, it compares the old version's cards with the new version and the run's cards, and lists:
 - changed: the old quote is gone and a new card's conclusion is close to the old one (both are listed);
@@ -105,6 +105,12 @@ Show one preview and wait for the user to confirm before anything is written:
 - Topic pages that will be rebuilt (the accepted cards' topics, plus the topics of the cards files being archived).
 
 A local library writes straight into the library after the confirmation. For a library in Google Drive, see "Libraries in Google Drive" below before writing.
+
+Answering on the knowledge base client (local libraries): before showing the preview, write the decisions to be made to a pending file, which the client shows as a form on its Waiting for confirmation page:
+
+  python3 scripts/ingest.py pending write --library <library> --entities <work>/entities.json --versions <work>/versions.json --conflicts <work>/conflicts.json
+
+(add --report <work>/report.json when the new topics of step 4 were left for the preview). It prints the file's path; its name is the run's name. Say in the preview that the user can answer here or on the client's page. Answers given in the conversation are used as before. When the user, or the client in the conversation, says the decisions are saved, run python3 scripts/ingest.py pending read --library <library> --run <run> --work <work>: it prints the topics to add, the topics to put under others and the --replaces pairs, and writes <work>/entity-map.json and <work>/restore.json for step 9. After step 9: python3 scripts/ingest.py pending done --library <library> --run <run>.
 
 ## Step 9: file
 
