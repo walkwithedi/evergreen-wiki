@@ -4,7 +4,6 @@
   "preset": "work",
   "language": "en",
   "timezone": "UTC",
-  "tier": "weak",
   "partitions": {
     "max": 9,
     "topic_start": 2,

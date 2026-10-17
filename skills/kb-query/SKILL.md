@@ -1,6 +1,6 @@
 ---
 name: kb-query
-description: Answers questions from the user's own knowledge base (an evergreen 2.0 library in a Google Drive folder or a local/Obsidian vault) by searching it first, never from memory; every fact is followed by the exact source sentence it rests on, with a link to it, and when nothing is found it says where it looked. Use when a question may be recorded there - what was agreed or decided, current values and limits, owners, dates, status, open issues, terms, how something changed, or whether some material is already in the library. Examples: "When is the launch date?", "Who owns Project Atlas?". When the user has a knowledge base set up (a kb-libraries.json registry, KB_LIBRARIES, or libraries named in project instructions), check it before searching code or answering from general knowledge, even if the user does not say "check my knowledge base". Not for unrelated general questions. Writes nothing except a status-card update the user confirmed; ingesting and setup belong to kb-ingest, saving notes to kb-note.
+description: Answers questions from the user's own knowledge base (an evergreen library in a local or Obsidian folder) by searching it first, never from memory; every fact is followed by the exact source sentence it rests on, with a link to it, and when nothing is found it says where it looked. Use when a question may be recorded there - what was agreed or decided, current values and limits, owners, dates, status, open issues, terms, how something changed, or whether some material is already in the library. Examples: "When is the launch date?", "Who owns Project Atlas?". When the user has a knowledge base set up (a kb-libraries.json registry, KB_LIBRARIES, or libraries named in project instructions), check it before searching code or answering from general knowledge, even if the user does not say "check my knowledge base". Not for unrelated general questions. Writes nothing except a status-card update the user confirmed; ingesting and setup belong to kb-ingest, saving notes to kb-note.
 ---
 
 # Knowledge base questions
@@ -19,7 +19,7 @@ Read references/config.md and references/environment.md once before starting. Sc
 4. If unsure whether a question falls in a library, read that library's spec Table A to check; still unsure, treat as rule 3.
 5. Ingesting and setup requests belong to kb-ingest; "note this" belongs to kb-note.
 
-For each library searched, read its backend file and _kb.json. A _kb.json of schema 1 is a 1.x library: say that this release does not read it and that the 1.x release does. The tier is _kb.json "tier" (missing: strong for a Claude or ChatGPT client, weak otherwise). Start the answer with: Library: <label(s)>.
+For each library searched, read references/backend-local.md and _kb.json. A _kb.json of schema 1 is a 1.x library: say that this release does not read it and that the 1.x release does. Start the answer with: Library: <label(s)>.
 
 ## Step 2: where answers come from
 
@@ -39,21 +39,15 @@ Never use the ignored files listed in references/config.md. The archive folder h
 
 Pick the question's keywords: names, terms (the standard form from Table B and the user's form), numbers, dates.
 
-Weak tier, where Python runs:
-
   python3 scripts/answer.py select <library root> <keyword> [<keyword> ...]
 
 It lists the status-card items and the cards the keywords point to (a keyword that names an entity of Table E counts for all its aliases; a keyword that names a topic brings that topic's cards), best first, each with its quote and source link; items marked for review say so; when no card matches, it lists the source paragraphs holding a keyword, marked as not on a card. Answer only from what it lists. When it finds nothing, try once more with other forms of the keywords, then answer as not found.
 
-Strong tier, or a weak library without Python: search yourself, inside the library root only.
-- Status card first (read it whole when it is under 8000 characters).
-- Then cards and topic pages: in a local library where commands run, python3 scripts/kbfind.py find <library root> <keyword> [...] --in <cards_dir> (or --in <topics_dir>, --in <sources_dir>) prints the matching blocks with their line numbers; otherwise find_by_text in those folders.
-- Read a source file only at the paragraph a card cites, or whole when the question needs the whole document.
+Without Python: search yourself, inside the library root only. Status card first (read it whole when it is under 8000 characters), then the cards and topic pages with find_by_text; read a source file only at the paragraph a card cites, or whole when the question needs the whole document.
 
 Rules:
 1. Never use a file ID or path from memory; use what the search returns.
 2. Search cap: at most 8 searches or select runs for one library and 4 more for each extra library. Then answer as not found.
-3. Several copies of the status card (Drive): use the most recently modified and say that several copies exist.
 
 ## Step 4: answer
 
@@ -72,7 +66,7 @@ Every statement of fact is followed by a quote line with the exact sentence it r
 8. Nothing found: say which libraries and keywords were searched and conclude "nothing found in the knowledge base".
 9. Answer only what was asked; mention the search only when nothing was found or sources conflict. Replies follow the library language and preferences.output.
 
-Weak tier: write the answer to <work>/answer.md first and run python3 scripts/answer.py check <library root> <work>/answer.md. Exit 3 lists the quotes not found in their linked paragraph: copy each again from the card or paragraph, exactly, and check once more; a quote that still fails is removed together with its statement. Then reply with the answer. In the strong tier, run the same check when Python runs.
+Write the answer to <work>/answer.md first and run python3 scripts/answer.py check <library root> <work>/answer.md. Exit 3 lists the quotes not found in their linked paragraph: copy each again from the card or paragraph, exactly, and check once more; a quote that still fails is removed together with its statement. Then reply with the answer.
 
 ## Step 5: status-card update (only with the user's confirmation)
 
@@ -80,8 +74,7 @@ When the answer rests on cards or sources because the status card has no item fo
 
 1. After the answer, propose the item: one numbered line in the status card's own style, citing the passages the answer quoted ([[Sources/<source>#^pN]]), and for a marked item the text that replaces it (without the mark). Ask whether to write it; never write without a yes.
 2. On yes: copy the status card to <work>/status-card.md and make the change there. Run python3 scripts/ingest.py status-check --old <status card> --new <work>/status-card.md. It lists removed and changed items and source links no longer cited: show that list to the user. When they accept it, run the same command with --write --confirmed --library <library root>. Change nothing else on the card.
-3. A library in Google Drive: run the check on downloaded copies; on acceptance move the old status card into the archive folder (name<old_suffix><YYYYMMDDHHMMSS>.md), write_new the new one and find_exact it once more (references/backend-gdrive.md).
-4. Without Python, do not change the status card (hard rule 4); give the proposed line for the user to add by hand or through kb-ingest.
+3. Without Python, do not change the status card (hard rule 4); give the proposed line for the user to add by hand or through kb-ingest.
 
 ## Hard rules
 

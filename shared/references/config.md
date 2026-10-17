@@ -6,14 +6,12 @@ Nothing about a particular library is written in the skills. Everything comes fr
 
 Look for the registry in this order and use the first one found:
 
-1. The current project instructions (claude.ai Project instructions, AGENTS.md, CLAUDE.md, GEMINI.md and the like), in one of two forms:
-   - a line naming a registry in Google Drive: "registry: Google Drive folder <folder id>, file kb-libraries.json". find_exact kb-libraries.json in that folder (the folder ID comes from the instructions, not from memory) and read it; several copies: use the most recently modified and mention it. Not found: say so and offer init mode; do not search elsewhere.
-   - a registry pasted as JSON (the older form; still read as is).
+1. A registry pasted as JSON into the current project instructions (AGENTS.md and the like).
 2. The file named by the environment variable KB_LIBRARIES.
-3. ~/.config/kb/kb-libraries.json (on Windows %APPDATA%\kb\kb-libraries.json).
+3. ~/.config/kb/kb-libraries.json.
 4. config/kb-libraries.json inside this skill folder (present only in a private build made with build_skill.py --config).
 
-If none exists, nothing is set up yet. Never guess a folder ID or path. Offer setup once, in one line, then go on:
+If none exists, nothing is set up yet. Never guess a path. Offer setup once, in one line, then go on:
 - kb-query: a question unrelated to any knowledge base is answered normally, without the offer. A question meant for the knowledge base: say it is not set up yet and offer: "No knowledge base is set up yet. Set one up now? Two questions, a preview, nothing written before you confirm."
 - kb-note: show the finished note in the reply so nothing is lost, then make the same offer; once the library exists, offer to save the note there.
 - kb-ingest (intake or setup asked for): the user already wants a library, so go straight to init mode (references/init.md in kb-ingest). Where local files can be written and commands run, do not ask for the library path in words: open the folder chooser first (references/pick-material.md in kb-ingest, library folder).
@@ -25,24 +23,22 @@ If none exists, nothing is set up yet. Never guess a folder ID or path. Offer se
   "preferences": {"language": "en", "output": "markdown"},
   "libraries": [
     {"id": "work", "label": "Work", "scope": "team projects, decisions, specs, owners",
-     "backend": {"type": "gdrive", "root": "<drive-folder-id>"}},
+     "backend": {"type": "local", "root": "~/kb/work"}},
     {"id": "atlas", "label": "Project Atlas", "scope": "Project Atlas plans, minutes and reports",
      "backend": {"type": "local", "root": "~/kb/atlas"}}
   ]
 }
 ```
 
-A registry in Google Drive is the same JSON, kept by kb-ingest (init mode adds entries to it), so the project instructions never change when a library is added. It sits in the root of the first Drive library under the name kb-libraries.json; the knowledge-file searches skip it because it is not a Markdown file. Drive cannot rewrite a file in place, so an update moves the old copy to that library's archive folder and writes a new one; the folder ID in the instructions stays valid.
-
 - id: short lowercase name used in replies and file names.
 - scope: one sentence saying what belongs in the library. It is how you decide which library a request or question belongs to.
-- backend.type: gdrive or local. Read references/backend-gdrive.md or references/backend-local.md accordingly, and only that one.
+- backend.type: local, the only backend; read references/backend-local.md. A library of type gdrive belongs to a 2.0.x release: say that this release does not read it and that 2.0.x does.
 - preferences.output: markdown (default) or plain. With plain, replies use no Markdown markup at all (no headings, bold, bullets, code blocks or tables); number items as "1." or "(1)" instead. Knowledge files keep their own formats either way.
 - preferences.language: language of replies when a library does not set its own.
 
 ## 2. Library files: how one library works
 
-A 2.0 library holds, in its root, _kb.json (settings; its name starts with an underscore, so searches for knowledge files skip it), the spec and the status card, and beside them the folders for sources, cards, topics and the archive. A quick note (kb-note) is a source like any other, named "Note <YYYYMMDD-HHMM> <title>".
+A library holds, in its root, _kb.json (settings; its name starts with an underscore, so searches for knowledge files skip it), the spec and the status card, and beside them the folders for sources, cards, topics and the archive. A quick note (kb-note) is a source like any other, named "Note <YYYYMMDD-HHMM> <title>".
 
 | File or folder | Content |
 | --- | --- |
@@ -58,7 +54,7 @@ The spec is the source of every rule about partitions, topics, terms and entitie
 
 The status card holds numbered items ("1. ..."), each citing the source passage it rests on ([[Sources/<source>#^pN]]). Two rules keep it honest:
 - When a source it cites gets a new version, kb-ingest's filing script appends a review mark to the item: "⏳ review: <source> has a new version (<date>)" ("⏳ 待复核：<source> 有新版本（<date>）"). A marked item is not to be relied on until it is checked against the current sources; its mark is removed only when the item is rewritten.
-- The status card is never rewritten freely. Write the rewrite to a work file and run python3 scripts/ingest.py status-check --old <status card> --new <rewrite> (kb-ingest's scripts). Exit 3 lists removed items, changed items and source links no longer cited: show each to the user, who accepts it or has it restored in the rewrite; run the check again. Only a rewrite that passes is written (--write --library <library>, or the backend's way of replacing a file).
+- The status card is never rewritten freely. Write the rewrite to a work file and run python3 scripts/ingest.py status-check --old <status card> --new <rewrite> (kb-ingest's scripts). Exit 3 lists removed items, changed items and source links no longer cited: show each to the user, who accepts it or has it restored in the rewrite; run the check again. Only a rewrite that passes is written (--write --library <library>).
 
 ### _kb.json
 
@@ -69,17 +65,16 @@ The status card holds numbered items ("1. ..."), each citing the source passage 
   "preset": "work",
   "language": "en",
   "timezone": "Europe/London",
-  "tier": "weak",
   "partitions": {"max": 9, "topic_start": 2, "fallback": "09"},
   "names": {}
 }
 ```
 
-- schema: 2. A _kb.json with schema 1 belongs to a 1.x library: 2.0 does not read or migrate it; say so and stop (the 1.x release keeps working for it, or a 2.0 library is set up and the material ingested again).
+- schema: 2. A _kb.json with schema 1 belongs to a 1.x library: this release does not read or migrate it; say so and stop (the 1.x release keeps working for it, or a new library is set up and the material ingested again).
 - language: language of replies and new files for this library.
-- timezone: IANA name or a fixed offset such as +08:00. Use it for every time stamp (note times, archive suffixes). The scripts resolve IANA names only on Python 3.9+ with a timezone database (Windows usually has none); there, use the fixed offset.
-- tier: weak or strong. Weak: scripts build the topic pages and select what answers rest on, for models with limited reasoning (OpenCode, local models). Strong: the assistant writes the topic pages and a script checks every citation (Claude, ChatGPT). Missing: decided by the assistant in use, and said.
-- batch_chars (optional): characters per batch file instead of the tier's (weak 20000, strong 100000).
+- timezone: IANA name or a fixed offset such as +08:00. Use it for every time stamp (note times, archive suffixes). The scripts resolve IANA names only on Python 3.9+ with a timezone database; without one, use the fixed offset.
+- batch_chars (optional): characters per batch file (default 20000).
+- tier: a setting of 2.0.x, accepted and ignored. Topic pages are always built by the script.
 - quote_min, quote_max (optional): the length a card's quote must keep to (default 6 to 300 characters).
 - partitions: highest partition number, first topic partition (00 and 01 hold summary files), and the fallback partition for new topics.
 - names: overrides for any default name below. Leave out the keys you do not change.

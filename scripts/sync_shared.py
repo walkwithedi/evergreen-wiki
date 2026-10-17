@@ -21,13 +21,12 @@ log = logging.getLogger("sync_shared")
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s.%(funcName)s:%(lineno)d - %(message)s"
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-REFS = ["config.md", "environment.md", "backend-gdrive.md", "backend-local.md"]
+REFS = ["config.md", "environment.md", "backend-local.md"]
 # (file under shared/, folders that receive a copy, relative to the repository root)
 PLAN = [(f"references/{r}", [f"skills/{s}/references" for s in ("kb-note", "kb-query", "kb-ingest")])
         for r in REFS]
-# writing cards and topic pages: kb-ingest for documents, kb-note for a note
-PLAN += [(f"references/{r}", ["skills/kb-ingest/references", "skills/kb-note/references"])
-         for r in ("extract.md", "pages-strong.md")]
+# writing cards: kb-ingest for documents, kb-note for a note
+PLAN.append(("references/extract.md", ["skills/kb-ingest/references", "skills/kb-note/references"]))
 ALL = ["skills/kb-note/scripts", "skills/kb-query/scripts", "skills/kb-ingest/scripts"]
 PLAN.append(("scripts/kbconf.py", ALL))
 # the converter: used by kb-ingest (batch files) and by the stand-alone tool
@@ -36,7 +35,7 @@ PLAN.append(("scripts/doc2kb_core.py", ["skills/kb-ingest/scripts", "tools/doc2k
 PLAN.append(("scripts/kb_batch.py", ALL + ["tools/doc2kb"]))
 # checking cards against their batch file and writing them
 PLAN.append(("scripts/quote_check.py", ALL + ["tools/doc2kb"]))
-# filing an intake run or a note into a 2.0 library, rebuilding its topic pages, checking the status card
+# filing an intake run or a note into a library, rebuilding its topic pages, checking the status card
 PLAN.append(("scripts/ingest.py", ALL))
 
 

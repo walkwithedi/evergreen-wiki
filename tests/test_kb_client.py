@@ -241,7 +241,7 @@ class KbClientTest(unittest.TestCase):
         self.assertEqual(len(previews), 2)
         self.assertEqual([o["value"] for o in previews[0]["options"]], ["write", "change", "cancel"])
         items = next(q for q in asked if q["kind"] == "choose" and q["options"][0]["value"] == "1")
-        self.assertEqual(len(items["options"]), 7)
+        self.assertEqual(len(items["options"]), 6)
         self.assertEqual(json.loads(read(self.p("home", "kb", "work", "_kb.json")))["label"], "Team")
 
     def test_preview_cancelled_with_a_choice(self):
@@ -1383,7 +1383,7 @@ class DecideTest(unittest.TestCase):
                                 ("python3 scripts/ingest.py file b01.md --cards a.jsonl --library l", "ingest file"),
                                 ("python3 scripts/ingest.py pages --library l --topic Pilot", "ingest pages"),
                                 ("python3 scripts/ingest.py add-topic --library l --topic Pilot", "ingest add"),
-                                ("python3 scripts/ingest.py check-page --library l --topic T --page p.md", "ingest check"),
+                                ("python3 scripts/ingest.py retopic a.jsonl --from A --to B", "ingest retopic"),
                                 ("python3 scripts/init_library.py plan --root r", "init_library plan"),
                                 ("python3 scripts/ingest.py --help", ""),
                                 ("python3 scripts/quote_check.py --help", ""), ("python3 other.py", ""),

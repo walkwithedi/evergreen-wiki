@@ -3565,11 +3565,11 @@ def main(argv=None):
                     help='write knowledge-base batch files: source numbers, paragraph anchors, '
                          'at most a set number of characters each; implies --no-images')
     ap.add_argument('--tier', choices=sorted(kb_batch.TIER_CHARS), default=None,
-                    help='--kb-batch: weak (%d characters per batch) or strong (%d); '
-                         'default: the library\'s setting, else weak'
+                    help='--kb-batch, kept for older command lines: weak (%d characters per batch) or '
+                         'strong (%d); --batch-chars or the library\'s batch_chars is preferred'
                          % (kb_batch.TIER_CHARS['weak'], kb_batch.TIER_CHARS['strong']))
     ap.add_argument('--batch-chars', type=int, default=None, metavar='N',
-                    help='--kb-batch: characters per batch, instead of the tier\'s')
+                    help='--kb-batch: characters per batch (default: the library\'s batch_chars, else %d)' % kb_batch.TIER_CHARS['weak'])
     ap.add_argument('--library', metavar='DIR', default=None,
                     help='--kb-batch: local library whose _kb.json sets tier and batch_chars')
     ap.add_argument('--no-images', action='store_true',
