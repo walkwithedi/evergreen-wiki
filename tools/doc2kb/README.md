@@ -40,7 +40,7 @@ Messages and the labels written into the output (headings, notes, table headers)
 ./doc2kb.sh
 ```
 
-Choose a mode: folder batch, chosen files or incremental tasks. Ticking "KB batch files" among the options writes batch files instead of merged output and asks for the tier (weak or strong).
+Choose a mode: folder batch, chosen files or incremental tasks. Ticking "KB batch files" among the options writes batch files instead of merged output, at most 20,000 characters each.
 
 ### Incremental command line (cron)
 
@@ -84,8 +84,8 @@ python3 doc2kb_core.py -h                                  # every option
 ### Knowledge-base batch files
 
 ```bash
-python3 doc2kb_core.py --batch SOURCE -o OUTPUT --kb-batch --tier weak      # 20,000 characters per batch
-python3 doc2kb_core.py --batch SOURCE -o OUTPUT --kb-batch --library LIB    # tier and limit from LIB/_kb.json
+python3 doc2kb_core.py --batch SOURCE -o OUTPUT --kb-batch                  # 20,000 characters per batch
+python3 doc2kb_core.py --batch SOURCE -o OUTPUT --kb-batch --library LIB    # limit from LIB/_kb.json (batch_chars)
 python3 kb_batch.py split OUTPUT/SOURCE_20261017_b*.md -o SPLIT              # back to one file per source
 ```
 
@@ -94,7 +94,7 @@ python3 kb_batch.py split OUTPUT/SOURCE_20261017_b*.md -o SPLIT              # b
 - Each file starts with the batch name, the tier, the character limit, a note for the reader and a table of its sources (number, file, original path, last modified, characters, part).
 - Sources are numbered S01, S02, ... over the run and appear oldest first (document last-modified time); each is a section headed `# S01 <file name>` with the original path and times as quoted lines, and the document's own headings one level lower.
 - Paragraphs and list items end with an anchor such as `^s01-p2`; a table has one anchor on its own line below it. Headings, quoted notes, rules and picture placeholders carry none. These are Obsidian block references, so `[[file#^p2]]` reaches the paragraph once the source is split back.
-- A batch holds at most the limit: `--batch-chars N`, else `--tier` (weak 20,000, strong 100,000 characters), else `batch_chars` and `tier` from the `_kb.json` of `--library`, else weak. A document longer than the limit is cut at its highest heading level that divides it, then lower levels, then between paragraphs; its parts keep the source number, are marked `· 1/3` and so on, and may land in different batches. A single paragraph or table longer than the limit is not cut: it becomes a batch of its own and the run and the report say so.
+- A batch holds at most the limit: `--batch-chars N`, else `batch_chars` from the `_kb.json` of `--library`, else 20,000 characters. `--tier weak|strong` (20,000 or 100,000) stays for older command lines; a library's own `tier` setting is ignored. A document longer than the limit is cut at its highest heading level that divides it, then lower levels, then between paragraphs; its parts keep the source number, are marked `· 1/3` and so on, and may land in different batches. A single paragraph or table longer than the limit is not cut: it becomes a batch of its own and the run and the report say so.
 - No picture files are exported (`--kb-batch` implies `--no-images`); placeholders stay in the text.
 - Date filter, `--only`, duplicate removal and the fingerprint file (`--fp-db`) work as in merged mode; a fingerprint line names the batch file that holds the document.
 

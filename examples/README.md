@@ -1,6 +1,6 @@
 # Examples
 
-sample-work-kb/ is a small, entirely fictional 2.0 work library (tier weak) about Project Atlas, a pilot run with Riverside Clinic. It holds three sources with their cards and the topic pages built from them. Open it in Obsidian, or register it and try the skills:
+sample-work-kb/ is a small, entirely fictional work library about Project Atlas, a pilot run with Riverside Clinic. It holds three sources with their cards and the topic pages built from them. Open it in Obsidian, or register it and try the skills:
 
 ```json
 {"schema": 1, "libraries": [{"id": "sample", "label": "Sample Work",

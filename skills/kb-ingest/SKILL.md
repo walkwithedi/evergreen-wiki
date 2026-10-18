@@ -5,7 +5,7 @@ description: Ingests documents into an evergreen knowledge base (a local or Obsi
 
 # Knowledge base ingest
 
-Version: 2.0.0
+Version: 3.0.0
 
 This skill files material into a 2.0 library. Every conclusion it writes carries the source sentence it rests on, and a script checks that sentence before anything is written. The rules of a library (partitions, topics, folder names) live in the library's own spec and _kb.json; read them each time, never from memory or from this file.
 

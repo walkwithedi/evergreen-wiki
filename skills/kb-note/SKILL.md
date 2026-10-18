@@ -5,7 +5,7 @@ description: Saves a small piece of information from the conversation into the u
 
 # Quick notes: save a piece of the conversation
 
-Version: 2.0.0
+Version: 3.0.0
 
 A note becomes a source of the library on the spot: the user's words are the source text, cards are taken from them and checked like any other, and the topic pages they touch are rebuilt. It only adds files and rebuilds generated pages; it never edits or deletes an existing source or card.
 

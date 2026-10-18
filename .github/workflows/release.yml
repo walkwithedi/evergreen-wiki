@@ -73,8 +73,7 @@ jobs:
         env:
           TAG: ${{ steps.decide.outputs.tag }}
         run: |
-          python scripts/build_skill.py
-          python scripts/build_skill.py --locale zh
+          mkdir -p dist
           git archive --format=zip --prefix=evergreen-wiki/ -o "dist/evergreen-wiki-${TAG}.zip" HEAD
           # the offline workbench: its entry at the top, the repository beside it
           python scripts/build_workbench.py "dist/evergreen-wiki-${TAG}.zip" "dist/workbench-bundle-${TAG}.zip"

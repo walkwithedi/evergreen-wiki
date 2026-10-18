@@ -415,8 +415,9 @@ address, keep each file within what the assistant can read at once, and split ba
   line after a blank line below it. Headings, quoted lines (notes the converter adds), rules, comments and
   picture placeholders get none. N counts from 1 over the whole source, across parts. The form is an Obsidian
   block reference, so after splitting back `[[file#^pN]]` reaches the passage.
-- **Limit**: `--batch-chars`, else `--tier` (weak 20,000, strong 100,000), else `batch_chars` and `tier`
-  from the library settings file named by `--library`, else weak; below 1,000 is refused.
+- **Limit**: `--batch-chars`, else `--tier` (weak 20,000, strong 100,000; kept for older command lines),
+  else `batch_chars` from the library settings file named by `--library`, else 20,000; a library's `tier`
+  is ignored; below 1,000 is refused.
 - **Cutting**: a source larger than the limit is cut at the highest heading level that divides it into more
   than one piece, pieces still too large at the next level, and without headings between blocks; pieces are
   then joined greedily back up to the limit. Parts keep the source number and are marked `· k/n` at the end
@@ -447,7 +448,7 @@ Choose a mode first:
 The walk skips hidden folders, lock files (the office suite's temporary files) and the tool's own output
 folders (or it nests into itself).
 
-Options at least: merge, knowledge-base batch files (then ask for the tier), expand embedded attachments,
+Options at least: merge, knowledge-base batch files, expand embedded attachments,
 skip pictures, contact sheets.
 
 **One failing file never stops a batch.** Record the reason in the report and continue. Failure types to
