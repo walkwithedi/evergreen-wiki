@@ -438,17 +438,21 @@ class App:
                 return None, "running"
             if self.write_lock() is not None:
                 return None, "locked"
-            ingest_run.plan(str(body.get("material") or ""), body.get("rules"), lib["root"])  # refuses bad input
+            got = ingest_run.plan(str(body.get("material") or ""), body.get("rules"), lib["root"], self.material_roots())
             run_id = time.strftime("%Y%m%d-%H%M%S")
             work = os.path.join(ingest_run.runs_root(kb_manage.state_dir()), run_id)
             os.makedirs(work, mode=0o700, exist_ok=True)
             run = ingest_run.Run(self, {"id": lib["id"], "label": lib["label"], "root": lib["root"]},
-                                 os.path.realpath(os.path.expanduser(str(body["material"]))), body.get("rules"),
+                                 got["material"], body.get("rules"),
                                  self.ingest_scripts(), work, self.lang, run_id, body.get("parallel") or 1,
                                  bool(body.get("unattended")))
             self.ingest = run
         run.start()
         return run, None
+
+    def material_roots(self):
+        """Where material may come from: the folder browser's places and the drop folders' staging area."""
+        return [p["path"] for p in places()] + [os.path.join(kb_manage.state_dir(), "auto")]
 
     def continue_ingest(self):
         run = self.ingest
@@ -1337,7 +1341,8 @@ class Handler(BaseHTTPRequestHandler):
             if lib is None:
                 return self.send(404, {"error": m["ingest_library"]})
             try:
-                got = ingest_run.plan(str(body.get("material") or ""), body.get("rules"), lib["root"])
+                got = ingest_run.plan(str(body.get("material") or ""), body.get("rules"), lib["root"],
+                                      self.app.material_roots())
             except ValueError as e:
                 return self.send(400, {"error": str(e)})
             return self.send(200, dict(got, files=got["files"][:PLAN_SHOWN]))

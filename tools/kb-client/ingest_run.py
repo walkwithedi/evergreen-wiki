@@ -116,12 +116,24 @@ def read_json(path, default=None):
 
 # ---------------------------------------------------------------- choosing material
 
-def plan(material, rules, library_root):
+def inside(path, roots):
+    """path (a real path) when it is one of roots or below one of them; ValueError otherwise."""
+    for r in roots:
+        r = os.path.realpath(r)
+        if path == r or path.startswith(r.rstrip(os.sep) + os.sep):
+            return path
+    raise ValueError("the material folder must be in the home folder or on a mounted drive")
+
+
+def plan(material, rules, library_root, roots=None):
     """The documents of a material folder and which of them are important: {"material", "total",
     "important", "folders": [{folder, files}], "files": [{rel, modified, important}], "rules", "other"}.
     rules: {"folders": [folders below the material folder; empty for all], "since": "YYYY-MM-DD" or ""}.
-    Refuses a folder inside the library and one with more than MAX_FILES documents."""
+    roots: the folders the material must be in (the folder browser's places) when given. Refuses a folder
+    inside the library and one with more than MAX_FILES documents."""
     material = os.path.realpath(os.path.expanduser(material))
+    if roots is not None:
+        material = inside(material, roots)
     if not os.path.isdir(material):
         raise ValueError("not a folder: %s" % material)
     root = os.path.realpath(library_root)
@@ -328,7 +340,7 @@ class Run:
                 try:
                     self.app.agent.drop_window(wid)
                 except (AttributeError, KeyError):
-                    pass
+                    log.debug("window %s already gone", wid)
             with self.lock:
                 self.windows = []
             self.note("run %s %s%s" % (self.id, self.state, ": " + self.reason if self.reason else ""))
@@ -713,7 +725,7 @@ class Asker:
                 try:
                     ag.stop(w.id)
                 except (OSError, RuntimeError, KeyError):
-                    pass
+                    log.debug("nothing to stop in %s", w.id)
                 raise Stopped(WHY[run.lang]["busy"])
             if w.questions and w.allow_all:
                 for q in list(w.questions.values()):
@@ -739,7 +751,7 @@ class Asker:
         try:
             ag.stop(w.id)
         except (OSError, RuntimeError, KeyError):
-            pass
+            log.debug("nothing to stop in %s", w.id)
         raise Stopped(WHY[run.lang]["timeout"])
 
 
@@ -852,7 +864,7 @@ class Backfill:
             try:
                 self.app.agent.stop(wid)
             except (OSError, RuntimeError, KeyError, AttributeError):
-                pass
+                log.debug("nothing to stop in %s", wid)
         self.changed()
 
     def off(self):

@@ -1643,7 +1643,7 @@ class IngestRunTest(unittest.TestCase):
         write(self.p("home", ".config", "kb", "kb-libraries.json"), json.dumps(
             {"schema": 2, "libraries": [{"id": "work", "label": "Work", "scope": "team projects",
                                          "backend": {"type": "local", "root": root}}]}))
-        material = self.p("material")
+        material = self.p("home", "material")
         shutil.copytree(os.path.join(ROOT, "examples", "sample-materials"), material)
         return root, material
 
@@ -1657,6 +1657,7 @@ class IngestRunTest(unittest.TestCase):
                 self.fail("run failed: %s\n%s" % (run["reason"], read(run["log"])))
             time.sleep(0.5)
         self.fail("run did not reach %s: %s" % (states, run))
+        return None
 
     def test_plan_then_run(self):
         self.env["KB_BACKFILL_IDLE"] = "1"
@@ -1669,6 +1670,7 @@ class IngestRunTest(unittest.TestCase):
         self.assertEqual((plan["total"], plan["important"]), (3, 1))
         self.assertEqual([f["folder"] for f in plan["folders"]], ["Meetings", "Plans", "Status reports"])
         self.assertEqual(s.post("/api/ingest/plan", {"library": "work", "material": root})[0], 400)  # the library itself
+        self.assertEqual(s.post("/api/ingest/plan", {"library": "work", "material": self.p("tmp")})[0], 400)  # elsewhere
         status, r = s.post("/api/ingest/start", {"library": "work", "material": material,
                                                  "rules": {"folders": ["Plans"], "since": ""}})
         self.assertEqual(status, 200, r)
@@ -1722,7 +1724,7 @@ class IngestRunTest(unittest.TestCase):
         self.assertEqual(s.post("/api/ingest/start", {"library": "work", "material": material,
                                                       "rules": {"folders": []}})[0], 200)
         self.assertEqual(s.post("/api/ingest/stop", {})[0], 200)
-        run = self.wait_run(("stopped",))
+        self.wait_run(("stopped",))
         self.assertEqual(s.post("/api/ingest/continue", {})[0], 200)
         run = self.wait_run()
         self.assertEqual(run["counts"], {"carded": 3}, read(run["log"]))
