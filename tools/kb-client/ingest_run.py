@@ -116,24 +116,13 @@ def read_json(path, default=None):
 
 # ---------------------------------------------------------------- choosing material
 
-def inside(path, roots):
-    """path (a real path) when it is one of roots or below one of them; ValueError otherwise."""
-    for r in roots:
-        r = os.path.realpath(r)
-        if path == r or path.startswith(r.rstrip(os.sep) + os.sep):
-            return path
-    raise ValueError("the material folder must be in the home folder or on a mounted drive")
-
-
-def plan(material, rules, library_root, roots=None):
+def plan(material, rules, library_root):
     """The documents of a material folder and which of them are important: {"material", "total",
     "important", "folders": [{folder, files}], "files": [{rel, modified, important}], "rules", "other"}.
     rules: {"folders": [folders below the material folder; empty for all], "since": "YYYY-MM-DD" or ""}.
-    roots: the folders the material must be in (the folder browser's places) when given. Refuses a folder
-    inside the library and one with more than MAX_FILES documents."""
+    The client hands over a folder found through its folder browser's places (kb_client.walk_to). Refuses
+    a folder inside the library and one with more than MAX_FILES documents."""
     material = os.path.realpath(os.path.expanduser(material))
-    if roots is not None:
-        material = inside(material, roots)
     if not os.path.isdir(material):
         raise ValueError("not a folder: %s" % material)
     root = os.path.realpath(library_root)

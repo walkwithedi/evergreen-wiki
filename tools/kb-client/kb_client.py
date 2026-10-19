@@ -438,7 +438,7 @@ class App:
                 return None, "running"
             if self.write_lock() is not None:
                 return None, "locked"
-            got = ingest_run.plan(str(body.get("material") or ""), body.get("rules"), lib["root"], self.material_roots())
+            got = ingest_run.plan(walk_to(str(body.get("material") or ""))[0], body.get("rules"), lib["root"])
             run_id = time.strftime("%Y%m%d-%H%M%S")
             work = os.path.join(ingest_run.runs_root(kb_manage.state_dir()), run_id)
             os.makedirs(work, mode=0o700, exist_ok=True)
@@ -449,10 +449,6 @@ class App:
             self.ingest = run
         run.start()
         return run, None
-
-    def material_roots(self):
-        """Where material may come from: the folder browser's places and the drop folders' staging area."""
-        return [p["path"] for p in places()] + [os.path.join(kb_manage.state_dir(), "auto")]
 
     def continue_ingest(self):
         run = self.ingest
@@ -1341,8 +1337,7 @@ class Handler(BaseHTTPRequestHandler):
             if lib is None:
                 return self.send(404, {"error": m["ingest_library"]})
             try:
-                got = ingest_run.plan(str(body.get("material") or ""), body.get("rules"), lib["root"],
-                                      self.app.material_roots())
+                got = ingest_run.plan(walk_to(str(body.get("material") or ""))[0], body.get("rules"), lib["root"])
             except ValueError as e:
                 return self.send(400, {"error": str(e)})
             return self.send(200, dict(got, files=got["files"][:PLAN_SHOWN]))
