@@ -175,11 +175,20 @@ def make_app_class():
                 LOG.warning("请求知识库客户端 %s %s 出错：%s", method, path, e)
                 return None
 
-        def kb_step_running(self):
-            """工作台此刻是否有未完成的管理步骤（安装与建库、备份等，知识库客户端 GET /api/state 的 job）。"""
+        def kb_busy(self):
+            """工作台此刻在忙什么，不忙时为空：有未完成的管理步骤（安装与建库、备份等，GET /api/state 的
+            job），或有对话窗口在处理、有卡片等人（GET /api/chat/state 的 windows；入库在对话里进行）。"""
             r = self.kb_call("GET", "/api/state")
             job = r.get("job") if isinstance(r, dict) else None
-            return isinstance(job, dict) and not job.get("done")
+            if isinstance(job, dict) and not job.get("done"):
+                return "step"
+            r = self.kb_call("GET", "/api/chat/state")
+            ag = r.get("agent") if isinstance(r, dict) else None
+            wins = ag.get("windows") if isinstance(ag, dict) else None
+            if isinstance(wins, list) and any(isinstance(w, dict) and (w.get("status", "idle") != "idle" or w.get("cards"))
+                                              for w in wins):
+                return "chat"
+            return ""
 
         def stop_kb(self):
             """停掉本服务启动的知识库客户端：先请它自己退出（它会一并停掉它启动的 OpenCode），
@@ -205,9 +214,14 @@ def make_app_class():
                 if self.kb_proc is not None and self.kb_proc.poll() is None and self.kb_url:
                     if self.kb_simple == simple:
                         return self.kb_url, ""
-                    if self.kb_step_running():
+                    busy = self.kb_busy()
+                    if busy == "step":
                         LOG.info("工作台有管理步骤在运行，不切换版本")
                         return "", "工作台有知识库管理步骤在运行（如安装与建库、备份）：等它完成后再换版本"
+                    if busy == "chat":
+                        LOG.info("工作台有对话在处理，不切换版本")
+                        return "", ("工作台有对话还在处理或等你回答（入库也在对话里进行）：换版本会重启工作台、"
+                                    "打断它。等它完成，或在工作台里点「停止」后，再换版本")
                     LOG.info("工作台改为%s，重新启动知识库客户端", "简易版" if simple else "全版")
                     self.stop_kb()
                 script = kb_client_path(self.wiki)

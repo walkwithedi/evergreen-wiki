@@ -110,7 +110,8 @@
       </div>
       <p class="hint" id="workdir-note" data-t="workdir_hint" hidden>The assistant reads and edits files in this folder without asking.</p>
       <div class="win-tabs" id="win-tabs" role="tablist" hidden></div>
-      <p class="hint lock-note" id="lock-note" hidden><span id="lock-text"></span></p>
+      <p class="hint lock-note" id="lock-note" hidden><span id="lock-text"></span>
+        <button type="button" class="quiet small" id="lock-view" data-t="lock_view">Show</button></p>
       <div class="tasks" id="tasks">
         <button type="button" class="task-main" data-task="note"><strong data-t="task_note">Quick note</strong>
           <span data-t="task_note_hint">Keep one sentence in the library at once</span></button>
@@ -122,6 +123,13 @@
         <ol class="stage-list" id="stage-list"></ol>
         <p class="stage-why" id="stage-why"></p>
         <p class="progress" id="progress" hidden></p>
+        <div class="hint ingest-long" id="ingest-long">
+          <p data-t="ingest_long">An ingest run takes a long time.</p>
+          <details><summary data-t="ingest_cli">How to open OpenCode from a terminal</summary>
+            <p><span data-t="ingest_cli_hint">In a terminal, run:</span>
+              <code id="ingest-cli"></code> <button type="button" class="quiet small" id="ingest-cli-copy" data-t="copy">Copy</button></p>
+          </details>
+        </div>
         <div class="ideas mini" id="ideas-mini" role="region" aria-roledescription="carousel"></div>
       </div>
       <div class="messages" id="messages"></div>

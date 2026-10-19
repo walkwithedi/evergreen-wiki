@@ -100,8 +100,8 @@ class OpencodeSetupTest(unittest.TestCase):
         self.assertNotIn("good-key-1234567890", p.stderr)  # only the masked form is shown
         out = subprocess.run([sys.executable, os.path.join(SETUP, "ca_config.py"), "summary-opencode", self.conf],
                              capture_output=True, text=True, encoding="utf-8").stdout
-        self.assertIn("AK 已设置（共 19 位）", out)
-        self.assertNotIn("good", out)  # not even the first characters
+        self.assertIn("AK good…7890（共 19 位）", out)  # the ends, to tell which key it is
+        self.assertNotIn("good-key-1234567890", out)
 
     def test_a_failing_test_writes_nothing(self):
         before = read(self.conf)
@@ -183,6 +183,68 @@ class WizardServerTest(unittest.TestCase):
             data = json.loads(r.read())
         self.assertTrue(data["wizard"]["kb_ready"])
         self.assertTrue(os.path.isfile(os.path.join(tmp, ".config", "work-kb", "location")))
+
+
+def load(name, path):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(name, path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class VersionSwitchTest(unittest.TestCase):
+    """The wizard does not restart a client that is busy: a management step, or a conversation that works
+    or waits for an answer (an ingest run goes on in a conversation)."""
+
+    def setUp(self):
+        sys.path.insert(0, SETUP)
+        self.addCleanup(sys.path.remove, SETUP)
+        wk = load("wk_web_test", os.path.join(WORKBENCH, "wk_web.py"))
+        wk.ca_web = load("ca_web", os.path.join(SETUP, "ca_web.py"))
+        cls = wk.make_app_class()
+        self.app = cls.__new__(cls)  # no server: only the switching logic is tested
+        self.answers = {"/api/state": {"job": None},
+                        "/api/chat/state": {"agent": {"windows": [{"id": "w1", "status": "idle", "cards": 0}]}}}
+        self.app.kb_call = lambda method, path: self.answers.get(path)
+        self.app.kb_proc = type("Running", (), {"poll": lambda _self: None})()
+        self.app.kb_url, self.app.kb_simple, self.app.kb_lock = "http://127.0.0.1:1/?t=x", True, threading.Lock()
+        self.stopped = []
+        self.app.stop_kb = lambda: self.stopped.append(True)
+
+    def windows(self, *wins):
+        self.answers["/api/chat/state"] = {"agent": {"windows": list(wins)}}
+
+    def test_busy_states(self):
+        self.assertEqual(self.app.kb_busy(), "")
+        self.windows({"id": "w1", "status": "idle", "cards": 0}, {"id": "w2", "status": "busy", "cards": 0})
+        self.assertEqual(self.app.kb_busy(), "chat")
+        self.windows({"id": "w1", "status": "idle", "cards": 1})
+        self.assertEqual(self.app.kb_busy(), "chat")
+        self.answers["/api/state"] = {"job": {"id": 1, "action": "install", "done": False}}
+        self.assertEqual(self.app.kb_busy(), "step")
+
+    def test_switch_refused_while_a_conversation_works(self):
+        self.windows({"id": "w1", "status": "busy", "cards": 0})
+        url, err = self.app.open_kb(simple=False)
+        self.assertEqual(url, "")
+        self.assertIn("对话", err)
+        self.assertEqual(self.stopped, [])
+
+    def test_same_version_is_not_restarted(self):
+        self.windows({"id": "w1", "status": "busy", "cards": 0})
+        self.assertEqual(self.app.open_kb(simple=True), (self.app.kb_url, ""))
+
+
+class MaskTest(unittest.TestCase):
+    def test_key_shows_its_ends_and_length(self):
+        sys.path.insert(0, SETUP)
+        self.addCleanup(sys.path.remove, SETUP)
+        cfg = load("ca_config_test", os.path.join(SETUP, "ca_config.py"))
+        self.assertEqual(cfg.mask("abcd-0000-wxyz"), "abcd…wxyz（共 14 位）")
+        self.assertEqual(cfg.mask("short"), "*****")
+        self.assertEqual(cfg.mask("{env:KEY}"), "取自环境变量")
+        self.assertEqual(cfg.mask(""), "（未设置）")
 
 
 if __name__ == "__main__":
