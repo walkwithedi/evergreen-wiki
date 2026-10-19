@@ -86,6 +86,12 @@
       <form class="ask" id="ask" hidden></form>
       <p class="result" id="result" hidden></p>
     </div>
+    <div class="panel health" id="health" hidden>
+      <div class="panel-head"><h2 id="health-title"></h2>
+        <button type="button" class="quiet small" id="health-close" data-t="close">Close</button></div>
+      <p class="hint" data-t="health_intro">Read only: nothing in the library is changed.</p>
+      <div id="health-body"></div>
+    </div>
     <div class="panel pending" id="pending" hidden>
       <div class="panel-head"><h2 data-t="pending_title">Waiting for confirmation</h2></div>
       <p class="hint" data-t="pending_intro">Decisions an ingest run needs before it writes.</p>

@@ -37,6 +37,8 @@ PLAN.append(("scripts/kb_batch.py", ALL + ["tools/doc2kb"]))
 PLAN.append(("scripts/quote_check.py", ALL + ["tools/doc2kb"]))
 # filing an intake run or a note into a library, rebuilding its topic pages, checking the status card
 PLAN.append(("scripts/ingest.py", ALL))
+# the search index of a library: used by filing, topic pages and answers
+PLAN.append(("scripts/kbindex.py", ALL))
 
 
 def copies():

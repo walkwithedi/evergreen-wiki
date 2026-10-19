@@ -5,3 +5,6 @@ dist/
 config/kb-libraries.json
 # a private-terms list belongs in ~/.config/evergreen-wiki/, never here
 sensitive_terms.txt
+
+# the index the scripts keep inside a library
+_index/

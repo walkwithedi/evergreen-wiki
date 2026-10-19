@@ -4,6 +4,32 @@ All three skills share one version number. To release, update this file and the 
 
 ## Unreleased
 
+4.0 (in progress, docs/design-4.0.md): one library carries about ten thousand documents.
+
+Removed and incompatible
+- Libraries are schema 3. A _kb.json of schema 2 (2.0.x and 3.0.x, one flat sources folder) is refused with a message naming 3.0.x, as schema 1 is; libraries are not migrated. install.py refuses such a folder in the same words.
+
+Library layout
+- A source keeps the folder it came from below the material root: Sources/<folder>/<name>.md, Cards/<folder>/<name>.md, older versions under Archive/Sources/<folder> and Archive/Cards/<folder>. kbconf.rel_folder() makes the folder from a batch file's original path: parts made safe for names and links, cut to 60 characters, a path over 180 characters shortened in the middle; an absolute path or one leading out of the root gives the top folder.
+- A file name is one document wherever its folder is: a source whose name is in the library is a new version, archived from its old folder, and the new one goes to its own folder. A run's sources with one name and different content form a group: the newest is current and the others go straight to the archive, unless --groups (or the decisions file's "groups") picks another current one or marks members as separate documents, which get their folder's last part in front of their name.
+- A source with the same content as one in the library or an earlier one of the run (kbindex.fingerprint: the text without notes, anchors and spacing) is not filed again and is listed under duplicates.
+- ingest.py file without --cards files the sources only; the record lists them under without_cards, with older and duplicates.
+- ingest.py pages: a topic with more than 60 cards keeps its newest year and undated cards on its page and each earlier year on "<topic> (YYYY)"; year pages no longer needed are removed.
+- ingest.py versions also lists the run's groups and duplicates; same_name covers every folder; candidates carry old_path and are compared only with library names sharing enough letter pairs.
+
+Index (shared/scripts/kbindex.py, copied into the three skills)
+- <library>/_index/kb.sqlite holds sources, paragraphs and cards, made from the files and kept current by comparing sizes and times on every use; build, refresh, stats and search commands. Trigram full-text search where SQLite has it, else LIKE (KBINDEX_FULL_TEXT=0 forces LIKE). A damaged index, or one this SQLite cannot read, is made again; a folder that cannot be written gets an index in memory.
+- ingest.py file, conflicts, versions and pages and answer.py select read through it. answer.py select also lists paragraphs of sources without cards yet, marked as such.
+- tests/test_scale.py: 10,000 sources and 100,000 cards; an answer's material within five seconds (SCALE_SOURCES sets the size).
+
+Health check
+- ingest.py check (health_check, read only, exit 3 when it finds problems; --json): cards whose quote is no longer in its paragraph, links of the status card's items and of topic pages to files that do not exist, topic pages missing, out of date or no longer built (compared with what ingest.py pages builds, in memory), cards files without their source, status-card items marked for review or citing a source that is not current, runs waiting for decisions for more than seven days, and the number of sources without cards. ingest.py pages builds its pages through page_texts().
+- kb-ingest has a health check mode ("health check", "check the knowledge base"; 体检). kb-client has a Health check button under each library (GET /api/check), listing the findings by kind.
+
+Examples
+- The sample materials sit in folders (Plans, Meetings, Status reports) and the sample library keeps them.
+
+Workbench and client
 - tools/workbench: switching between the simple and the full version is refused while a conversation of the client works or waits for an answer (an ingest run goes on in a conversation), besides a running management step; the wizard reads GET /api/chat/state for it.
 - tools/kb-client: the write-lock line has a Show button that brings the step panel into view (or the holding window); under the stage bar, a line says that an ingest run takes long, with the command that opens OpenCode in the work folder and a Copy button.
 - tools/opencode-setup: the key is shown as its first and last four characters with its length (「abcd…wxyz（共 N 位）」), so that the key in use can be told apart; ten characters or fewer show as asterisks.

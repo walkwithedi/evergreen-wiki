@@ -1,6 +1,6 @@
-> Original path: Atlas pilot plan.eml
+> Original path: Plans/Atlas pilot plan.eml
 > Document last modified: 2026-02-02 09:00 (from: mail date)
-> Extracted: 2026-10-17 07:06
+> Extracted: 2026-10-19 13:18
 
 # Atlas pilot plan
 

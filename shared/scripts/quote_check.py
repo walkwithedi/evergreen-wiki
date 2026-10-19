@@ -28,7 +28,8 @@ check: every card is checked against the batch files of its run (kb_batch.py for
   (JSON) lists rejected cards with the reason, corrected anchors and new topics.
 
 write: the accepted cards go to one Markdown file per source in the cards folder, named like
-the source file (kb_batch.py split names, --names the same map), rewritten as a whole.
+the source file (kb_batch.py split names, --names the same map; a name may hold folders,
+"folder/name.md"), rewritten as a whole.
 
 Python 3 standard library only.
 
@@ -296,7 +297,8 @@ def write(cards, table, outdir, names=None, lang='en', sources_dir='', topics_di
         src = table.get(sid, {})
         fname = kb_batch.output_name(sid, src.get('name', sid), names or {})
         stem = os.path.splitext(fname)[0]
-        path = os.path.join(outdir, fname)
+        path = os.path.join(outdir, *fname.split('/'))
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, 'w', encoding='utf-8') as f:
             f.write(render_cards(stem, by_sid[sid], src.get('modified', ''), lang, sources_dir, topics_dir))
         paths.append(path)

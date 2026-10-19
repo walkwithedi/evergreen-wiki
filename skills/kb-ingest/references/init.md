@@ -1,7 +1,7 @@
 # Init mode: get started or set up a new library
 
 Trigger: "get started with the knowledge base", "first time", "set up a knowledge base", "new library", "init". Also entered when kb-query or kb-note found no registry and the user accepted the offer to set one up.
-Result: the library folder holds _kb.json (schema 2), the spec, the status card and the folders for sources, cards, topics and the archive; the library is in the registry; the assistant's always-read instructions say the library exists.
+Result: the library folder holds _kb.json (schema 3), the spec, the status card and the folders for sources, cards, topics and the archive; the library is in the registry; the assistant's always-read instructions say the library exists.
 
 The preset lives in assets/presets/work/: _kb.json, 00_Spec.md and summary/00_Status-Card.md, with a Chinese translation in zh/. The placeholder {{DATE}} is filled when writing.
 
@@ -12,7 +12,7 @@ scripts/init_library.py holds the shared definition of a new library: the sugges
 1. Questions, then a preview, then writing. Nothing is written before the user confirms the preview.
 2. Only create files. Never delete or rewrite anything in an existing folder.
 3. A new library needs an empty folder (empty subfolders are fine). A folder holding Markdown files or a _kb.json is refused.
-4. A folder with a _kb.json of schema 1 is a 1.x library: say that this release does not migrate 1.x libraries, that the 1.x release keeps working for it, and that a new library is set up in another, empty folder and the material ingested again.
+4. A folder with a _kb.json of schema 1 is a 1.x library, one of schema 2 a 2.0 or 3.0 library (all sources in one folder): say that this release does not migrate them, that the release that made it (1.x, or 3.0) keeps working for it, and that a new library is set up in another, empty folder and the material ingested again.
 5. Never invent rules: every partition and topic comes from the preset as the user confirmed or changed it.
 6. Ask as little as possible. Ask only what cannot be found out reliably; show everything else in the preview, where the user can change any item.
 

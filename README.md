@@ -23,7 +23,7 @@ An assistant that answers from a pile of documents returns whatever matches best
 
 Documents are converted locally into batch files before they are ingested (Word, Excel, PowerPoint, PDF, mail): plain text with a source number per document and an anchor on every paragraph, at most 20,000 characters per batch. Material becomes searchable once its run is filed.
 
-The reasoning is in [docs/methodology.md](docs/methodology.md) ([中文](docs/methodology.zh-CN.md)); the design of this release in [docs/design-3.0.md](docs/design-3.0.md).
+The reasoning is in [docs/methodology.md](docs/methodology.md) ([中文](docs/methodology.zh-CN.md)); the design of this release in [docs/design-3.0.md](docs/design-3.0.md), and of the next one, for libraries of about ten thousand documents, in [docs/design-4.0.md](docs/design-4.0.md).
 
 ## How it fits together
 
@@ -83,10 +83,11 @@ work-kb/
   _kb.json                 settings: language, timezone, batch size, names
   00_Spec.md               partitions and topics, term fixes, folder names, scope
   00_Status-Card.md        current facts, each linked to its source passage
-  Sources/                 one Markdown file per source document, paragraphs anchored ^p1, ^p2, ...
-  Cards/                   one cards file per source: conclusion, exact quote, link, topic, date
-  Topics/                  one page per topic, built from the cards, newest first
-  Archive/                 older versions of sources and cards
+  Sources/<folder>/        one Markdown file per source document, in the folder it came from, paragraphs anchored ^p1, ^p2, ...
+  Cards/<folder>/          one cards file per source: conclusion, exact quote, link, topic, date
+  Topics/                  one page per topic, built from the cards, newest first; earlier years on pages of their own
+  Archive/                 older versions of sources and cards, in the same folders
+  _index/                  the search index the scripts keep; made from the files, can be deleted
   _pending/                decisions an ingest run waits for (removed after filing)
 ```
 
@@ -94,6 +95,7 @@ Every name is configurable in `_kb.json`. A quick note is a source like any othe
 
 ## Coming from earlier releases
 
+- 2.0.x and 3.0.x on main (to be released as 4.0): libraries keep each source in the folder it came from (schema 3). A library made by 2.0 or 3.0 (schema 2, one flat sources folder) is not read and not migrated; keep using [v3.0.0](../../releases/tag/v3.0.0) for it, or set up a new library and ingest the material again.
 - 2.0.x: a local library made by 2.0 works in 3.0 as it is; its `tier` setting is read and ignored, and topic pages are always built by the script. Libraries in Google Drive and the ChatGPT versions of the skills stay with [v2.0.0](../../releases/tag/v2.0.0), which is not developed further.
 - 1.x: libraries of schema 1 are not migrated; the skills say so and stop when they meet one. Keep using [v1.22.1](../../releases/tag/v1.22.1) for such a library, or set up a new library in an empty folder and ingest the material again.
 

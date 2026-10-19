@@ -31,7 +31,7 @@ class InstallOptionsTest(unittest.TestCase):
         self.env = dict(os.environ, HOME=self.home, XDG_CONFIG_HOME=self.p("home", ".config"), PYTHONIOENCODING="utf-8")
         self.env.pop("KB_LIBRARIES", None)
         self.existing = self.p("home", "atlas")
-        write(os.path.join(self.existing, "_kb.json"), json.dumps({"schema": 2, "label": "Atlas"}))
+        write(os.path.join(self.existing, "_kb.json"), json.dumps({"schema": 3, "label": "Atlas"}))
         write(os.path.join(self.existing, "00_Spec.md"), "# Spec\n")
 
     def p(self, *parts):
@@ -104,12 +104,22 @@ class InstallOptionsTest(unittest.TestCase):
             p = self.install(["--wizard", "--agent", agent], ["2", "", "", new, "team projects", "", ""])
             self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
             kb = json.loads(read(os.path.join(new, "_kb.json")))
-            self.assertEqual(kb["schema"], 2, agent)
+            self.assertEqual(kb["schema"], 3, agent)
             self.assertNotIn("tier", kb)
             self.assertNotIn("Tier", p.stdout)
             self.assertNotIn("Which kind of library", p.stdout)
             self.assertEqual(sorted(n for n in os.listdir(new) if not os.path.isdir(os.path.join(new, n))),
                              ["00_Spec.md", "00_Status-Card.md", "_kb.json"])
+
+    def test_flat_library_is_refused(self):
+        old = self.p("home", "flat")
+        write(os.path.join(old, "_kb.json"), json.dumps({"schema": 2, "label": "Flat"}))
+        write(os.path.join(old, "00_Spec.md"), "# Spec\n")
+        new = self.p("home", "kb", "fresh")
+        p = self.install(["--wizard", "--agent", "claude-code"], ["2", "", "", old, new, "team projects", "", ""])
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertIn("2.0 or 3.0 library", p.stdout)
+        self.assertEqual([lib["label"] for lib in self.registry()["libraries"]], ["Work"])
 
     def test_1x_library_is_refused(self):
         old = self.p("home", "old")

@@ -1,4 +1,4 @@
-"""The sample library examples/sample-work-kb is what the 2.0 scripts make of examples/sample-materials with the
+"""The sample library examples/sample-work-kb is what the scripts make of examples/sample-materials with the
 cards in examples/sample-work-cards.jsonl: doc2kb batch files, quote_check, ingest.py file and pages.
 
 After a change to the scripts or the material, rebuild it with

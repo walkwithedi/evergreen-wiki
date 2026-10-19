@@ -1,6 +1,6 @@
-> Original path: Atlas steering minutes 2026-03-13.eml
+> Original path: Meetings/Atlas steering minutes 2026-03-13.eml
 > Document last modified: 2026-03-13 15:30 (from: mail date)
-> Extracted: 2026-10-17 07:06
+> Extracted: 2026-10-19 13:18
 
 # Atlas steering minutes 2026-03-13
 

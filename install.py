@@ -160,6 +160,7 @@ MSG = {
         "existing": "{root} already holds a library. It can be registered as it is; nothing in the folder changes.",
         "existing_items": ["Folder", "Label", "Id", "Scope"],
         "old_library": "{root} holds a 1.x library. This release does not migrate 1.x libraries: keep using the 1.x release for it, or choose an empty folder for a new library and ingest the material again.",
+        "flat_library": "{root} holds a 2.0 or 3.0 library (all sources in one folder). This release reads 4.0 libraries only and does not migrate them: keep using the 3.0 release for it, or choose an empty folder for a new library and ingest the material again.",
         "registered_only": "Library {root} registered in {path} as it is.",
         "upgraded": "Skills upgraded: {skills}.",
         "was": "{name} {new} (was {old})", "new_skill": "{name} {new} (new)",
@@ -201,6 +202,7 @@ MSG = {
         "existing": "{root} 里已经有知识库，可以按原样登记，不改动文件夹里的任何文件。",
         "existing_items": ["文件夹", "名称", "id", "范围"],
         "old_library": "{root} 里是 1.x 的知识库。本版本不迁移 1.x 的库：这个库可以继续用已发布的 1.x 版本，或另选一个空文件夹新建知识库，再把材料重新入库。",
+        "flat_library": "{root} 里是 2.0 或 3.0 的知识库（来源都在一个文件夹里）。本版本只读 4.0 的库，不迁移旧库：这个库可以继续用 3.0 版本，或另选一个空文件夹新建知识库，再把材料重新入库。",
         "registered_only": "已把 {root} 按原样登记到 {path}。",
         "upgraded": "技能已升级：{skills}。",
         "was": "{name} {new}（原 {old}）", "new_skill": "{name} {new}（新装）",
@@ -331,8 +333,10 @@ def ask_root(q, m, il, default):
             print(m["bad"].format(err=f"{root}: {kb_manage.MSG[lang]['protected']}"))
             continue
         if os.path.isdir(root) and kb_manage.is_library(root):
-            if library_schema(il, root) == 1:
-                print(m["bad"].format(err=m["old_library"].format(root=root)))
+            schema = library_schema(il, root)
+            if schema in (1, 2):
+                key = "old_library" if schema == 1 else "flat_library"
+                print(m["bad"].format(err=m[key].format(root=root)))
                 continue
             return root, True
         try:

@@ -16,14 +16,14 @@ sys.path.insert(0, SCRIPTS)
 import answer  # noqa: E402
 import kbconf  # noqa: E402
 
-STEERING = "Sources/Atlas steering minutes 2026-03-13"
+STEERING = "Sources/Meetings/Atlas steering minutes 2026-03-13"
 STATUS = """# Status card
 Last updated: 2026-03-14
 
 ## Items
 
 1. The pilot ends on 2026-04-27. [[%s#^p2]] ⏳ review: Atlas steering minutes 2026-03-13 has a new version (2026-03-20)
-2. Support is capped at 40 hours a week. [[Sources/Atlas pilot plan#^p4]]
+2. Support is capped at 40 hours a week. [[Sources/Plans/Atlas pilot plan#^p4]]
 """ % STEERING
 
 
@@ -62,7 +62,7 @@ class SelectTest(SampleCase):
                          ["The data export moves to 2026-03-20 while the test server is replaced.",
                           "The integration lead owns the data export."])
         c = got["cards"][0]
-        self.assertEqual((c["link"], c["anchor"], c["topic"]), ("Sources/Atlas weekly status 2026-03-09", "p4", "milestones"))
+        self.assertEqual((c["link"], c["anchor"], c["topic"]), ("Sources/Status reports/Atlas weekly status 2026-03-09", "p4", "milestones"))
         self.assertEqual(got["paragraphs"], [])
 
     def test_same_event_date_newer_source_first(self):
@@ -99,8 +99,19 @@ class SelectTest(SampleCase):
     def test_source_paragraphs_when_no_card_matches(self):
         got = answer.select(self.lib, self.cfg, ["steering meeting"])
         self.assertEqual(got["cards"], [])
-        self.assertEqual(got["paragraphs"], [{"link": "Sources/Atlas weekly status 2026-03-09", "anchor": "p5",
-                                              "text": "The next steering meeting is on 2026-03-13."}])
+        self.assertEqual(got["paragraphs"], [{"link": "Sources/Status reports/Atlas weekly status 2026-03-09", "anchor": "p5",
+                                              "text": "The next steering meeting is on 2026-03-13.", "carded": True}])
+
+    def test_sources_without_cards_answer_from_paragraphs(self):
+        self.write(os.path.join("Sources", "Status reports", "Atlas weekly status 2026-03-16.md"),
+                   "> Original path: Status reports/Atlas weekly status 2026-03-16.eml\n\n"
+                   "The data export is on track for 2026-03-20. ^p1\n")
+        got = answer.select(self.lib, self.cfg, ["data export"])
+        self.assertTrue(got["cards"])
+        self.assertEqual(got["paragraphs"], [{"link": "Sources/Status reports/Atlas weekly status 2026-03-16",
+                                              "anchor": "p1", "text": "The data export is on track for 2026-03-20.",
+                                              "carded": False}])
+        self.assertIn("(source without cards yet)", answer.render(got, "en"))
 
     def test_command_line_text(self):
         self.write("00_Status-Card.md", STATUS)
@@ -109,7 +120,7 @@ class SelectTest(SampleCase):
         self.assertIn("## Status card", p.stdout)
         self.assertIn("(marked for review: check it against the cards and sources)", p.stdout)
         self.assertIn("> The data export is delayed until 2026-03-20 because the test server is being replaced. "
-                      "[[Sources/Atlas weekly status 2026-03-09#^p4]]", p.stdout)
+                      "[[Sources/Status reports/Atlas weekly status 2026-03-09#^p4]]", p.stdout)
         p = cli("select", self.lib, "nothing-like-this")
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertIn("Nothing in the library matches", p.stdout)

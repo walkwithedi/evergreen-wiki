@@ -8,7 +8,7 @@ The [quick start](../README.md#quick-start) does all of this for you: the workbe
 
 `python3 install.py --target opencode` copies the three skills into `~/.config/opencode/skills` (or `--target agents` for `~/.agents/skills`, `--target claude-code` for `~/.claude/skills`, both of which OpenCode also reads, or `--dest <folder>`). Add `--locale zh` for Chinese trigger phrases, `--descriptions <file>` for your own descriptions (one line per skill, in the shape of `locales/zh/descriptions.json`), `--force` to replace an existing install, `--dry-run` to see what would happen.
 
-The guided setup (`python3 install.py`) takes `--agent <target>` to skip that question, and `--descriptions` as well. Given a folder that already holds a library (`_kb.json` of schema 2), it registers the folder as it is, without changing a file, after a preview. A 1.x library (schema 1) is refused: keep using the 1.x release for it, or set up a new library in an empty folder and ingest the material again.
+The guided setup (`python3 install.py`) takes `--agent <target>` to skip that question, and `--descriptions` as well. Given a folder that already holds a library (`_kb.json` of schema 3), it registers the folder as it is, without changing a file, after a preview. A 1.x library (schema 1) or a 2.0 or 3.0 library (schema 2, one flat sources folder) is refused: keep using the release that made it, or set up a new library in an empty folder and ingest the material again.
 
 ## 2. Create a library
 

@@ -119,7 +119,7 @@ STYLES = (f'<w:styles xmlns:w="{W}">'
           '<w:style w:styleId="a3"><w:name w:val="标题 3"/></w:style></w:styles>')
 
 
-def docx(path, english=False, modified="2026-03-04T05:06:07Z"):
+def docx(path, english=False, modified="2026-03-04T05:06:07Z", intro=None):
     """A report with headings, a merged-cell table with a nested table, a content control,
     one described and one undescribed picture (DrawingML and VML), the same workbook embedded
     twice, an embedded document and an old-format embedded object."""
@@ -127,6 +127,7 @@ def docx(path, english=False, modified="2026-03-04T05:06:07Z"):
         t = dict(h1="Project Atlas report", h2="Scope", h3="Details", intro="This report covers the pilot.",
                  described="The menu is shown below.", plain="Owner list follows.", cover="Cover text",
                  a="Item", b="Value", nested="inner")
+        t["intro"] = intro or t["intro"]
     else:
         t = dict(h1="示例项目报告", h2="范围", h3="细节", intro="本报告说明试点情况。",
                  described="菜单如下图所示。", plain="负责人名单如下。", cover="封面文字",

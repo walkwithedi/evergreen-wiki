@@ -32,6 +32,7 @@ import secrets
 import signal
 import shutil
 import socketserver
+import sqlite3
 import sys
 import tempfile
 import threading
@@ -477,6 +478,17 @@ def pending_runs():
             if "\u23f3" in line and ing.ITEM_RE.match(line):
                 review.append({"library": lib["id"], "label": lib["label"], "item": ing.MARK_RE.sub("", line).strip()})
     return {"runs": runs, "review": review}
+
+
+def health(lib):
+    """(status, body) of a library's read-only health check (ingest.health_check) for the page."""
+    ing = ingest_module()
+    try:
+        got = ing.health_check(lib["root"], ing.kbconf.load_library(lib["root"]))
+    except (ing.kbconf.ConfigError, OSError, ValueError, sqlite3.Error) as e:
+        log.warning("health check of %s: %s", lib["id"], e)
+        return 409, {"error": str(e)}
+    return 200, dict(got, label=lib["label"])
 
 
 def ingest_module():
@@ -962,6 +974,12 @@ class Handler(BaseHTTPRequestHandler):
             if lib is None:
                 return self.send(404, {"error": "library"})
             return self.send(200, dict(graph(lib["root"], self.app.started), label=lib["label"], root=lib["root"]))
+        if path == "/api/check":
+            lib_id = (query.get("lib") or [""])[0]
+            lib = next((x for x in libraries() if x["id"] == lib_id and x["root"] and x["exists"]), None)
+            if lib is None:
+                return self.send(404, {"error": "library"})
+            return self.send(*health(lib))
         if path == "/api/pending":
             return self.send(200, pending_runs())
         if path == "/api/skills":
