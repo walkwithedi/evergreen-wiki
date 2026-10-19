@@ -32,7 +32,6 @@ import secrets
 import signal
 import shutil
 import socketserver
-import subprocess
 import sys
 import tempfile
 import threading
@@ -53,7 +52,7 @@ import skills_admin  # noqa: E402
 log = logging.getLogger("kb_client")
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s.%(funcName)s:%(lineno)d - %(message)s"
 WEB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
-ACTIONS = ("setup", "backup", "rollback", "move", "uninstall", "batch",
+ACTIONS = ("setup", "backup", "rollback", "move", "uninstall",
            "skill_backup", "skill_restore", "skill_import", "skill_new", "skill_upgrade")
 LANGS = ("en", "zh")
 MAX_BODY = 64 * 1024
@@ -78,16 +77,6 @@ MSG = {
         "move_pick": "Which library should be moved?",
         "move_none": "No registered library on this computer can be moved.",
         "move_to": "Choose the folder to move the library into. The library keeps its folder name.",
-        "batch_src": "Choose the folder with the documents to turn into batch files (Word, Excel, PowerPoint, PDF, mail). They are only read.",
-        "batch_lib": "Which library are they for? Its settings give the size of a batch.",
-        "batch_no_lib": "none yet (20,000 characters per batch)",
-        "batch_out": "Choose the folder for the batch files. It stays after the client is closed, so the files can be copied and uploaded.",
-        "batch_no_src": "{path} is not a folder.",
-        "batch_not_empty": "{path} is not empty; choose a new or empty folder.",
-        "batch_in_library": "{path} is inside the library {lib}; batch files go outside every library.",
-        "batch_in_src": "{path} is inside the material folder; choose a folder outside it.",
-        "batch_failed": "The converter stopped (exit code {code}); its output is above.",
-        "batch_done": "{n} batch file(s) in {path}.",
         "pending_said": "The decisions for ingest run {run} in the {lib} library are saved; go on with that run.",
         "busy": "Another step is still running.",
         "simple": "This version of the client does not offer this.",
@@ -113,16 +102,6 @@ MSG = {
         "move_pick": "要移动哪个知识库？",
         "move_none": "本机没有可以移动的已登记知识库。",
         "move_to": "选择要把知识库移到哪个文件夹里。知识库的文件夹名不变。",
-        "batch_src": "选择放文档的文件夹（Word、Excel、PowerPoint、PDF、邮件），要转成批文件。文档只读不改。",
-        "batch_lib": "这些材料要入哪个知识库？批的大小按它的设置定。",
-        "batch_no_lib": "还没有（每批 20000 字符）",
-        "batch_out": "选择批文件放在哪个文件夹。客户端关闭后仍保留，可以拷走上传。",
-        "batch_no_src": "{path} 不是文件夹。",
-        "batch_not_empty": "{path} 不是空文件夹，请选新的或空的文件夹。",
-        "batch_in_library": "{path} 在知识库「{lib}」里面；批文件要放在所有知识库之外。",
-        "batch_in_src": "{path} 在材料文件夹里面，请选材料文件夹以外的地方。",
-        "batch_failed": "转换器中途停止（退出码 {code}），输出见上方。",
-        "batch_done": "已在 {path} 生成 {n} 个批文件。",
         "pending_said": "知识库「{lib}」第 {run} 轮入库的决定已保存，请接着完成这一轮。",
         "busy": "还有一个步骤在运行。",
         "simple": "这个版本的客户端不提供这一项。",
@@ -448,9 +427,6 @@ def run_action(action, asker, lang, options, lib_id=None):
         except skills_admin.Refused as e:
             print(str(e))
             return 1
-    if action == "batch":
-        q = asker(lang)
-        return batch_step(q, lang, getattr(q, "job", None))
     if action == "setup":
         install.wizard(asker, lang, options.get("agent"), options.get("descriptions"), agent_default="opencode")
         return None
@@ -467,62 +443,6 @@ def run_action(action, asker, lang, options, lib_id=None):
         parent = asker(lang).ask(m["move_to"], kind="folder")
         return kb_manage.main(["move", lib_id, "--to", parent, "--lang", lang], asker, install.MANAGE_DEFAULTS)
     return kb_manage.main([action, "--lang", lang], asker, install.MANAGE_DEFAULTS)
-
-
-BATCH_RE = re.compile(r"_b\d{2,}\.md$")
-
-
-def _inside(path, folder):
-    path, folder = os.path.realpath(path), os.path.realpath(folder)
-    return path == folder or path.startswith(folder.rstrip(os.sep) + os.sep)
-
-
-def batch_step(q, lang, job=None):
-    """Build batch files for kb-ingest with doc2kb: the material folder, the library whose settings give
-    the batch size, a new or empty output folder outside every library. 0 when done, 1 when refused."""
-    m = MSG[lang]
-    src = q.ask(m["batch_src"], kind="folder")
-    if not src or not os.path.isdir(src):
-        print(m["batch_no_src"].format(path=src))
-        return 1
-    libs = [x for x in libraries() if x["root"] and x["exists"]]
-    lib_id = q.choose(m["batch_lib"], [(x["id"], "%s  %s" % (x["label"], x["root"])) for x in libs]
-                      + [("", m["batch_no_lib"])], libs[0]["id"] if libs else "")
-    base = os.path.join(os.path.expanduser("~"), "kb-batches",
-                        "%s_%s" % (os.path.basename(os.path.normpath(src)) or "material", time.strftime("%Y%m%d")))
-    default, k = base, 1
-    while os.path.exists(default) and os.listdir(default):
-        k += 1
-        default = "%s_%d" % (base, k)
-    out = os.path.abspath(q.ask(m["batch_out"], default=default, kind="folder"))
-    if os.path.isdir(out) and os.listdir(out):
-        print(m["batch_not_empty"].format(path=out))
-        return 1
-    for x in libs:
-        if _inside(out, x["root"]):
-            print(m["batch_in_library"].format(path=out, lib=x["label"]))
-            return 1
-    if _inside(out, src):
-        print(m["batch_in_src"].format(path=out))
-        return 1
-    cmd = [sys.executable, os.path.join(kb_manage.SCRIPTS, "doc2kb_core.py"), "--batch", src, "-o", out, "--kb-batch"]
-    root = next((x["root"] for x in libs if x["id"] == lib_id), None)
-    if root:
-        cmd += ["--library", root]
-    env = dict(os.environ, PYTHONIOENCODING="utf-8")
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8",
-                            errors="replace", env=env)
-    for line in proc.stdout:
-        print(line, end="")
-    code = proc.wait()
-    if code != 0:
-        print(m["batch_failed"].format(code=code))
-        return 1
-    files = sorted(f for f in os.listdir(out) if BATCH_RE.search(f)) if os.path.isdir(out) else []
-    print(m["batch_done"].format(n=len(files), path=out))
-    if job is not None:
-        job.emit("batch", out=out, files=files)
-    return 0
 
 
 def pending_runs():

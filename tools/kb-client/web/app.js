@@ -14,11 +14,6 @@
       backup: "Back up",
       rollback: "Roll back",
       move: "Move a library",
-      batch: "Build batch files",
-      material: "Material",
-      batch_hint: "Turn a folder of documents into batch files for ingesting, then ingest them here.",
-      batch_copy: "Copy path", batch_ingest: "Ingest these",
-      say_batch: "ingest these batch files: {path}",
       pending_title: "Waiting for confirmation",
       pending_intro: "Decisions an ingest run needs before it writes. Answering here or in the conversation both work.",
       pending_run: "{lib} \u00b7 run {run} \u00b7 {created}",
@@ -240,11 +235,6 @@
       backup: "备份",
       rollback: "回滚",
       move: "移动知识库",
-      batch: "生成批文件",
-      material: "材料",
-      batch_hint: "把一个文件夹里的文档转成入库用的批文件，然后在这里入库。",
-      batch_copy: "复制路径", batch_ingest: "入库这些",
-      say_batch: "入库这些批文件：{path}",
       pending_title: "等待确认",
       pending_intro: "入库写入前需要你决定的事项。在这里或在对话里回答都可以。",
       pending_run: "{lib} \u00b7 第 {run} 轮 \u00b7 {created}",
@@ -855,7 +845,6 @@
       if (ev.type === "out") appendLog(ev.text);
       else if (ev.type === "ask") ask(ev);
       else if (ev.type === "answered") { if (job.asking === ev.of) { job.asking = null; clearAsk(); } }
-      else if (ev.type === "batch") job.batch = ev;
       else if (ev.type === "end") { src.close(); finish(ev.result); }
     };
     src.onerror = function () {
@@ -873,30 +862,15 @@
   function finish(res) {
     clearAsk();
     var action = job && job.action;
-    var batch = job && job.batch;
     job = null;
     setBusy(false);
     result(res, t("result_" + res));
-    if (batch) batchButtons(batch);
     var after = afterJob;
     afterJob = null;
     if (res === "ok" && after) after($("log").textContent);
     if (action) loadSkills();  // Set up, Uninstall and Roll back change the skills too
     foldStep(res === "ok");
     refresh();
-  }
-
-  // After Build batch files: where they are, Copy path, and Ingest these, which fills the box.
-  function batchButtons(b) {
-    var r = $("result");
-    r.appendChild(document.createTextNode(" " + b.files.length + " \u00b7 "));
-    r.appendChild(el("code", {}, b.out));
-    var copy = el("button", { type: "button", "class": "quiet small" }, t("batch_copy"));
-    copy.addEventListener("click", function () { copyText(b.out, copy); });
-    r.appendChild(copy);
-    var go = el("button", { type: "button", "class": "small" }, t("batch_ingest"));
-    go.addEventListener("click", function () { fillInput(t("say_batch", { path: b.out })); });
-    r.appendChild(go);
   }
 
   function fillInput(text) {
