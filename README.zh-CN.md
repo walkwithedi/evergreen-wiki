@@ -23,7 +23,7 @@
 
 文档入库前先在本机转换成批文件（Word、Excel、PowerPoint、PDF、邮件）：纯文本，每份文档一个来源编号，每段带锚点，每批最多 2 万字符。一次入库归档完成后，材料才能查到。
 
-方法论见 [docs/methodology.zh-CN.md](docs/methodology.zh-CN.md)，本版本的设计见 [docs/design-3.0.md](docs/design-3.0.md)（英文）。
+方法论见 [docs/methodology.zh-CN.md](docs/methodology.zh-CN.md)，本版本（一个库承载约一万份文档）的设计见 [docs/design-4.0.md](docs/design-4.0.md)，它建立在 [docs/design-3.0.md](docs/design-3.0.md) 之上（均为英文）。
 
 ## 整体结构与下载
 
@@ -93,8 +93,8 @@ work-kb/
 
 ## 从旧版本来
 
-- main 上的新版本（将作为 4.0 发布）：知识库把每份来源放在它原来所在的文件夹里（schema 3）。2.0、3.0 建的知识库（schema 2，来源都在一个文件夹里）不读取、不迁移；可以继续用 [v3.0.0](../../releases/tag/v3.0.0)，或者新建知识库，把材料重新入库。
-- 2.0.x：2.0 建的本地知识库在 3.0 里原样可用；其中的 `tier`（档位）设置会被读入并忽略，主题页一律由脚本生成。Google Drive 上的知识库和 ChatGPT 版 skill 请继续用 [v2.0.0](../../releases/tag/v2.0.0)，它不再更新。
+- 3.0.x 和 2.0.x：4.0 的知识库把每份来源放在它原来所在的文件夹里（schema 3）。2.0、3.0 建的知识库（schema 2，来源都在一个文件夹里）不读取、不迁移；可以继续用 [v3.0.0](../../releases/tag/v3.0.0)，或者新建知识库，把材料重新入库。
+- 3.0.0 时的 2.0.x：2.0 建的本地知识库在 3.0 里原样可用；其中的 `tier`（档位）设置会被读入并忽略，主题页一律由脚本生成。Google Drive 上的知识库和 ChatGPT 版 skill 请继续用 [v2.0.0](../../releases/tag/v2.0.0)，它不再更新。
 - 1.x：schema 1 的知识库不迁移，skill 遇到时会说明并停下。可以继续用 [v1.22.1](../../releases/tag/v1.22.1)，或者在空文件夹里新建知识库，把材料重新入库。
 
 ## 兼容性

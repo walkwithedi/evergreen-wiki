@@ -46,4 +46,5 @@ The wizard keeps its two choices in `~/.config/work-kb/state.json` and logs to `
 
 Released with evergreen-wiki under the repository's version; changes are in CHANGELOG.md.
 
+- 4.0.0: the client ingests material itself (Ingest, write cards while idle, automatic ingest from a drop folder); switching between the simple and the full version waits while it runs, while a conversation works or waits for an answer, and while a management step runs.
 - 3.0.0: moved into evergreen-wiki as `tools/workbench/`; it uses this repository's `tools/kb-client` and `tools/opencode-setup` instead of downloading a release, and each release attaches `workbench-bundle-<version>.zip`. The choices, location and logs under `~/.config/work-kb/` keep their paths.
