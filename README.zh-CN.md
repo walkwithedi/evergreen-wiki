@@ -57,7 +57,7 @@
 1. 把 `workbench-bundle-v<版本>.zip` 拷到工作站上解压。
 2. 双击最上层的 `启动OpenCode工作台.desktop`（第一次选信任）。浏览器页面按三步走：检查 Node、opencode 和 OpenCode 配置；粘贴个人 AK，测试通过才写入；打开工作台。
 3. 在工作台里展开「知识库」，选「安装与建库」：把三个 skill 装到 OpenCode，问两个问题（知识库文件夹、收什么内容），给出预览，确认前什么都不写。
-4. 入库在对话里提出（「入库」并写明文件或文件夹路径），也可以用「生成批文件」；需要你决定的事项在「等待确认」里回答；直接在对话里提问。
+4. 入库在对话里提出（「入库」并写明文件或文件夹路径）；需要你决定的事项在「等待确认」里回答；直接在对话里提问。
 
 详见 [tools/workbench](tools/workbench/README.zh-CN.md)、[tools/opencode-setup](tools/opencode-setup/README.zh-CN.md)、[tools/kb-client](tools/kb-client/README.zh-CN.md)。
 
@@ -108,7 +108,7 @@ work-kb/
 
 - [tools/workbench](tools/workbench/README.zh-CN.md)：工作站上的三步向导（环境检查、填 AK 并自检、打开工作台），发行包的入口启动的就是它。
 - [tools/opencode-setup](tools/opencode-setup/README.zh-CN.md)：只输入个人 AK 就配好 OpenCode，关闭它启动时的联网下载并做首次启动自检，有网页和终端菜单两种用法。
-- [tools/kb-client](tools/kb-client/README.zh-CN.md)：在浏览器里用的知识库客户端，由本机提供页面：在选定的工作文件夹里和 OpenCode 对话，查看知识库和技能，安装与建库、备份、回滚、移动、卸载，生成批文件，等待确认。
+- [tools/kb-client](tools/kb-client/README.zh-CN.md)：在浏览器里用的知识库客户端，由本机提供页面：在选定的工作文件夹里和 OpenCode 对话，查看知识库和技能，安装与建库、备份、回滚、移动、卸载，等待确认。
 - [tools/doc2kb](tools/doc2kb/README.zh-CN.md)：独立的文档转换器，可在桌面对话框或定时任务里增量转换。每次发版另附 `doc2kb-v<版本>.zip`。
 
 ## 开发

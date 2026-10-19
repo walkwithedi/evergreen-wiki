@@ -59,7 +59,7 @@ Every release on the [Releases](../../releases) page carries three files:
 1. Copy `workbench-bundle-v<version>.zip` to the workstation and unpack it.
 2. Double-click `启动OpenCode工作台.desktop` at the top (trust it the first time). A page in the browser walks through three steps: check Node, opencode and the OpenCode configuration; paste your personal key, which is tested before it is written; open the workbench.
 3. In the workbench, open Knowledge base and choose Set up (安装与建库; the workbench page is in Chinese): it installs the three skills into OpenCode, asks two questions (the library folder and what belongs in it), shows a preview and writes nothing until you confirm.
-4. Ingest by asking in the conversation ("ingest these" with a file or folder path), or through Build batch files; answer the decisions under Waiting for confirmation; ask questions in the conversation.
+4. Ingest by asking in the conversation ("ingest these" with a file or folder path); answer the decisions under Waiting for confirmation; ask questions in the conversation.
 
 Details: [tools/workbench](tools/workbench/README.md), [tools/opencode-setup](tools/opencode-setup/README.md), [tools/kb-client](tools/kb-client/README.md).
 
@@ -110,7 +110,7 @@ Scripts need Python 3.8+ and nothing outside the standard library. Without Pytho
 
 - [tools/workbench](tools/workbench/README.md): the three-step wizard on the workstation (check, key and self-check, open the workbench); the bundle's entry starts it.
 - [tools/opencode-setup](tools/opencode-setup/README.md): sets OpenCode up from one personal key, switches off its start-up downloads and checks a first start, as a page or a terminal menu.
-- [tools/kb-client](tools/kb-client/README.md): the knowledge base client in the browser, served from your own computer: a conversation with OpenCode in a chosen work folder, the libraries and skills, set up, back up, roll back, move, uninstall, Build batch files and Waiting for confirmation.
+- [tools/kb-client](tools/kb-client/README.md): the knowledge base client in the browser, served from your own computer: a conversation with OpenCode in a chosen work folder, the libraries and skills, set up, back up, roll back, move, uninstall and Waiting for confirmation.
 - [tools/doc2kb](tools/doc2kb/README.md): the converter as a stand-alone tool, from a desktop dialog or a cron job, incrementally. Each release also attaches it as `doc2kb-v<version>.zip`.
 
 ## Development

@@ -446,31 +446,6 @@ class KbClientTest(unittest.TestCase):
         self.assertIn("kb-note " + self.release(), out)
         self.assertIn("No library set up", out)
 
-    def test_batch_files_step(self):
-        self.assertEqual(self.setup_library()[0], "ok")
-        material = self.p("home", "Documents", "Atlas")
-        os.makedirs(material)
-        fx.docx(os.path.join(material, "report.docx"), english=True)
-        out = self.p("home", "kb-batches", "Atlas_run")
-        result, text, asked = self.server.run("batch", [material, "work", out])
-        self.assertEqual(result, "ok", text)
-        self.assertEqual([q["kind"] for q in asked], ["folder", "choose", "folder"])
-        self.assertIn("work", [o["value"] for o in asked[1]["options"]])
-        self.assertRegex(asked[2]["default"], r"kb-batches/Atlas_\d{8}$")
-        files = [n for n in os.listdir(out) if n.endswith("_b01.md")]
-        self.assertEqual(len(files), 1)
-        self.assertEqual(self.server.extra[-1]["type"], "batch")
-        self.assertEqual((self.server.extra[-1]["out"], self.server.extra[-1]["files"]), (out, files))
-        # refused: an output folder that is not empty, or one inside a library
-        result, text, _ = self.server.run("batch", [material, "work", out])
-        self.assertEqual(result, "stopped", text)
-        self.assertIn("not empty", text)
-        result, text, _ = self.server.run("batch", [material, "", self.p("home", "kb", "work", "batches")])
-        self.assertEqual(result, "stopped", text)
-        self.assertIn("inside the library", text)
-        result, text, _ = self.server.run("batch", [self.p("nowhere")])
-        self.assertEqual(result, "stopped", text)
-
     def test_pending_decisions_and_review_items(self):
         self.assertEqual(self.setup_library()[0], "ok")
         lib = self.p("home", "kb", "work")

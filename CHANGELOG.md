@@ -2,6 +2,10 @@
 
 All three skills share one version number. To release, update this file and the "Version:" line of every SKILL.md together and merge to main; the release workflow then publishes v<version>.
 
+## Unreleased
+
+- tools/kb-client: the Material card and its Build batch files step are removed; documents are ingested by asking in the conversation with a file or folder path, and kb-ingest converts them itself.
+
 ## 3.0.0
 
 3.0 serves one setting: an offline Kylin workstation where OpenCode runs a privately deployed model. Libraries are local folders, and every step that can be decided mechanically is done by a script. Libraries made by 2.0 work unchanged. Google Drive libraries and the ChatGPT versions of the skills stay with 2.0.0, which is not developed further. The design is in docs/design-3.0.md.
