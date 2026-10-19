@@ -95,9 +95,15 @@ add-topic: appends topics the owner confirmed to a partition of Table A (partiti
 
 retopic: changes the topic of accepted cards, for a new topic the owner put under a known one.
 
+check: a read-only health check (health_check): quotes no longer in their paragraph, links to files that do
+  not exist, topic pages missing, out of date or no longer built, cards files without their source,
+  status-card items marked for review or citing a source that is not current, runs waiting for decisions
+  for more than PENDING_DAYS days, and the number of sources without cards. Writes nothing; exit 3 when
+  it finds problems.
+
 Python 3 standard library only.
 
-Exit codes: 0 done; 3 status-check found problems; 2 bad arguments, unreadable input or a part missing.
+Exit codes: 0 done; 3 status-check or check found problems; 2 bad arguments, unreadable input or a part missing.
 Usage:
   ingest.py file BATCH.md [BATCH.md ...] [--cards ACCEPTED.jsonl] --library DIR [--target DIR]
                  [--names NAMES.json] [--replaces NEW.md=OLD.md ...] [--restore RESTORE.json] [--groups GROUPS.json]
@@ -114,6 +120,7 @@ Usage:
   ingest.py topics --library DIR [--out FILE]
   ingest.py add-topic --library DIR --topic NAME [--topic NAME ...] [--partition NN]
   ingest.py retopic ACCEPTED.jsonl --from TOPIC --to TOPIC
+  ingest.py check --library DIR [--json]
 """
 import argparse
 import difflib
@@ -124,7 +131,7 @@ import re
 import shutil
 import sqlite3
 import sys
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import kb_batch
 import kbconf
@@ -578,6 +585,30 @@ def _write(path, text):
         f.write(text)
 
 
+def page_texts(ix, cfg, keys, names):
+    """{file name in the topics folder: text} of the pages of the topics keys (topic keys), as pages_run
+    writes them; names gives each key's topic as shown."""
+    out = {}
+    for k in dict.fromkeys(keys):
+        entries = []
+        for f, src, c in ix.cards([k]):
+            day = c.get('event_date') or c['date'][:10]
+            entries.append((day, os.path.splitext(f)[0], src, c))
+        entries.sort(key=lambda e: (e[0] or '', e[1], int(e[3]['anchor'][1:] or 0)), reverse=True)
+        page = quote_check.page_name(names[k])
+        by_year = {}
+        if len(entries) > YEAR_SPLIT:
+            for e in entries:
+                by_year.setdefault(e[0][:4] if e[0] else '', []).append(e)
+        dated = sorted((y for y in by_year if y), reverse=True)
+        earlier = dated[1:]
+        main = [e for e in entries if not earlier or not e[0] or e[0][:4] == dated[0]]
+        out[page + '.md'] = render_page(names[k], main, cfg, earlier, page=page)
+        for y in earlier:
+            out['%s (%s).md' % (page, y)] = render_page(names[k], by_year[y], cfg, year=y, page=page)
+    return out
+
+
 def pages_run(target, cfg, topics=None):
     """Rebuild the pages of the topics named (every topic with cards when None); returns their paths.
     A topic with more than YEAR_SPLIT cards keeps the newest year (and undated cards) on its page and
@@ -591,37 +622,22 @@ def pages_run(target, cfg, topics=None):
         else:
             wanted = [kbconf.topic_key(t) for t in topics]
             names = dict({k: held[k][0] for k in wanted if k in held}, **{kbconf.topic_key(t): t for t in topics})
-        folder = os.path.join(target, cfg['names']['topics_dir'])
-        os.makedirs(folder, exist_ok=True)
-        paths = []
-        for k in dict.fromkeys(wanted):
-            entries = []
-            for f, src, c in ix.cards([k]):
-                day = c.get('event_date') or c['date'][:10]
-                entries.append((day, os.path.splitext(f)[0], src, c))
-            entries.sort(key=lambda e: (e[0] or '', e[1], int(e[3]['anchor'][1:] or 0)), reverse=True)
-            page = quote_check.page_name(names[k])
-            by_year = {}
-            if len(entries) > YEAR_SPLIT:
-                for e in entries:
-                    by_year.setdefault(e[0][:4] if e[0] else '', []).append(e)
-            dated = sorted((y for y in by_year if y), reverse=True)
-            earlier = dated[1:]
-            main = [e for e in entries if not earlier or not e[0] or e[0][:4] == dated[0]]
-            path = os.path.join(folder, page + '.md')
-            _write(path, render_page(names[k], main, cfg, earlier, page=page))
-            paths.append(path)
-            for y in earlier:
-                ypath = os.path.join(folder, '%s (%s).md' % (page, y))
-                _write(ypath, render_page(names[k], by_year[y], cfg, year=y, page=page))
-                paths.append(ypath)
-            for f in os.listdir(folder):
-                m = YEAR_PAGE_RE.search(f)
-                if m and f[:m.start()] == page and m.group(1) not in earlier:
-                    os.remove(os.path.join(folder, f))
-        return paths
+        texts = page_texts(ix, cfg, wanted, names)
     finally:
         ix.close()
+    folder = os.path.join(target, cfg['names']['topics_dir'])
+    os.makedirs(folder, exist_ok=True)
+    paths = []
+    for fname, text in texts.items():
+        path = os.path.join(folder, fname)
+        _write(path, text)
+        paths.append(path)
+    mains = {quote_check.page_name(names[k]) for k in wanted}
+    for f in os.listdir(folder):
+        m = YEAR_PAGE_RE.search(f)
+        if m and f[:m.start()] in mains and f not in texts:
+            os.remove(os.path.join(folder, f))
+    return paths
 
 
 SPEC_LABELS = {
@@ -1023,6 +1039,148 @@ def status_check(old_text, new_text):
     return {'removed': removed, 'changed': changed, 'lost': lost, 'added': free}
 
 
+PENDING_DAYS = 7    # a run waiting longer than this for the owner's decisions is reported
+LIB_LINK_RE = re.compile(r'\[\[([^\]|#]+)(?:#\^(p\d+))?(?:\|[^\]]*)?\]\]')
+
+
+def health_check(library, cfg, today=None):
+    """A read-only check of a library; returns {"problems": n, ...} with the findings by kind:
+      quotes      cards whose quote is not in the paragraph its link names (or the source or anchor is gone)
+      links       links of the status card's items and the topic pages to a source, cards file, topic page or
+                  archived file that does not exist
+      pages       topics with cards whose page is missing or differs from what ingest.py pages builds,
+                  and year pages that are no longer built
+      unpaired    cards files without their source
+      status      status-card items marked for review, and items citing a source that is not current
+      pending     runs waiting for the owner's decisions for more than PENDING_DAYS days
+      uncarded    sources without cards yet (counted, not a problem)
+    """
+    n = cfg['names']
+    today = today or kbconf.now(cfg['timezone']).date()
+    ix = kbindex.open_index(library, cfg)
+    try:
+        sources = {p for p, in ix.db.execute('SELECT path FROM sources')}
+        paras = {}
+        for src, anchor, text in ix.db.execute('SELECT source, anchor, text FROM paragraphs'):
+            paras[(src, anchor)] = text
+        quotes, archived_cache = [], {}
+        for cards_file, src, c in ix.cards():
+            link = c.get('link') or src
+            if link.startswith(n['sources_dir'] + '/'):
+                text = paras.get((link[len(n['sources_dir']) + 1:] + '.md', c['anchor']))
+            else:
+                if link not in archived_cache:
+                    path = os.path.join(library, *link.split('/')) + '.md'
+                    archived_cache[link] = None
+                    if os.path.isfile(path):
+                        with open(path, encoding='utf-8') as fh:
+                            archived_cache[link] = anchored(fh.read())
+                text = (archived_cache[link] or {}).get(c['anchor'])
+            if text is None:
+                quotes.append({'cards': cards_file, 'link': '%s#^%s' % (link, c['anchor']), 'reason': 'no such paragraph'})
+            elif quote_check.norm(c['quote']) not in quote_check.norm(text):
+                quotes.append({'cards': cards_file, 'link': '%s#^%s' % (link, c['anchor']), 'reason': 'quote not in the paragraph'})
+        top = n['cards_dir'] + '/'
+        unpaired = sorted(p[len(top):] for p, in ix.db.execute('SELECT path FROM files') if p.startswith(top)
+                          and p[len(top):] not in sources)
+        held = ix.topics()
+        texts = page_texts(ix, cfg, sorted(held), {k: held[k][0] for k in held})
+        uncarded = len(ix.uncarded())
+    finally:
+        ix.close()
+
+    topics_dir = os.path.join(library, n['topics_dir'])
+    on_disk = {f for f in os.listdir(topics_dir) if f.endswith('.md')} if os.path.isdir(topics_dir) else set()
+    pages = {'missing': sorted(f for f in texts if f not in on_disk), 'stale': [], 'extra': []}
+    for f in sorted(texts):
+        if f in on_disk:
+            with open(os.path.join(topics_dir, f), encoding='utf-8') as fh:
+                if fh.read() != texts[f]:
+                    pages['stale'].append(f)
+    mains = {f[:-3] for f in texts if not YEAR_PAGE_RE.search(f)}
+    for f in sorted(on_disk):
+        m = YEAR_PAGE_RE.search(f)
+        if m and f[:m.start()] in mains and f not in texts:
+            pages['extra'].append(f)
+
+    def exists(target):
+        return os.path.isfile(os.path.join(library, *target.split('/')) + '.md')
+
+    links, tops = [], tuple(n[k] + '/' for k in ('sources_dir', 'cards_dir', 'topics_dir', 'archive_dir'))
+    card_path = os.path.join(library, n['status_card'])
+    files = [(n['status_card'], card_path)] + [('%s/%s' % (n['topics_dir'], f), os.path.join(topics_dir, f))
+                                               for f in sorted(on_disk)]
+    status = {'review': [], 'not_current': []}
+    for shown, path in files:
+        if not os.path.isfile(path):
+            continue
+        with open(path, encoding='utf-8') as fh:
+            text = fh.read()
+        if shown == n['status_card']:   # only its numbered items cite; the text above them may show examples
+            text = '\n'.join(ln for ln in text.split('\n') if ITEM_RE.match(ln))
+        for target, _ in LIB_LINK_RE.findall(text):
+            if target.startswith(tops) and not exists(target):
+                links.append({'file': shown, 'link': target})
+        if shown != n['status_card']:
+            continue
+        for line in text.split('\n'):
+            if not ITEM_RE.match(line):
+                continue
+            item = MARK_RE.sub('', line).strip()
+            if '⏳' in line:
+                status['review'].append(item)
+            cited = [t for t, _ in LIB_LINK_RE.findall(item) if t.startswith(n['sources_dir'] + '/')]
+            if any(t[len(n['sources_dir']) + 1:] + '.md' not in sources for t in cited):
+                status['not_current'].append(item)
+
+    pending = []
+    folder = os.path.join(library, PENDING_DIR)
+    for fname in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
+        if fname.endswith('.json') and not fname.endswith('.decisions.json'):
+            age = (today - datetime.fromtimestamp(os.path.getmtime(os.path.join(folder, fname))).date()).days
+            if age > PENDING_DAYS:
+                pending.append({'run': fname[:-5], 'days': age})
+    problems = (len(quotes) + len(links) + sum(len(v) for v in pages.values()) + len(unpaired)
+                + len(status['review']) + len(status['not_current']) + len(pending))
+    return {'problems': problems, 'quotes': quotes, 'links': links, 'pages': pages, 'unpaired': unpaired,
+            'status': status, 'pending': pending, 'uncarded': uncarded, 'sources': len(sources)}
+
+
+CHECK_LABELS = {
+    'en': {'quotes': 'Cards whose quote is not in its paragraph', 'links': 'Links to files that do not exist',
+           'missing': 'Topic pages missing (ingest.py pages --all builds them)',
+           'stale': 'Topic pages that differ from the cards (ingest.py pages --all rebuilds them)',
+           'extra': 'Year pages no longer built', 'unpaired': 'Cards files without their source',
+           'review': 'Status-card items marked for review', 'not_current': 'Status-card items citing a source that is not current',
+           'pending': 'Runs waiting for decisions for more than %d days' % PENDING_DAYS,
+           'summary': '%d sources, %d of them without cards yet; %d problems.'},
+    'zh': {'quotes': '引文不在所链接段落里的卡片', 'links': '指向不存在文件的链接',
+           'missing': '缺少的主题页（ingest.py pages --all 可生成）',
+           'stale': '与卡片不一致的主题页（ingest.py pages --all 可重建）',
+           'extra': '已不再生成的年份页', 'unpaired': '没有对应来源的卡片文件',
+           'review': '状态卡中待复核的条目', 'not_current': '状态卡中引用了非现行来源的条目',
+           'pending': '等待决定超过 %d 天的入库' % PENDING_DAYS,
+           'summary': '共 %d 份来源，其中 %d 份尚未抽卡；发现 %d 个问题。'},
+}
+
+
+def render_check(got, lang):
+    lb = CHECK_LABELS[lang]
+    groups = [('quotes', ['%s %s (%s)' % (q['cards'], q['link'], q['reason']) for q in got['quotes']]),
+              ('links', ['%s: [[%s]]' % (x['file'], x['link']) for x in got['links']]),
+              ('missing', got['pages']['missing']), ('stale', got['pages']['stale']), ('extra', got['pages']['extra']),
+              ('unpaired', got['unpaired']), ('review', got['status']['review']),
+              ('not_current', got['status']['not_current']),
+              ('pending', ['%s (%d)' % (p['run'], p['days']) for p in got['pending']])]
+    w = [lb['summary'] % (got['sources'], got['uncarded'], got['problems'])]
+    for key, rows in groups:
+        if rows:
+            w += ['', '%s: %d' % (lb[key], len(rows))] + ['  ' + r for r in rows[:50]]
+            if len(rows) > 50:
+                w.append('  ...')
+    return '\n'.join(w) + '\n'
+
+
 def replace_pair(text):
     new, sep, old = text.partition('=')
     if not (sep and new.strip() and old.strip()):
@@ -1085,6 +1243,9 @@ def main(argv=None):
         p.add_argument('--target', default=None, help='work on this folder, laid out like the library, instead')
     for p in (f, vs, cf):
         p.add_argument('--groups', default=None, help='JSON file with the decisions on same-named sources of the run')
+    ck = sub.add_parser('check', help='a read-only check of the library (exit 3 when it finds problems)')
+    ck.add_argument('--json', action='store_true', help='print JSON instead of text')
+    ck.add_argument('--library', required=True, help='library root')
     rt = sub.add_parser('retopic', help="change accepted cards' topic")
     rt.add_argument('cards', help='accepted cards (JSON lines), rewritten in place')
     rt.add_argument('--from', dest='old', required=True)
@@ -1114,6 +1275,10 @@ def main(argv=None):
             print('%d card%s now under %s' % (n, '' if n == 1 else 's', a.new))
             return 0
         cfg = kbconf.load_library(a.library)
+        if a.cmd == 'check':
+            got = health_check(a.library, cfg)
+            print(json.dumps(got, ensure_ascii=False) if a.json else render_check(got, lang_of(cfg)), end='')
+            return 3 if got['problems'] else 0
         if a.cmd == 'topics':
             found = kbconf.topics(read_spec(a.library, cfg), cfg)
             for t in found:

@@ -3,6 +3,7 @@ Standard library only: python3 -m unittest discover tests"""
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -959,6 +960,66 @@ class InitTest(Tmp):
         p = init("write", "--root", self.p("x"), "--preset", "work", *self.BASE, "--sources", "on")
         self.assertEqual(p.returncode, 2)
         self.assertFalse(os.path.exists(self.p("x")))
+
+
+class HealthCheckTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.lib = os.path.join(self.tmp, "lib")
+        shutil.copytree(os.path.join(ROOT, "examples", "sample-work-kb"), self.lib,
+                        ignore=shutil.ignore_patterns("_index"))
+        self.cfg = kbconf.load_library(self.lib)
+
+    def path(self, *parts):
+        return os.path.join(self.lib, *parts)
+
+    def test_clean_library(self):
+        got = ingest.health_check(self.lib, self.cfg)
+        self.assertEqual((got["problems"], got["sources"], got["uncarded"]), (0, 3, 0))
+
+    def test_every_kind_of_problem(self):
+        plan = self.path("Sources", "Plans", "Atlas pilot plan.md")
+        text = read(plan)
+        with open(plan, "w", encoding="utf-8") as f:
+            f.write(text.replace("Riverside Clinic will host", "Riverside Clinic may host"))
+        os.remove(self.path("Topics", "milestones.md"))
+        with open(self.path("Topics", "decision logs.md"), "a", encoding="utf-8") as f:
+            f.write("- edited by hand\n")
+        with open(self.path("Topics", "decision logs (2019).md"), "w", encoding="utf-8") as f:
+            f.write("# old year\n")
+        with open(self.path("00_Status-Card.md"), "a", encoding="utf-8") as f:
+            f.write("\n1. A fact. [[Sources/Plans/Gone#^p1]]\n2. Another fact. [[Sources/Plans/Atlas pilot plan#^p2]] ⏳ review: x\n")
+        os.remove(self.path("Sources", "Meetings", "Atlas steering minutes 2026-03-13.md"))
+        os.makedirs(self.path("_pending"))
+        old = self.path("_pending", "20260101-000000.json")
+        with open(old, "w", encoding="utf-8") as f:
+            f.write("{}")
+        os.utime(old, (0, 0))
+        got = ingest.health_check(self.lib, self.cfg)
+        self.assertIn("quote not in the paragraph", [q["reason"] for q in got["quotes"]])
+        self.assertIn("no such paragraph", [q["reason"] for q in got["quotes"]])   # the removed source's cards
+        self.assertEqual(got["pages"]["missing"], ["milestones.md"])
+        self.assertIn("decision logs.md", got["pages"]["stale"])
+        self.assertEqual(got["pages"]["extra"], ["decision logs (2019).md"])
+        self.assertEqual(got["unpaired"], ["Meetings/Atlas steering minutes 2026-03-13.md"])
+        self.assertEqual(got["links"][0], {"file": "00_Status-Card.md", "link": "Sources/Plans/Gone"})
+        self.assertEqual(got["status"]["review"], ["2. Another fact. [[Sources/Plans/Atlas pilot plan#^p2]]"])
+        self.assertEqual(got["status"]["not_current"], ["1. A fact. [[Sources/Plans/Gone#^p1]]"])
+        self.assertEqual([p["run"] for p in got["pending"]], ["20260101-000000"])
+        self.assertGreater(got["problems"], 8)
+        text = ingest.render_check(got, "zh")
+        self.assertIn("缺少的主题页", text)
+        self.assertIn("引文不在所链接段落里的卡片", text)
+
+    def test_command_line_exit_codes(self):
+        p = cli("check", "--library", self.lib)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn("0 problems", p.stdout)
+        os.remove(self.path("Topics", "milestones.md"))
+        p = cli("check", "--library", self.lib, "--json")
+        self.assertEqual(p.returncode, 3)
+        self.assertEqual(json.loads(p.stdout)["pages"]["missing"], ["milestones.md"])
 
 
 if __name__ == "__main__":

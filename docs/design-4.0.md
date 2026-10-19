@@ -26,5 +26,5 @@ Status: in progress. Each step below is its own pull request; 4.0.0 is released 
 ## 4. Steps
 
 1. Library format and index (this document, kbconf, kbindex, ingest, answer, skills, the sample library, the scale test).
-2. Health check: a read-only ingest.py check over the 4.0 layout and the index, a mode of kb-ingest and a button in kb-client.
+2. Health check: a read-only ingest.py check over the 4.0 layout and the index, a mode of kb-ingest ("health check") and a Health check button under each library in kb-client.
 3. Client-run ingest in kb-client: choosing material with rules (folders, a time range) and a confirmed list, filing every document without cards first, writing cards for the chosen ones, writing the others' cards when the assistant is idle (pausable, giving way to the user), automatic ingest from a drop folder, decisions taken by group on the Waiting for confirmation page, and an adjustable number of parallel card runs (default one).

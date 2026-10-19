@@ -545,3 +545,7 @@ body.kb-open .kb-toggle { background: var(--soft); color: var(--accent); }
 .pending-check { display: block; font-size: 13.5px; margin: 2px 0; overflow-wrap: anywhere; }
 .pending-items { margin: 0; padding-left: 18px; font-size: 13.5px; }
 .pending-items li { overflow-wrap: anywhere; margin: 2px 0; }
+
+/* health check: one foldable list per kind of finding */
+.health-group { margin: 4px 0; }
+.health-group summary { cursor: pointer; font-size: 13.5px; }
