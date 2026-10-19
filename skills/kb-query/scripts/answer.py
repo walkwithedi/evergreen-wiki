@@ -8,8 +8,9 @@ select: the cards and status-card items a question's keywords point to; the assi
   for each keyword in its conclusion or quote, two for each of its entities a keyword names and
   two when a keyword names its topic; the best LIMIT cards are listed, newest first among equals,
   with their quotes and source links. Status-card items score by their text and say when they are
-  marked for review. When no card matches, the paragraphs of the sources holding a keyword are
-  listed instead (at most PARAGRAPH_LIMIT), marked as not on a card.
+  marked for review. Paragraphs holding a keyword are listed too (at most PARAGRAPH_LIMIT), marked as
+  not on a card: those of sources without cards yet, and, when no card matches, those of any source.
+  Cards and paragraphs come from the library's index (kbindex.py), brought up to date first.
   ASCII keywords match at the start of a word; others anywhere. Case does not matter.
 
 check: every quote line of an answer, "> <sentence> [[<source>#^pN]]", must hold a sentence of
@@ -33,6 +34,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import kbconf  # noqa: E402
+import kbindex  # noqa: E402
 import quote_check  # noqa: E402
 from ingest import ITEM_RE, MARK_RE, anchored  # noqa: E402
 
@@ -40,13 +42,16 @@ log = logging.getLogger('answer')
 
 LIMIT = 12
 PARAGRAPH_LIMIT = 5
+PARAGRAPH_SCAN = 200  # paragraphs the index hands over for the keyword check
 QUOTE_LINE_RE = re.compile(r'^\s*>\s*(.*?)\s*\[\[([^\]#|]+)#\^(p\d+)(?:\|[^\]]*)?\]\]\s*$')
 
 LABELS = {
     'en': {'status': '## Status card', 'cards': '## Cards', 'paragraphs': '## Source paragraphs (not on a card)',
+           'uncarded': ' (source without cards yet)',
            'review': '(marked for review: check it against the cards and sources)', 'earlier': ' (earlier version)',
            'nothing': 'Nothing in the library matches these keywords.'},
     'zh': {'status': '## 状态卡', 'cards': '## 卡片', 'paragraphs': '## 来源段落（不在卡片上）',
+           'uncarded': '（该来源尚未抽卡）',
            'review': '（待复核：须对照卡片和来源核实）', 'earlier': '（旧版本）',
            'nothing': '知识库里没有与这些关键词匹配的内容。'},
 }
@@ -82,32 +87,38 @@ def _expand(keywords, spec):
     return terms, named
 
 
-def _cards(library, cfg):
-    folder = os.path.join(library, cfg['names']['cards_dir'])
-    for fname in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
-        if fname.endswith('.md'):
-            with open(os.path.join(folder, fname), encoding='utf-8') as f:
-                got = quote_check.read_cards(f.read())
-            for c in got['cards']:
-                yield got['source'], c
-
-
 def select(library, cfg, keywords, limit=LIMIT):
-    """{"status": [{item, review}], "cards": [...], "paragraphs": [{link, anchor, text}]}."""
+    """{"status": [{item, review}], "cards": [...], "paragraphs": [{link, anchor, text, carded}]}."""
     spec = _spec(library, cfg)
     terms, named = _expand(keywords, spec)
     patterns = [_pattern(t) for t in terms]
     topic_keys = {kbconf.topic_key(t) for t in terms}
-    scored = []
-    for src, c in _cards(library, cfg):
-        score = _hits(patterns, c['conclusion'] + '\n' + c['quote'])
-        score += 2 * sum(1 for e in c['entities'] if kbconf.topic_key(e) in named)
-        score += 2 if kbconf.topic_key(c['topic']) in topic_keys else 0
-        if score:
-            day = c.get('event_date') or c['date'][:10]
-            scored.append((score, day, dict(c, link=c.get('link') or src, earlier=bool(c.get('link')))))
-    scored.sort(key=lambda s: (s[0], s[1], s[2]['date']), reverse=True)  # newer source first on the same day
-    cards = [s[2] for s in scored[:limit]]
+    sdir = cfg['names']['sources_dir']
+    ix = kbindex.open_index(library, cfg)
+    try:
+        entity_names = [n for row in kbconf.entities(spec) for n in [row['name']] + row['aliases']
+                        if kbconf.topic_key(n) in named]
+        scored = []
+        for _, src, c in ix.find_cards(terms, entity_names, topic_keys):
+            score = _hits(patterns, c['conclusion'] + '\n' + c['quote'])
+            score += 2 * sum(1 for e in c['entities'] if kbconf.topic_key(e) in named)
+            score += 2 if kbconf.topic_key(c['topic']) in topic_keys else 0
+            if score:
+                day = c.get('event_date') or c['date'][:10]
+                scored.append((score, day, dict(c, link=c.get('link') or src, earlier=bool(c.get('link')))))
+        scored.sort(key=lambda s: (s[0], s[1], s[2]['date']), reverse=True)  # newer source first on the same day
+        cards = [s[2] for s in scored[:limit]]
+        # paragraphs: of sources without cards yet, and of every source when no card matched
+        paragraphs = []
+        carded = {p for p, in ix.db.execute('SELECT path FROM sources WHERE carded')}
+        for p in ix.find_paragraphs(terms, PARAGRAPH_SCAN, uncarded_first=True):
+            if len(paragraphs) >= PARAGRAPH_LIMIT or (cards and p['source'] in carded):
+                break
+            if _hits(patterns, p['text']):
+                paragraphs.append({'link': '%s/%s' % (sdir, p['source'][:-3]), 'anchor': p['anchor'],
+                                   'text': p['text'], 'carded': p['source'] in carded})
+    finally:
+        ix.close()
 
     status = []
     path = os.path.join(library, cfg['names']['status_card'])
@@ -116,19 +127,6 @@ def select(library, cfg, keywords, limit=LIMIT):
             for line in f.read().split('\n'):
                 if ITEM_RE.match(line) and _hits(patterns, MARK_RE.sub('', line)):
                     status.append({'item': MARK_RE.sub('', line).strip(), 'review': '⏳' in line})
-
-    paragraphs = []
-    if not cards:
-        sdir = cfg['names']['sources_dir']
-        folder = os.path.join(library, sdir)
-        for fname in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
-            if not fname.endswith('.md'):
-                continue
-            with open(os.path.join(folder, fname), encoding='utf-8') as f:
-                paras = anchored(f.read())
-            for a, text in paras.items():
-                if len(paragraphs) < PARAGRAPH_LIMIT and _hits(patterns, text):
-                    paragraphs.append({'link': '%s/%s' % (sdir, fname[:-3]), 'anchor': a, 'text': text})
     return {'status': status, 'cards': cards, 'paragraphs': paragraphs}
 
 
@@ -151,7 +149,8 @@ def render(got, lang):
     if got['paragraphs']:
         w += [lb['paragraphs'], '']
         for p in got['paragraphs']:
-            w.append('> %s [[%s#^%s]]' % (' '.join(p['text'].split()), p['link'], p['anchor']))
+            w.append('> %s [[%s#^%s]]%s' % (' '.join(p['text'].split()), p['link'], p['anchor'],
+                                            '' if p.get('carded', True) else lb['uncarded']))
         w.append('')
     return '\n'.join(w)
 
@@ -181,7 +180,7 @@ def check(library, text):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description='Material for an answer from a 2.0 library, and a check of its quotes.')
+    ap = argparse.ArgumentParser(description='Material for an answer from a library, and a check of its quotes.')
     kbconf.add_log_args(ap)
     sub = ap.add_subparsers(dest='cmd', required=True)
     s = sub.add_parser('select', help='cards and status-card items for the keywords')

@@ -4,10 +4,15 @@
 Two levels of configuration:
 
   Registry (user level)   kb-libraries.json: which libraries exist and where they live.
-  Library (per library)   _kb.json in the library root (schema 2): label, language, timezone,
+  Library (per library)   _kb.json in the library root (schema 3): label, language, timezone,
                           batch and quote limits, partitions and file/folder names. A tier
-                          set by 2.0.x is accepted and ignored. A 1.x library (schema 1) is
-                          refused: this release does not migrate them.
+                          set by 2.0.x is accepted and ignored. Older libraries are refused:
+                          schema 1 (1.x) and schema 2 (2.0.x and 3.0.x, one flat sources folder);
+                          this release does not migrate them.
+
+Layout of a schema 3 library: a source keeps the folder it came from below the material root, so
+Sources/<folder>/<name>.md, with its cards file at Cards/<folder>/<name>.md. rel_folder() turns a
+batch file's "original path" into that folder. A name is one document wherever its folder is.
 
 Every name a skill or script uses (summary files, archive folder, "_old" suffix, ...)
 comes from resolve_names(), so a library can keep its own names (for example Chinese
@@ -33,7 +38,8 @@ from datetime import datetime, timedelta, timezone
 log = logging.getLogger("kbconf")
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s.%(funcName)s:%(lineno)d - %(message)s"
 
-SCHEMA = 2
+SCHEMA = 2           # the registry's schema
+LIBRARY_SCHEMA = 3   # _kb.json: sources in subfolders
 KB_JSON = "_kb.json"
 REGISTRY_FILE = "kb-libraries.json"
 
@@ -63,7 +69,7 @@ DEFAULT_LIMITS = {"zh": (55, 80), "ja": (55, 80), "ko": (60, 90)}
 FALLBACK_LIMITS = (90, 120)
 
 DEFAULTS = {
-    "schema": SCHEMA,
+    "schema": LIBRARY_SCHEMA,
     "label": "",
     "preset": "",
     "language": "en",
@@ -78,6 +84,17 @@ INGEST_KEYS = ("tier", "batch_chars", "quote_min", "quote_max")
 KNOWN_KEYS = set(DEFAULTS) | {"backend", "notes"} | set(INGEST_KEYS)
 OLD_SCHEMA = ("this is a 1.x library (schema 1); 1.x libraries are not migrated: keep using the "
               "1.x release for it, or set up a new library and ingest the material again")
+FLAT_SCHEMA = ("this is a 2.0.x or 3.0.x library (schema 2, one flat sources folder); this release reads "
+               "schema 3 libraries only and does not migrate them: keep using the 3.0.x release for it, "
+               "or set up a new library and ingest the material again")
+OLD_SCHEMAS = {1: OLD_SCHEMA, 2: FLAT_SCHEMA}
+
+# A source's folder in the library: the folder it came from below the material root, each part made
+# safe for file names and links and cut to FOLDER_PART_MAX characters; a longer path keeps its first
+# and last parts around "…".
+FOLDER_UNSAFE = re.compile(r'[\\:*?"<>|#^\[\]\x00-\x1f]+')
+FOLDER_PART_MAX = 60
+FOLDER_MAX = 180
 
 
 def utf8_stdio():
@@ -180,6 +197,30 @@ def check_registry(reg):
     return problems
 
 
+def rel_folder(path):
+    """The library folder ("a/b", or "" for the top) of a source whose original path, relative to the
+    material root, is path. An absolute path, one leading out of the root or a bare name gives ""."""
+    p = str(path or "").replace("\\", "/").strip()
+    if not p or p.startswith("/") or re.match(r"^[A-Za-z]:", p):
+        return ""
+    parts = [x for x in p.split("/")[:-1] if x not in ("", ".")]
+    if ".." in parts:
+        return ""
+    out = []
+    for x in parts:
+        x = " ".join(FOLDER_UNSAFE.sub("-", x).split()).strip(" .-")[:FOLDER_PART_MAX].strip()
+        if x:
+            out.append(x)
+    while len("/".join(out)) > FOLDER_MAX and len(out) > 2:
+        if out[1] != "…":
+            out[1] = "…"           # the second part gives way first
+        elif len(out) > 3:
+            del out[2]             # then the parts after it, until the path fits
+        else:
+            break
+    return "/".join(out)
+
+
 def find_kb_json(path):
     path = os.path.expanduser(path)
     if os.path.isdir(path):
@@ -220,8 +261,8 @@ def search_key(file_name):
 def load_library(path):
     p = find_kb_json(path)
     raw = load_json(p)
-    if isinstance(raw, dict) and raw.get("schema") == 1:
-        raise ConfigError(f"{p}: {OLD_SCHEMA}")
+    if isinstance(raw, dict) and raw.get("schema") in OLD_SCHEMAS:
+        raise ConfigError(f"{p}: {OLD_SCHEMAS[raw['schema']]}")
     cfg = merge(DEFAULTS, raw)
     cfg["names"] = resolve_names(raw.get("names"))
     cfg["_path"] = p
@@ -234,10 +275,10 @@ def validate(raw):
     problems = []
     if not isinstance(raw, dict):
         return ["_kb.json must be a JSON object"]
-    if raw.get("schema") == 1:
-        return [OLD_SCHEMA]
-    if raw.get("schema") != SCHEMA:
-        problems.append(f"schema should be {SCHEMA}, got {raw.get('schema')!r}")
+    if raw.get("schema") in OLD_SCHEMAS:
+        return [OLD_SCHEMAS[raw["schema"]]]
+    if raw.get("schema") != LIBRARY_SCHEMA:
+        problems.append(f"schema should be {LIBRARY_SCHEMA}, got {raw.get('schema')!r}")
     for k in raw:
         if k not in KNOWN_KEYS:
             problems.append(f"unknown key {k!r}")

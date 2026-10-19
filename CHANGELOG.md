@@ -4,6 +4,27 @@ All three skills share one version number. To release, update this file and the 
 
 ## Unreleased
 
+4.0 (in progress, docs/design-4.0.md): one library carries about ten thousand documents.
+
+Removed and incompatible
+- Libraries are schema 3. A _kb.json of schema 2 (2.0.x and 3.0.x, one flat sources folder) is refused with a message naming 3.0.x, as schema 1 is; libraries are not migrated. install.py refuses such a folder in the same words.
+
+Library layout
+- A source keeps the folder it came from below the material root: Sources/<folder>/<name>.md, Cards/<folder>/<name>.md, older versions under Archive/Sources/<folder> and Archive/Cards/<folder>. kbconf.rel_folder() makes the folder from a batch file's original path: parts made safe for names and links, cut to 60 characters, a path over 180 characters shortened in the middle; an absolute path or one leading out of the root gives the top folder.
+- A file name is one document wherever its folder is: a source whose name is in the library is a new version, archived from its old folder, and the new one goes to its own folder. A run's sources with one name and different content form a group: the newest is current and the others go straight to the archive, unless --groups (or the decisions file's "groups") picks another current one or marks members as separate documents, which get their folder's last part in front of their name.
+- A source with the same content as one in the library or an earlier one of the run (kbindex.fingerprint: the text without notes, anchors and spacing) is not filed again and is listed under duplicates.
+- ingest.py file without --cards files the sources only; the record lists them under without_cards, with older and duplicates.
+- ingest.py pages: a topic with more than 60 cards keeps its newest year and undated cards on its page and each earlier year on "<topic> (YYYY)"; year pages no longer needed are removed.
+- ingest.py versions also lists the run's groups and duplicates; same_name covers every folder; candidates carry old_path and are compared only with library names sharing enough letter pairs.
+
+Index (shared/scripts/kbindex.py, copied into the three skills)
+- <library>/_index/kb.sqlite holds sources, paragraphs and cards, made from the files and kept current by comparing sizes and times on every use; build, refresh, stats and search commands. Trigram full-text search where SQLite has it, else LIKE (KBINDEX_FULL_TEXT=0 forces LIKE). A damaged index, or one this SQLite cannot read, is made again; a folder that cannot be written gets an index in memory.
+- ingest.py file, conflicts, versions and pages and answer.py select read through it. answer.py select also lists paragraphs of sources without cards yet, marked as such.
+- tests/test_scale.py: 10,000 sources and 100,000 cards; an answer's material within five seconds (SCALE_SOURCES sets the size).
+
+Examples
+- The sample materials sit in folders (Plans, Meetings, Status reports) and the sample library keeps them.
+
 - tools/kb-client: the Material card and its Build batch files step are removed; documents are ingested by asking in the conversation with a file or folder path, and kb-ingest converts them itself.
 
 ## 3.0.0

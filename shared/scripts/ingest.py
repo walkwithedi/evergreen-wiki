@@ -6,11 +6,18 @@ The library (or, with --target, another folder laid out like it) has three
 folders, named by kbconf names: sources_dir (default Sources), cards_dir (Cards) and topics_dir
 (Topics), plus archive_dir for older versions.
 
-file: the run's batch files are split back into one file per source, Sources/<original name>.md
-  (two sources of the run with the same name get their parent folder's name in front). The
-  accepted cards (quote_check.py check) go to Cards/<same name>.md. A source whose name is
-  already in the library is a new version: the old source file and its cards file move to
-  Archive/Sources and Archive/Cards as <name><old_suffix><YYYYMMDDHHMMSS>.md; nothing is deleted.
+file: the run's batch files are split back into one file per source, Sources/<folder>/<original
+  name>.md, where folder is the one the document came from below the material root (kbconf
+  rel_folder). The accepted cards (quote_check.py check) go to Cards/<folder>/<same name>.md; a run
+  filed without --cards writes the sources only, to be searched until their cards are written. A
+  name is one document wherever its folder is: a source whose name is already in the library is a
+  new version, and the old source file and its cards file move to Archive/Sources/<old folder> and
+  Archive/Cards/<old folder> as <name><old_suffix><YYYYMMDDHHMMSS>.md; nothing is deleted. A source
+  with the same content (fingerprint) as one in the library, or as an earlier one of the run, is not
+  written and is listed as a duplicate. Several sources of the run with one name and different
+  content form a group: the newest is filed as current and the others go straight to the archive as
+  its older versions, unless --groups FILE ({name: {"current": path, "separate": [paths]}}) says
+  otherwise; a separate one is another document and gets its folder's last part in front of its name.
   --replaces NEW=OLD (repeatable) archives OLD the same way: the owner confirmed that the run's
   source NEW is a new version of the library's source OLD under another name. A run with a part
   missing from the batch files, or naming an OLD that is not in the library, writes nothing.
@@ -18,8 +25,10 @@ file: the run's batch files are split back into one file per source, Sources/<or
   still in the new version becomes a current card of it again; any other old card is kept in the
   new version's cards file, citing the archived old source and marked as from an earlier version.
   Items of the status card that cite a source being archived get a review mark, once.
-  Prints a JSON record: sources written, files archived, topics touched (of the new cards and of
-  the archived ones), conflicts restored, status-card items marked for review.
+  Prints a JSON record: sources written, files archived, older versions filed straight to the
+  archive, duplicates, topics touched (of the new cards and of the archived ones), sources written
+  without cards, conflicts restored, status-card items marked for review. The library's index
+  (kbindex.py) is brought up to date.
 
 conflicts: for each library source the run replaces (same name, or --replaces), its current cards
   against the new version and the run's cards. An old card whose quote is in the new version and
@@ -39,11 +48,12 @@ pending: the owner's decisions of a run of a local library through a file, so th
   conflicts (--conflicts) into <library>/_pending/<run>.json, with the spec's topics and entity names
   to choose from; it prints the file's path. The decisions come back as <run>.decisions.json:
   {"topics": {name: {"add": true} | {"under": topic}}, "entities": {name: {"add": true, "type": T} |
-  {"alias": table name}}, "versions": ["new=old", ...], "conflicts": {id: "accept" | "restore"}};
-  what is left out takes the default (topics and entities added, pairs not new versions, conflicts
-  accepted). "read" checks them and turns them into what the next commands take: topics to add,
-  topics to put under others, --replaces pairs, an entity map (--map) and a restore file (--restore)
-  in --work. "done" removes both files once the run is filed.
+  {"alias": table name}}, "versions": ["new=old", ...], "conflicts": {id: "accept" | "restore"},
+  "groups": {name: {"current": path, "separate": [paths]}}}; what is left out takes the default
+  (topics and entities added, pairs not new versions, conflicts accepted, the newest of a group
+  current). "read" checks them and turns them into what the next commands take: topics to add,
+  topics to put under others, --replaces pairs, an entity map (--map), a restore file (--restore) and
+  a groups file (--groups) in --work. "done" removes both files once the run is filed.
 
 status-check: the numbered items of a rewritten status card against the current one. Items pair
   by their text (review marks left out), else by a source link they share. Lists removed and
@@ -56,7 +66,9 @@ versions: for each source of the run whose name is not in the library yet, the l
   version marks (v2, rev, final, draft, copy, (1), 副本, 终稿, 定稿, 修订版) and punctuation are
   dropped (equal, or a similarity of NAME_MIN or more) and at least OVERLAP_MIN of the shorter
   source's paragraphs (PARA_MIN characters or more, compared as quote_check does) are in the other.
-  Same-named sources are new versions anyway and are listed apart. Prints JSON.
+  Names are compared only with library names sharing enough letter pairs, through the index.
+  Same-named sources (in any folder) are new versions anyway and are listed apart, with the run's
+  groups of same-named sources and its duplicates. Prints JSON.
 
 entities: the cards' entity names against the spec's Table E. Names or aliases of the table
   (compared without regard to case and spacing) are merged into the table's name; the other names
@@ -67,9 +79,11 @@ entities: the cards' entity names against the spec's Table E. Names or aliases o
   rewritten with the table's names, and Table E gets the new rows and aliases, with one version
   step for the lot and a revision line each.
 
-pages: Topics/<topic>.md is rebuilt from every cards file: the topic's cards, newest first by
-  event date or else the source's date, each with its conclusion, quote, source link and cards
-  link. Pages are generated; edits to them are overwritten.
+pages: Topics/<topic>.md is rebuilt from the cards (through the index): the topic's cards, newest
+  first by event date or else the source's date, each with its conclusion, quote, source link and
+  cards link. A topic with more than YEAR_SPLIT cards keeps its newest year and undated cards on that
+  page and each earlier year on Topics/<topic> (YYYY).md. Pages are generated; edits to them are
+  overwritten.
 
 topics: prints the topics of the spec's Table A, one per line, and with --out writes them to a file
   (for quote_check.py --topics).
@@ -85,16 +99,16 @@ Python 3 standard library only.
 
 Exit codes: 0 done; 3 status-check found problems; 2 bad arguments, unreadable input or a part missing.
 Usage:
-  ingest.py file BATCH.md [BATCH.md ...] --cards ACCEPTED.jsonl --library DIR [--target DIR]
-                 [--names NAMES.json] [--replaces NEW.md=OLD.md ...] [--restore RESTORE.json]
+  ingest.py file BATCH.md [BATCH.md ...] [--cards ACCEPTED.jsonl] --library DIR [--target DIR]
+                 [--names NAMES.json] [--replaces NEW.md=OLD.md ...] [--restore RESTORE.json] [--groups GROUPS.json]
   ingest.py conflicts BATCH.md [BATCH.md ...] --cards ACCEPTED.jsonl --library DIR [--target DIR]
-                 [--replaces NEW.md=OLD.md ...]
+                 [--replaces NEW.md=OLD.md ...] [--groups GROUPS.json]
   ingest.py status-check --old CURRENT.md --new REWRITE.md [--write [--confirmed] --library DIR]
   ingest.py note --library DIR --title TITLE --text WORDS.txt [--context TEXT] -o DIR
   ingest.py pending write --library DIR [--run NAME] [--report F] [--entities F] [--versions F] [--conflicts F]
   ingest.py pending read --library DIR --run NAME --work DIR
   ingest.py pending done --library DIR --run NAME
-  ingest.py versions BATCH.md [BATCH.md ...] --library DIR [--target DIR]
+  ingest.py versions BATCH.md [BATCH.md ...] --library DIR [--target DIR] [--groups GROUPS.json]
   ingest.py entities ACCEPTED.jsonl --library DIR [--apply [--map MAP.json]]
   ingest.py pages --library DIR [--target DIR] (--topic NAME ... | --all)
   ingest.py topics --library DIR [--out FILE]
@@ -108,11 +122,13 @@ import logging
 import os
 import re
 import shutil
+import sqlite3
 import sys
 from datetime import timedelta
 
 import kb_batch
 import kbconf
+import kbindex
 import quote_check
 
 log = logging.getLogger('ingest')
@@ -125,33 +141,93 @@ def lang_of(cfg):
     return 'zh' if str(cfg.get('language', 'en')).lower().startswith('zh') else 'en'
 
 
-def source_names(table, names=None):
-    """{sid: file name} for the run's sources; the same name twice gets the parent folder's name."""
-    out = {sid: kb_batch.output_name(sid, v['name'], names or {}) for sid, v in table.items()}
-    counts = {}
-    for f in out.values():
-        counts[f] = counts.get(f, 0) + 1
-    for sid, f in out.items():
-        if counts[f] > 1 and not (names and (sid in names or table[sid]['name'] in names)):
-            parent = os.path.basename(os.path.dirname(table[sid].get('path', '').replace('\\', '/')))
-            out[sid] = '%s_%s' % (FOLDER_UNSAFE_RE.sub('-', parent) or sid, f)
+def run_sources(table, split, names=None):
+    """{sid: {name, folder, path, fp, modified}} of a run's sources: the file name (kb_batch.output_name),
+    the library folder its original path gives (kbconf.rel_folder), the path below the sources folder,
+    the content fingerprint and the last-modified time."""
+    out = {}
+    for sid, e in split.items():
+        t = table.get(sid, {})
+        name = os.path.basename(kb_batch.output_name(sid, e['name'], names or {}))
+        folder = kbconf.rel_folder(t.get('path', ''))
+        out[sid] = {'name': name, 'folder': folder, 'path': _join(folder, name),
+                    'fp': kbindex.fingerprint(e['text']), 'modified': t.get('modified', '')}
     return out
+
+
+def _join(folder, name):
+    return '%s/%s' % (folder, name) if folder else name
+
+
+def _sid_n(sid):
+    return int(sid[1:])
+
+
+def plan_run(srcs, ix, groups=None):
+    """What filing does with each source of a run, before anything is written:
+      duplicates  [{source, existing}]: the same content (fingerprint) is in the library already, or an
+                  earlier source of the run has it; not written.
+      groups      [{name, members: [{path, modified}], current}]: several sources of the run with one
+                  name and different content. By default the newest (last-modified) is the current
+                  version and the others are filed as its older versions, straight into the archive;
+                  groups ({name: {"current": path, "separate": [paths]}}) changes that: a separate one
+                  is another document and gets its folder's last part in front of its name.
+      current     {sid: path below the sources folder} of the sources filed as current.
+      older       {sid: path} of the sources filed as older versions.
+    """
+    groups = groups or {}
+    lib_fp = ix.by_fingerprint(e['fp'] for e in srcs.values())
+    dups, seen, keep = [], {}, []
+    for sid in sorted(srcs, key=_sid_n):
+        e = srcs[sid]
+        if e['fp'] in lib_fp:
+            dups.append({'source': e['path'], 'existing': lib_fp[e['fp']]})
+        elif e['fp'] in seen:
+            dups.append({'source': e['path'], 'existing': srcs[seen[e['fp']]]['path'], 'in_run': True})
+        else:
+            seen[e['fp']] = sid
+            keep.append(sid)
+    by_name = {}
+    for sid in keep:
+        by_name.setdefault(srcs[sid]['name'], []).append(sid)
+    current, older, out_groups = {}, {}, []
+    taken = set()
+    for name, sids in by_name.items():
+        if len(sids) == 1:
+            current[sids[0]] = srcs[sids[0]]['path']
+            taken.add(name)
+            continue
+        default = max(sids, key=lambda x: (srcs[x]['modified'] or '', _sid_n(x)))
+        d = groups.get(name) or {}
+        paths = {srcs[x]['path']: x for x in sids}
+        cur = paths.get(d.get('current')) or default
+        separate = [paths[x] for x in d.get('separate') or [] if x in paths and paths[x] != cur]
+        out_groups.append({'name': name, 'current': srcs[default]['path'],
+                           'members': [{'path': srcs[x]['path'], 'modified': srcs[x]['modified']} for x in sids]})
+        current[cur] = srcs[cur]['path']
+        taken.add(name)
+        for x in sids:
+            if x == cur:
+                continue
+            if x in separate:
+                e = srcs[x]
+                part = e['folder'].rsplit('/', 1)[-1] if e['folder'] else ''
+                new = '%s_%s' % (FOLDER_UNSAFE_RE.sub('-', part) or x, name)
+                while new in taken:
+                    new = '%s_%s' % (x, new)
+                taken.add(new)
+                e['name'], e['path'] = new, _join(e['folder'], new)
+                current[x] = e['path']
+            else:
+                older[x] = srcs[x]['path']
+    return {'duplicates': dups, 'groups': out_groups, 'current': current, 'older': older}
 
 
 NAME_MIN = 0.8      # name similarity for a version candidate (difflib ratio of the name keys)
 OVERLAP_MIN = 0.5   # share of the shorter source's paragraphs found in the other
 PARA_MIN = 20       # shorter paragraphs (headings, dates, signatures) are not compared
-NAME_DATE_RE = re.compile(r'\d{4}[-_./年]?\d{1,2}[-_./月]?\d{1,2}日?')
-NAME_MARK_RE = re.compile(r'(?<![a-z])(?:v\d+(?:\.\d+)*|rev\d*|ver\d*|version\d*|final|draft|copy)(?![a-z])'
-                          r'|副本|终稿|定稿|修订版|最终版|草稿|[(（]\d+[)）]')
 PARA_ANCHOR_RE = re.compile(r'\s*\^(?:s\d{2,}-)?p\d+\s*$')
-
-
-def name_key(fname):
-    """A file name without extension, dates, version marks, punctuation and case, for comparing names."""
-    stem = os.path.splitext(os.path.basename(fname))[0].casefold()
-    stem = NAME_MARK_RE.sub(' ', NAME_DATE_RE.sub(' ', stem))
-    return re.sub(r'[\W_]+', '', stem)
+name_key = kbindex.name_key
 
 
 def paragraphs(text):
@@ -174,16 +250,7 @@ ITEM_RE = re.compile(r'^\s*\d+[.、．]\s+\S')
 CITE_RE = re.compile(r'\[\[([^\]|#]+#\^p\d+)(?:\|[^\]]*)?\]\]')
 
 
-def anchored(text):
-    """{pN: paragraph text} of a source file (anchors at the end, a table's on the line below)."""
-    out, prev = {}, ''
-    for block in re.split(r'\n\s*\n', text):
-        block = block.strip()
-        m = ANCHORED_RE.match(block)
-        if m:
-            out[m.group(2)] = m.group(1).strip() or prev
-        prev = block
-    return out
+anchored = kbindex.anchored
 
 
 def _find_anchor(quote, paras):
@@ -191,46 +258,64 @@ def _find_anchor(quote, paras):
     return next((a for a, t in paras.items() if q in quote_check.norm(t)), None)
 
 
-def _replaced(fnames, target, cfg, replaces):
-    """{new file name: library file name it replaces} for a run: same names and confirmed pairs."""
-    src_dir = os.path.join(target, cfg['names']['sources_dir'])
-    out = {f: f for f in fnames.values() if os.path.isfile(os.path.join(src_dir, f))}
-    out.update(replaces or {})
+def _replaced(srcs, plan, lib, replaces):
+    """{new name: [library paths it replaces]} for a run: the same name anywhere in the library, and the
+    pairs the owner confirmed (replaces: {new name: library name})."""
+    out = {}
+    for sid in plan['current']:
+        name = srcs[sid]['name']
+        if lib.get(name):
+            out[name] = list(lib[name])
+    for new, old in (replaces or {}).items():
+        out.setdefault(new, []).extend(p for p in lib.get(old, []) if p not in out.get(new, []))
     return out
 
 
-def conflicts(batches, cards, target, cfg, names=None, replaces=None):
+def _read_cards_file(path):
+    with open(path, encoding='utf-8') as f:
+        return quote_check.read_cards(f.read())['cards']
+
+
+def conflicts(batches, cards, target, cfg, names=None, replaces=None, groups=None):
     """Old cards of the sources the run replaces that the new version changes, drops or does not
-    carry over: [{id, kind, source, old_source, old, new, new_anchor}]."""
+    carry over: [{id, kind, source, old_source, old, new, new_anchor}]; source is the new name,
+    old_source the old version's path below the sources folder."""
     table, split = _read_run(batches)
-    fnames = source_names({sid: table[sid] for sid in split}, names)
-    sid_of = {f: sid for sid, f in fnames.items()}
+    srcs = run_sources(table, split, names)
+    ix = kbindex.open_index(target, cfg)
+    try:
+        plan = plan_run(srcs, ix, groups)
+        lib = ix.source_paths()
+    finally:
+        ix.close()
+    sid_of = {srcs[sid]['name']: sid for sid in plan['current']}
     card_dir = os.path.join(target, cfg['names']['cards_dir'])
     out = []
-    for new, old in _replaced(fnames, target, cfg, replaces).items():
-        path = os.path.join(card_dir, old)
-        if new not in sid_of or not os.path.isfile(path):
-            continue
-        with open(path, encoding='utf-8') as f:
-            old_cards = quote_check.read_cards(f.read())['cards']
-        paras = anchored(split[sid_of[new]]['text'])
-        mine = [c for c in cards if c['source'] == sid_of[new]]
-        for oc in old_cards:
-            q = quote_check.norm(oc['quote'])
-            at = _find_anchor(oc['quote'], paras)
-            if at and any(quote_check.norm(c['quote']) == q for c in mine):
+    for new, olds in _replaced(srcs, plan, lib, replaces).items():
+        for old in olds:
+            path = os.path.join(card_dir, *old.split('/'))
+            if new not in sid_of or not os.path.isfile(path):
                 continue
-            entry = {'kind': 'not_carried', 'source': new, 'old_source': old, 'old': oc, 'new': None}
-            if at:
-                entry['new_anchor'] = at
-            else:
-                key = quote_check.norm(oc['conclusion'])
-                best = max(mine, default=None, key=lambda c: difflib.SequenceMatcher(
-                    None, key, quote_check.norm(c['conclusion'])).ratio())
-                close = best is not None and difflib.SequenceMatcher(
-                    None, key, quote_check.norm(best['conclusion'])).ratio() >= SIMILAR_MIN
-                entry['kind'], entry['new'] = ('changed', best) if close else ('removed', None)
-            out.append(entry)
+            old_cards = _read_cards_file(path)
+            sid = sid_of[new]
+            paras = anchored(split[sid]['text'])
+            mine = [c for c in cards if c['source'] == sid]
+            for oc in old_cards:
+                q = quote_check.norm(oc['quote'])
+                at = _find_anchor(oc['quote'], paras)
+                if at and any(quote_check.norm(c['quote']) == q for c in mine):
+                    continue
+                entry = {'kind': 'not_carried', 'source': new, 'old_source': old, 'old': oc, 'new': None}
+                if at:
+                    entry['new_anchor'] = at
+                else:
+                    key = quote_check.norm(oc['conclusion'])
+                    best = max(mine, default=None, key=lambda c: difflib.SequenceMatcher(
+                        None, key, quote_check.norm(c['conclusion'])).ratio())
+                    close = best is not None and difflib.SequenceMatcher(
+                        None, key, quote_check.norm(best['conclusion'])).ratio() >= SIMILAR_MIN
+                    entry['kind'], entry['new'] = ('changed', best) if close else ('removed', None)
+                out.append(entry)
     return [dict(id='c%d' % i, **e) for i, e in enumerate(out, 1)]
 
 
@@ -249,40 +334,66 @@ def _read_run(batches):
     return table, split
 
 
-def version_candidates(batches, target, cfg, known=None, names=None):
-    """{"same_name": [...], "candidates": [{new, old, name_score, overlap, read}]} for a run."""
+def _bigrams(key):
+    return {key[i:i + 2] for i in range(len(key) - 1)} or ({key} if key else set())
+
+
+def version_candidates(batches, target, cfg, names=None, groups=None):
+    """{"same_name": [names], "candidates": [{new, old, name_score, overlap}], "groups": [...],
+    "duplicates": [...]} for a run. same_name: the run's names already in the library (in any folder),
+    which are new versions anyway. Candidates: library sources under another name whose name key shares
+    enough letter pairs with the new one (Dice NAME_MIN - 0.2 or more), is close (NAME_MIN) and that
+    share OVERLAP_MIN of their paragraphs. new and old are file names."""
     table, split = _read_run(batches)
-    fnames = source_names({sid: table[sid] for sid in split}, names)
-    src_dir = os.path.join(target, cfg['names']['sources_dir'])
-    present = {f for f in os.listdir(src_dir) if f.endswith('.md')} if os.path.isdir(src_dir) else set()
-    listed = set(present)
-    if known:
-        with open(known, encoding='utf-8') as f:
-            listed.update(ln.strip() for ln in f if ln.strip())
-    same, found, cache = [], [], {}
-    for sid, e in split.items():
-        new = fnames[sid]
-        if new in listed:
-            same.append(new)
+    srcs = run_sources(table, split, names)
+    ix = kbindex.open_index(target, cfg)
+    try:
+        plan = plan_run(srcs, ix, groups)
+        lib = ix.source_paths()
+        keys = ix.keys()
+    finally:
+        ix.close()
+    run_names = {srcs[sid]['name'] for sid in plan['current']}
+    same = sorted(n for n in run_names if n in lib)
+    grams = {}
+    for path, key in keys:
+        if path.rsplit('/', 1)[-1] in run_names or not key:
             continue
-        key = name_key(new)
-        for old in sorted(listed - set(fnames.values())):
-            okey = name_key(old)
-            score = 1.0 if key == okey else round(difflib.SequenceMatcher(None, key, okey).ratio(), 2)
-            if not key or score < NAME_MIN:
+        for g in _bigrams(key):
+            grams.setdefault(g, []).append((path, key))
+    src_dir = os.path.join(target, cfg['names']['sources_dir'])
+    found, cache = [], {}
+    for sid in sorted(plan['current'], key=_sid_n):
+        e = srcs[sid]
+        if e['name'] in lib:
+            continue
+        key = name_key(e['name'])
+        if not key:
+            continue
+        mine_g = _bigrams(key)
+        shared = {}
+        for g in mine_g:
+            for item in grams.get(g, ()):
+                shared[item] = shared.get(item, 0) + 1
+        mine = None
+        for (old, okey), n in shared.items():
+            if 2.0 * n / (len(mine_g) + len(_bigrams(okey))) < NAME_MIN - 0.2:
                 continue
-            if old not in present:
-                found.append({'new': new, 'old': old, 'name_score': score, 'overlap': None, 'read': True})
+            score = 1.0 if key == okey else round(difflib.SequenceMatcher(None, key, okey).ratio(), 2)
+            if score < NAME_MIN:
                 continue
             if old not in cache:
-                with open(os.path.join(src_dir, old), encoding='utf-8') as f:
+                with open(os.path.join(src_dir, *old.split('/')), encoding='utf-8') as f:
                     cache[old] = paragraphs(f.read())
-            mine, theirs = paragraphs(e['text']), cache[old]
+            if mine is None:
+                mine = paragraphs(split[sid]['text'])
+            theirs = cache[old]
             overlap = round(len(mine & theirs) / min(len(mine), len(theirs)), 2) if mine and theirs else 0.0
             if overlap >= OVERLAP_MIN:
-                found.append({'new': new, 'old': old, 'name_score': score, 'overlap': overlap, 'read': False})
+                found.append({'new': e['name'], 'old': old.rsplit('/', 1)[-1], 'old_path': old,
+                              'name_score': score, 'overlap': overlap})
     found.sort(key=lambda c: (c['new'], -c['name_score'], c['old']))
-    return {'same_name': sorted(same), 'candidates': found}
+    return {'same_name': same, 'candidates': found, 'groups': plan['groups'], 'duplicates': plan['duplicates']}
 
 
 def _archive_path(folder, fname, old_suffix, stamp0):
@@ -295,60 +406,85 @@ def _archive_path(folder, fname, old_suffix, stamp0):
         k += 1
 
 
-def file_run(batches, cards, target, cfg, names=None, replaces=None, restore=None):
+def file_run(batches, cards, target, cfg, names=None, replaces=None, restore=None, groups=None):
     """File one run into target (a library or a staging folder); returns the run record.
-    replaces: {new source file name: library source it is a new version of}; restore: conflicts
-    (from conflicts()) to keep."""
+    cards may be empty: the sources are then filed without cards, to be read and searched until their
+    cards are written. replaces: {new file name: library file name it is a new version of};
+    restore: conflicts (from conflicts()) to keep; groups: decisions on same-named sources (plan_run)."""
     table, split = _read_run(batches)
     missing = ['%s %s (parts %s)' % (sid, e['name'], ', '.join(map(str, e['missing'])))
                for sid, e in split.items() if e['missing']]
     if missing:
         raise ValueError('parts missing from the batch files, nothing written: ' + '; '.join(missing))
-    fnames = source_names({sid: table[sid] for sid in split}, names)
+    srcs = run_sources(table, split, names)
+    ix = kbindex.open_index(target, cfg)
+    try:
+        plan = plan_run(srcs, ix, groups)
+        lib = ix.source_paths()
+        run_names = {srcs[sid]['name'] for sid in plan['current']}
+        replaces = replaces or {}
+        for new, old in replaces.items():
+            if new not in run_names:
+                raise ValueError('--replaces names %s, which is not a source of this run; nothing written' % new)
+            if not lib.get(old):
+                raise ValueError('--replaces names %s, which is not in the library; nothing written' % old)
 
-    n = cfg['names']
-    src_dir, card_dir = os.path.join(target, n['sources_dir']), os.path.join(target, n['cards_dir'])
-    replaces = replaces or {}
-    for new, old in replaces.items():
-        if new not in fnames.values():
-            raise ValueError('--replaces names %s, which is not a source of this run; nothing written' % new)
-        if not os.path.isfile(os.path.join(src_dir, old)):
-            raise ValueError('--replaces names %s, which is not in the library; nothing written' % old)
-    stamp0 = kbconf.now(cfg['timezone']).replace(microsecond=0)
-    topics, archived, moved = set(), [], {}
-    for fname in list(dict.fromkeys([fnames[sid] for sid in split] + list(replaces.values()))):
-        for folder, sub in ((src_dir, n['sources_dir']), (card_dir, n['cards_dir'])):
-            old = os.path.join(folder, fname)
-            if not os.path.isfile(old):
-                continue
-            if folder == card_dir:
-                with open(old, encoding='utf-8') as f:
-                    topics.update(c['topic'] for c in quote_check.read_cards(f.read())['cards'] if c['topic'])
-            dest_dir = os.path.join(target, n['archive_dir'], sub)
-            os.makedirs(dest_dir, exist_ok=True)
-            dest = _archive_path(dest_dir, fname, n['old_suffix'], stamp0)
-            shutil.move(old, dest)
-            archived.append('%s/%s' % (sub, fname))
-            if folder == src_dir:
-                moved[fname] = '%s/%s/%s' % (n['archive_dir'], sub, os.path.splitext(os.path.basename(dest))[0])
-    cards = list(cards) + _restored(restore or [], fnames, split, table, moved)
-
-    os.makedirs(src_dir, exist_ok=True)
-    for sid, e in split.items():
-        with open(os.path.join(src_dir, fnames[sid]), 'w', encoding='utf-8') as f:
-            f.write(e['text'])
-    quote_check.write([c for c in cards if c['source'] in split], table, card_dir, fnames, lang_of(cfg),
-                      n['sources_dir'], n['topics_dir'])
-    topics.update(c['topic'] for c in cards if c['source'] in split)
-    review = mark_review(target, cfg, [os.path.splitext(f)[0] for f in moved], stamp0.strftime('%Y-%m-%d'))
-    return {'sources': [fnames[sid] for sid in split], 'archived': archived, 'topics': sorted(topics),
+        n = cfg['names']
+        src_dir, card_dir = os.path.join(target, n['sources_dir']), os.path.join(target, n['cards_dir'])
+        stamp0 = kbconf.now(cfg['timezone']).replace(microsecond=0)
+        topics, archived, moved = set(), [], {}
+        for olds in _replaced(srcs, plan, lib, replaces).values():
+            for old in olds:
+                for folder, sub in ((src_dir, n['sources_dir']), (card_dir, n['cards_dir'])):
+                    path = os.path.join(folder, *old.split('/'))
+                    if not os.path.isfile(path):
+                        continue
+                    if folder == card_dir:
+                        topics.update(c['topic'] for c in _read_cards_file(path) if c['topic'])
+                    dest = _archive_to(target, n, sub, old, stamp0)
+                    shutil.move(path, dest)
+                    archived.append('%s/%s' % (sub, old))
+                    if folder == src_dir:
+                        moved[old] = os.path.splitext(os.path.relpath(dest, target).replace(os.sep, '/'))[0]
+        older = []
+        for sid, path in plan['older'].items():
+            dest = _archive_to(target, n, n['sources_dir'], path, stamp0)
+            with open(dest, 'w', encoding='utf-8') as f:
+                f.write(split[sid]['text'])
+            older.append(os.path.relpath(dest, target).replace(os.sep, '/'))
+        current = plan['current']
+        cards = [c for c in cards if c['source'] in current] + _restored(restore or [], srcs, current, split, table, moved)
+        for sid, path in current.items():
+            dest = os.path.join(src_dir, *path.split('/'))
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            with open(dest, 'w', encoding='utf-8') as f:
+                f.write(split[sid]['text'])
+        quote_check.write(cards, table, card_dir, {sid: current[sid] for sid in current}, lang_of(cfg),
+                          n['sources_dir'], n['topics_dir'])
+        topics.update(c['topic'] for c in cards)
+        review = mark_review(target, cfg, [os.path.splitext(p)[0] for p in moved], stamp0.strftime('%Y-%m-%d'))
+        ix.refresh()
+    finally:
+        ix.close()
+    with_cards = {c['source'] for c in cards}
+    return {'sources': [current[sid] for sid in sorted(current, key=_sid_n)], 'archived': archived,
+            'older': older, 'duplicates': plan['duplicates'], 'topics': sorted(topics),
+            'without_cards': [current[sid] for sid in sorted(current, key=_sid_n) if sid not in with_cards],
             'restored': [e['id'] for e in restore or []], 'review': review}
 
 
-def _restored(restore, fnames, split, table, moved):
+def _archive_to(target, n, sub, path, stamp0):
+    """A free path in the archive for an older version of path (below the sources or cards folder)."""
+    folder, _, name = path.rpartition('/')
+    dest_dir = os.path.join(target, n['archive_dir'], sub, *([x for x in folder.split('/') if x]))
+    os.makedirs(dest_dir, exist_ok=True)
+    return _archive_path(dest_dir, name, n['old_suffix'], stamp0)
+
+
+def _restored(restore, srcs, current, split, table, moved):
     """Cards for the conflicts the owner restores: back on the new version where its text still holds
     the quote, else citing the archived old version."""
-    sid_of = {f: sid for sid, f in fnames.items()}
+    sid_of = {srcs[sid]['name']: sid for sid in current}
     out = []
     for e in restore:
         sid = sid_of.get(e.get('source'))
@@ -399,59 +535,93 @@ def mark_review(target, cfg, stems, day):
 
 PAGE_LABELS = {
     'en': {'note': '> This page is generated from the cards by a script; edits here are overwritten.',
-           'empty': 'No current cards.', 'card': 'card', 'undated': 'undated', 'earlier': 'earlier version'},
+           'empty': 'No current cards.', 'card': 'card', 'undated': 'undated', 'earlier': 'earlier version',
+           'years': 'Earlier years:', 'main': 'All years:'},
     'zh': {'note': '> 本页由脚本根据卡片生成，在此修改会被覆盖。',
-           'empty': '暂无现行卡片。', 'card': '卡片', 'undated': '无日期', 'earlier': '旧版本'},
+           'empty': '暂无现行卡片。', 'card': '卡片', 'undated': '无日期', 'earlier': '旧版本',
+           'years': '更早年份：', 'main': '全部年份：'},
 }
+YEAR_SPLIT = 60     # a topic with more cards than this gets one page per earlier year
+YEAR_PAGE_RE = re.compile(r' \((\d{4})\)\.md$')
 
 
 def _all_cards(target, cfg):
     """[(cards file stem, source link, card)] over every cards file of the library."""
-    folder = os.path.join(target, cfg['names']['cards_dir'])
-    out = []
-    for fname in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
-        if not fname.endswith('.md'):
-            continue
-        with open(os.path.join(folder, fname), encoding='utf-8') as f:
-            got = quote_check.read_cards(f.read())
-        out.extend((fname[:-3], got['source'], c) for c in got['cards'])
-    return out
+    ix = kbindex.open_index(target, cfg)
+    try:
+        return [(os.path.splitext(f)[0], src, c) for f, src, c in ix.cards()]
+    finally:
+        ix.close()
 
 
-def render_page(topic, entries, cfg):
+def render_page(topic, entries, cfg, years=None, year=None, page=None):
+    """A topic page; years lists the earlier years that have their own page; year and page name the
+    main page of a year page."""
     lb = PAGE_LABELS[lang_of(cfg)]
-    cards_dir = cfg['names']['cards_dir']
-    w = ['# ' + topic, '', lb['note'], '']
+    cards_dir, topics_dir = cfg['names']['cards_dir'], cfg['names']['topics_dir']
+    w = ['# %s' % topic + (' (%s)' % year if year else ''), '', lb['note'], '']
+    if year:
+        w += ['%s [[%s/%s|%s]]' % (lb['main'], topics_dir, page, quote_check.link_text(topic)), '']
     if not entries:
         w += [lb['empty'], '']
     for day, stem, src, c in entries:
         w.append('- %s · %s' % (day or lb['undated'], c['conclusion']))
         w.append('  > %s [[%s#^%s]] · [[%s/%s|%s]]%s' % (c['quote'], c.get('link') or src, c['anchor'], cards_dir, stem,
                                                        lb['card'], ' · ' + lb['earlier'] if c.get('link') else ''))
+    if years:
+        w += ['', lb['years'] + ' ' + ' · '.join('[[%s/%s (%s)|%s]]' % (topics_dir, page, y, y) for y in years)]
     return '\n'.join(w) + '\n'
 
 
+def _write(path, text):
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write(text)
+
+
 def pages_run(target, cfg, topics=None):
-    """Rebuild the pages of the topics named (every topic with cards when None); returns their paths."""
-    by_key, shown = {}, {}
-    for stem, src, c in _all_cards(target, cfg):
-        k = kbconf.topic_key(c['topic'])
-        shown.setdefault(k, c['topic'])
-        day = c.get('event_date') or c['date'][:10]
-        by_key.setdefault(k, []).append((day, stem, src, c))
-    wanted = [kbconf.topic_key(t) for t in topics] if topics is not None else sorted(by_key)
-    names = dict(shown, **{kbconf.topic_key(t): t for t in topics or ()})
-    folder = os.path.join(target, cfg['names']['topics_dir'])
-    os.makedirs(folder, exist_ok=True)
-    paths = []
-    for k in dict.fromkeys(wanted):
-        entries = sorted(by_key.get(k, []), key=lambda e: (e[0] or '', e[1], int(e[3]['anchor'][1:] or 0)),
-                         reverse=True)
-        path = os.path.join(folder, quote_check.page_name(names[k]) + '.md')
-        with open(path, 'w', encoding='utf-8') as f:
-            f.write(render_page(names[k], entries, cfg))
-        paths.append(path)
-    return paths
+    """Rebuild the pages of the topics named (every topic with cards when None); returns their paths.
+    A topic with more than YEAR_SPLIT cards keeps the newest year (and undated cards) on its page and
+    each earlier year on a page of its own, "<topic> (YYYY)"; year pages no longer needed are removed."""
+    ix = kbindex.open_index(target, cfg)
+    try:
+        held = ix.topics()
+        if topics is None:
+            wanted = sorted(held)
+            names = {k: held[k][0] for k in held}
+        else:
+            wanted = [kbconf.topic_key(t) for t in topics]
+            names = dict({k: held[k][0] for k in wanted if k in held}, **{kbconf.topic_key(t): t for t in topics})
+        folder = os.path.join(target, cfg['names']['topics_dir'])
+        os.makedirs(folder, exist_ok=True)
+        paths = []
+        for k in dict.fromkeys(wanted):
+            entries = []
+            for f, src, c in ix.cards([k]):
+                day = c.get('event_date') or c['date'][:10]
+                entries.append((day, os.path.splitext(f)[0], src, c))
+            entries.sort(key=lambda e: (e[0] or '', e[1], int(e[3]['anchor'][1:] or 0)), reverse=True)
+            page = quote_check.page_name(names[k])
+            by_year = {}
+            if len(entries) > YEAR_SPLIT:
+                for e in entries:
+                    by_year.setdefault(e[0][:4] if e[0] else '', []).append(e)
+            dated = sorted((y for y in by_year if y), reverse=True)
+            earlier = dated[1:]
+            main = [e for e in entries if not earlier or not e[0] or e[0][:4] == dated[0]]
+            path = os.path.join(folder, page + '.md')
+            _write(path, render_page(names[k], main, cfg, earlier, page=page))
+            paths.append(path)
+            for y in earlier:
+                ypath = os.path.join(folder, '%s (%s).md' % (page, y))
+                _write(ypath, render_page(names[k], by_year[y], cfg, year=y, page=page))
+                paths.append(ypath)
+            for f in os.listdir(folder):
+                m = YEAR_PAGE_RE.search(f)
+                if m and f[:m.start()] == page and m.group(1) not in earlier:
+                    os.remove(os.path.join(folder, f))
+        return paths
+    finally:
+        ix.close()
 
 
 SPEC_LABELS = {
@@ -738,6 +908,7 @@ def pending_write(library, cfg, run=None, report=None, entities=None, versions=N
             'new_topics': (report or {}).get('new_topics', []), 'topics': kbconf.topics(spec, cfg),
             'entities': (entities or {}).get('new', []), 'entity_names': [r['name'] for r in kbconf.entities(spec)],
             'same_name': (versions or {}).get('same_name', []), 'versions': (versions or {}).get('candidates', []),
+            'groups': (versions or {}).get('groups', []), 'duplicates': (versions or {}).get('duplicates', []),
             'conflicts': conflicts_found or []}
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, 'w', encoding='utf-8') as f:
@@ -770,6 +941,13 @@ def check_decisions(pend, decisions):
     for pair in d.get('versions') or []:
         if pair not in pairs:
             out.append('%s is not a version candidate of this run' % pair)
+    members = {g['name']: {m['path'] for m in g['members']} for g in pend.get('groups', [])}
+    for name, v in (d.get('groups') or {}).items():
+        if name not in members:
+            out.append('%s is not a group of same-named sources of this run' % name)
+        elif not isinstance(v, dict) or (v.get('current') and v['current'] not in members[name]) \
+                or not set(v.get('separate') or []) <= members[name]:
+            out.append('group %s: current and separate must name sources of the group' % name)
     ids = {c['id'] for c in pend['conflicts']}
     for cid, v in (d.get('conflicts') or {}).items():
         if cid not in ids:
@@ -798,8 +976,9 @@ def pending_read(library, run, work):
     os.makedirs(work, exist_ok=True)
     out = {'add_topics': [t for t in pend['new_topics'] if t not in retopic_to], 'retopic': retopic_to,
            'replaces': list(d.get('versions') or []),
-           'entity_map': os.path.join(work, 'entity-map.json'), 'restore': os.path.join(work, 'restore.json')}
-    for key, data in (('entity_map', emap), ('restore', restore)):
+           'entity_map': os.path.join(work, 'entity-map.json'), 'restore': os.path.join(work, 'restore.json'),
+           'groups': os.path.join(work, 'groups.json')}
+    for key, data in (('entity_map', emap), ('restore', restore), ('groups', d.get('groups') or {})):
         with open(out[key], 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=1)
     return out
@@ -852,12 +1031,13 @@ def replace_pair(text):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description='File an intake run into a 2.0 library and rebuild its topic pages.')
+    ap = argparse.ArgumentParser(description='File an intake run into a library and rebuild its topic pages.')
     kbconf.add_log_args(ap)
     sub = ap.add_subparsers(dest='cmd', required=True)
     f = sub.add_parser('file', help='split the batch files back, archive old versions, write the cards')
     f.add_argument('batches', nargs='+', help='batch files of the run')
-    f.add_argument('--cards', required=True, help='accepted cards (quote_check.py check --accepted)')
+    f.add_argument('--cards', default=None, help='accepted cards (quote_check.py check --accepted); '
+                   'without it the sources are filed without cards')
     f.add_argument('--names', default=None,
                    help='JSON file mapping a source number or original file name to a file name')
     cf = sub.add_parser('conflicts', help='old cards that a new version changes, drops or does not carry over')
@@ -903,6 +1083,8 @@ def main(argv=None):
         p.add_argument('--library', required=True, help='library root (its _kb.json gives the names)')
     for p in (f, pg, vs, cf):
         p.add_argument('--target', default=None, help='work on this folder, laid out like the library, instead')
+    for p in (f, vs, cf):
+        p.add_argument('--groups', default=None, help='JSON file with the decisions on same-named sources of the run')
     rt = sub.add_parser('retopic', help="change accepted cards' topic")
     rt.add_argument('cards', help='accepted cards (JSON lines), rewritten in place')
     rt.add_argument('--from', dest='old', required=True)
@@ -977,13 +1159,14 @@ def main(argv=None):
             print(json.dumps(apply_entities(a.cards, a.library, cfg, decisions), ensure_ascii=False))
             return 0
         target = a.target or a.library
+        groups = _load(getattr(a, 'groups', None), None)
         if a.cmd == 'conflicts':
             with open(a.cards, encoding='utf-8') as fh:
                 cards = [json.loads(ln) for ln in fh if ln.strip()]
-            print(json.dumps(conflicts(a.batches, cards, target, cfg, None, dict(a.replaces)), ensure_ascii=False))
+            print(json.dumps(conflicts(a.batches, cards, target, cfg, None, dict(a.replaces), groups), ensure_ascii=False))
             return 0
         if a.cmd == 'versions':
-            print(json.dumps(version_candidates(a.batches, target, cfg), ensure_ascii=False))
+            print(json.dumps(version_candidates(a.batches, target, cfg, None, groups), ensure_ascii=False))
             return 0
         if a.cmd == 'pages':
             for p in pages_run(target, cfg, None if a.all else a.topic):
@@ -993,15 +1176,18 @@ def main(argv=None):
         if a.names:
             with open(a.names, encoding='utf-8') as fh:
                 names = json.load(fh)
-        with open(a.cards, encoding='utf-8') as fh:
-            cards = [json.loads(ln) for ln in fh if ln.strip()]
+        cards = []
+        if a.cards:
+            with open(a.cards, encoding='utf-8') as fh:
+                cards = [json.loads(ln) for ln in fh if ln.strip()]
         restore = None
         if a.restore:
             with open(a.restore, encoding='utf-8') as fh:
                 restore = json.load(fh)
-        print(json.dumps(file_run(a.batches, cards, target, cfg, names, dict(a.replaces), restore), ensure_ascii=False))
+        print(json.dumps(file_run(a.batches, cards, target, cfg, names, dict(a.replaces), restore, groups),
+                         ensure_ascii=False))
         return 0
-    except (kbconf.ConfigError, OSError, ValueError) as e:
+    except (kbconf.ConfigError, OSError, ValueError, sqlite3.Error) as e:
         log.error('%s', e)
         return 2
 

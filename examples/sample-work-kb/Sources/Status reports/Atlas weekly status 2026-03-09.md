@@ -1,6 +1,6 @@
-> Original path: Atlas weekly status 2026-03-09.eml
+> Original path: Status reports/Atlas weekly status 2026-03-09.eml
 > Document last modified: 2026-03-09 17:00 (from: mail date)
-> Extracted: 2026-10-17 07:06
+> Extracted: 2026-10-19 13:18
 
 # Atlas weekly status 2026-03-09
 

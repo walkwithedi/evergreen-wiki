@@ -27,6 +27,8 @@ The library is a folder on disk; backend.root in the registry is its path (~ all
 
 ## Writing an ingest run
 
-kb-ingest's scripts write straight into the library folder after the user confirms the preview: scripts/ingest.py file writes the sources and cards files and moves each older version, with its cards file, into the archive folder as <stem><old_suffix><YYYYMMDDHHMMSS>.md; scripts/ingest.py pages writes the topic pages. A folder cannot hold two files with the same name, so versions never pile up.
+kb-ingest's scripts write straight into the library folder after the user confirms the preview: scripts/ingest.py file writes the sources and cards files into the folders the documents came from and moves each older version, with its cards file, into the same folder below the archive folder as <stem><old_suffix><YYYYMMDDHHMMSS>.md; scripts/ingest.py pages writes the topic pages. A name is one document wherever its folder is, so versions never pile up.
+
+The sources and cards folders hold subfolders and, in a large library, thousands of files: do not list or search them file by file. scripts/kbindex.py search <library> <keyword> ... finds the paragraphs that hold a keyword through the library's index (_index, kept current from the files by the scripts), and kb-query's scripts/answer.py select gives the material for an answer.
 
 Without a code environment (Python), write nothing to the library and say so; reading and answering still work.

@@ -45,7 +45,7 @@ class Tmp(unittest.TestCase):
 
 class KbconfTest(Tmp):
     def test_defaults_and_overrides(self):
-        write(self.p("lib", "_kb.json"), json.dumps({"schema": 2, "language": "zh", "timezone": "+08:00",
+        write(self.p("lib", "_kb.json"), json.dumps({"schema": 3, "language": "zh", "timezone": "+08:00",
                                                      "names": {"status_card": "00_当前有效状态卡.md", "archive_dir": "归档"}}))
         cfg = kbconf.load_library(self.p("lib"))
         self.assertEqual(cfg["names"]["status_card"], "00_当前有效状态卡.md")
@@ -55,7 +55,7 @@ class KbconfTest(Tmp):
         self.assertEqual(cfg["partitions"]["topic_start"], 2)
 
     def test_validate_problems(self):
-        problems = kbconf.validate({"schema": 3, "metadata": "xml", "bogus": 1,
+        problems = kbconf.validate({"schema": 4, "metadata": "xml", "bogus": 1,
                                     "partitions": {"max": 5, "topic_start": 2, "fallback": "07"},
                                     "names": {"nope": "x"}, "timezone": "Mars Base"})
         text = " ".join(problems)

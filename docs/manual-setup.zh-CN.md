@@ -8,7 +8,7 @@
 
 `python3 install.py --target opencode --locale zh` 把三个技能复制到 `~/.config/opencode/skills`（也可用 `--target agents` 装到 `~/.agents/skills`、`--target claude-code` 装到 `~/.claude/skills`，OpenCode 也读这两处；或用 `--dest <文件夹>`）。`--descriptions <文件>` 用自己的技能描述（每个技能一行，格式同 `locales/zh/descriptions.json`），`--force` 替换已安装的版本，`--dry-run` 只预览。
 
-安装向导（`python3 install.py`）可用 `--agent <目标>` 免答这一题，也可用 `--descriptions`。向导里选到已有知识库的文件夹（`_kb.json` 的 schema 为 2）时，先给预览，再按原样登记，不改动任何文件。1.x 知识库（schema 1）会被拒绝：可以继续用 1.x 版本，或在空文件夹里新建知识库，把材料重新入库。
+安装向导（`python3 install.py`）可用 `--agent <目标>` 免答这一题，也可用 `--descriptions`。向导里选到已有知识库的文件夹（`_kb.json` 的 schema 为 3）时，先给预览，再按原样登记，不改动任何文件。1.x 知识库（schema 1）和 2.0、3.0 知识库（schema 2，来源都在一个文件夹里）会被拒绝：可以继续用建它的那个版本，或在空文件夹里新建知识库，把材料重新入库。
 
 ## 2. 建库
 

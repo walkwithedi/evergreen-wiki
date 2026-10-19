@@ -33,20 +33,21 @@ class Tmp(unittest.TestCase):
 
 class SettingsTest(unittest.TestCase):
     def test_new_settings_are_known_and_checked(self):
-        good = {"schema": 2, "tier": "strong", "batch_chars": 50000, "quote_min": 4, "quote_max": 200}
+        good = {"schema": 3, "tier": "strong", "batch_chars": 50000, "quote_min": 4, "quote_max": 200}
         self.assertEqual(kbconf.validate(good), [])
-        bad = {"schema": 2, "tier": "medium", "batch_chars": 999, "quote_min": 0, "quote_max": 3}
+        bad = {"schema": 3, "tier": "medium", "batch_chars": 999, "quote_min": 0, "quote_max": 3}
         text = " ".join(kbconf.validate(bad))
         for word in ("tier", "batch_chars", "quote_min"):
             self.assertIn(word, text)
-        self.assertIn("quote_max", " ".join(kbconf.validate({"schema": 2, "quote_min": 10, "quote_max": 5})))
-        self.assertEqual(len(kbconf.validate({"schema": 2, "batch_chars": True})), 1)
+        self.assertIn("quote_max", " ".join(kbconf.validate({"schema": 3, "quote_min": 10, "quote_max": 5})))
+        self.assertEqual(len(kbconf.validate({"schema": 3, "batch_chars": True})), 1)
 
-    def test_schema_2_only(self):
-        self.assertEqual(kbconf.validate({"schema": 2}), [])
+    def test_schema_3_only(self):
+        self.assertEqual(kbconf.validate({"schema": 3}), [])
         self.assertIn("1.x", " ".join(kbconf.validate({"schema": 1})))
+        self.assertIn("3.0.x", " ".join(kbconf.validate({"schema": 2})))
         for old in ("convert", "intake", "sources", "delivery", "inbox", "sensitivity", "metadata"):
-            self.assertIn("unknown key", " ".join(kbconf.validate({"schema": 2, old: {}})), old)
+            self.assertIn("unknown key", " ".join(kbconf.validate({"schema": 3, old: {}})), old)
         self.assertNotIn("convert", kbconf.DEFAULTS)
 
     def test_old_library_refused(self):
@@ -57,6 +58,20 @@ class SettingsTest(unittest.TestCase):
                 kbconf.load_library(d)
             self.assertIn("1.x", str(e.exception))
             self.assertIn("not migrated", str(e.exception))
+            with open(os.path.join(d, "_kb.json"), "w", encoding="utf-8") as f:
+                json.dump({"schema": 2, "label": "Flat"}, f)
+            with self.assertRaises(kbconf.ConfigError) as e:
+                kbconf.load_library(d)
+            self.assertIn("one flat sources folder", str(e.exception))
+
+    def test_rel_folder(self):
+        f = kbconf.rel_folder
+        self.assertEqual(f("Atlas/2026/plan.docx"), "Atlas/2026")
+        self.assertEqual(f("plan.docx"), "")
+        self.assertEqual(f("/home/user/plan.docx"), "")          # absolute: not a material path
+        self.assertEqual(f("../plan.docx"), "")
+        self.assertEqual(f("Team\\Plans [old]\\plan.docx"), "Team/Plans -old")
+        self.assertLessEqual(len(f("/".join(["x" * 70] * 5) + "/p.doc")), kbconf.FOLDER_MAX)
 
     def test_new_folder_names(self):
         names = kbconf.resolve_names()
@@ -153,38 +168,74 @@ class LibraryCase(Tmp):
 class FileTest(LibraryCase):
     def test_first_run_files_sources_and_cards(self):
         rec = self.first_run()
-        src = read(self.p("lib", "Sources", "plan.md"))
+        src = read(self.p("lib", "Sources", "Atlas", "plan.md"))       # the folder it came from
         self.assertIn("The pilot starts in April. ^p1", src)
         self.assertIn("> Original path: Atlas/plan.docx", src)
-        cards = read(self.p("lib", "Cards", "plan.md"))
-        self.assertIn("[[Sources/plan#^p2]]", cards)
+        cards = read(self.p("lib", "Cards", "Atlas", "plan.md"))
+        self.assertIn("[[Sources/Atlas/plan#^p2]]", cards)
         self.assertIn("[[Topics/Pilot|Pilot]]", cards)
-        self.assertEqual(sorted(rec["sources"]), ["minutes.md", "plan.md"])
+        self.assertEqual(rec["sources"], ["Atlas/plan.md", "Atlas/minutes.md"])
         self.assertEqual(rec["archived"], [])
         self.assertEqual(rec["topics"], ["Budget", "Pilot"])
 
-    def test_same_name_in_one_run_gets_its_folder(self):
-        b = make_run(self.p("run"), [("plan.docx", "Atlas/plan.docx", "", PLAN_V1),
-                                     ("plan.docx", "Beacon/plan.docx", "", MINUTES)])
+    def test_same_name_in_one_run_is_one_document(self):
+        b = make_run(self.p("run"), [("plan.docx", "Atlas/plan.docx", "2026-03-01 09:00", PLAN_V1),
+                                     ("plan.docx", "Beacon/plan.docx", "2026-03-05 09:00", MINUTES),
+                                     ("plan.docx", "Copy/plan.docx", "2026-03-06 09:00", PLAN_V1)])
+        got = ingest.version_candidates(b, self.p("lib"), self.cfg)
+        self.assertEqual(got["groups"], [{"name": "plan.md", "current": "Beacon/plan.md",
+                                          "members": [{"path": "Atlas/plan.md", "modified": "2026-03-01 09:00"},
+                                                      {"path": "Beacon/plan.md", "modified": "2026-03-05 09:00"}]}])
+        self.assertEqual(got["duplicates"], [{"source": "Copy/plan.md", "existing": "Atlas/plan.md", "in_run": True}])
         rec = ingest.file_run(b, [], self.p("lib"), self.cfg)
-        self.assertEqual(sorted(rec["sources"]), ["Atlas_plan.md", "Beacon_plan.md"])
-        self.assertIn("Budget stays", read(self.p("lib", "Sources", "Beacon_plan.md")))
+        self.assertEqual(rec["sources"], ["Beacon/plan.md"])                 # the newest is current
+        self.assertEqual(len(rec["older"]), 1)
+        self.assertRegex(rec["older"][0], r"^Archive/Sources/Atlas/plan_old\d{14}\.md$")
+        self.assertIn("pilot starts in April", read(self.p("lib", *rec["older"][0].split("/"))))
+        self.assertEqual([d["source"] for d in rec["duplicates"]], ["Copy/plan.md"])
+        self.assertEqual(rec["without_cards"], ["Beacon/plan.md"])
+
+    def test_same_name_group_decisions(self):
+        b = make_run(self.p("run"), [("plan.docx", "Atlas/plan.docx", "2026-03-01 09:00", PLAN_V1),
+                                     ("plan.docx", "Beacon/plan.docx", "2026-03-05 09:00", MINUTES)])
+        rec = ingest.file_run(b, [], self.p("lib"), self.cfg,
+                              groups={"plan.md": {"current": "Atlas/plan.md", "separate": ["Beacon/plan.md"]}})
+        self.assertEqual(rec["sources"], ["Atlas/plan.md", "Beacon/Beacon_plan.md"])
+        self.assertEqual(rec["older"], [])
+        self.assertIn("Budget stays", read(self.p("lib", "Sources", "Beacon", "Beacon_plan.md")))
+
+    def test_same_content_is_filed_once(self):
+        self.first_run()
+        b = make_run(self.p("run2"), [("plan copy.docx", "Elsewhere/plan copy.docx", "2026-03-09 09:00", PLAN_V1)])
+        rec = ingest.file_run(b, [], self.p("lib"), self.cfg)
+        self.assertEqual((rec["sources"], rec["duplicates"]),
+                         ([], [{"source": "Elsewhere/plan copy.md", "existing": "Atlas/plan.md"}]))
+        self.assertFalse(os.path.exists(self.p("lib", "Sources", "Elsewhere")))
+
+    def test_new_version_from_another_folder_moves_there(self):
+        self.first_run()
+        b = make_run(self.p("run2"), [("plan.docx", "Beacon/2026/plan.docx", "2026-04-01 09:00", PLAN_V2)])
+        rec = ingest.file_run(b, [], self.p("lib"), self.cfg)
+        self.assertEqual(rec["sources"], ["Beacon/2026/plan.md"])
+        self.assertEqual(rec["archived"], ["Sources/Atlas/plan.md", "Cards/Atlas/plan.md"])
+        self.assertFalse(os.path.exists(self.p("lib", "Sources", "Atlas", "plan.md")))
+        self.assertEqual(len(os.listdir(self.p("lib", "Archive", "Sources", "Atlas"))), 1)
 
     def test_new_version_archives_source_and_cards(self):
         self.first_run()
         b = make_run(self.p("run2"), [("plan.docx", "Atlas/plan.docx", "2026-04-01 09:00", PLAN_V2)])
         cards = accepted(b, card("S01", "p1", "The pilot starts in May.", "Pilot moves to May", "Schedule"))
         rec = ingest.file_run(b, cards, self.p("lib"), self.cfg)
-        self.assertIn("starts in May", read(self.p("lib", "Sources", "plan.md")))
-        old = sorted(os.listdir(self.p("lib", "Archive", "Sources")))
+        self.assertIn("starts in May", read(self.p("lib", "Sources", "Atlas", "plan.md")))
+        old = sorted(os.listdir(self.p("lib", "Archive", "Sources", "Atlas")))
         self.assertEqual(len(old), 1)
         self.assertRegex(old[0], r"^plan_old\d{14}\.md$")
-        self.assertIn("starts in April", read(self.p("lib", "Archive", "Sources", old[0])))
-        self.assertEqual(os.listdir(self.p("lib", "Archive", "Cards")), old)
-        self.assertNotIn("April", read(self.p("lib", "Cards", "plan.md")))
-        self.assertEqual(rec["archived"], ["Sources/plan.md", "Cards/plan.md"])
+        self.assertIn("starts in April", read(self.p("lib", "Archive", "Sources", "Atlas", old[0])))
+        self.assertEqual(os.listdir(self.p("lib", "Archive", "Cards", "Atlas")), old)
+        self.assertNotIn("April", read(self.p("lib", "Cards", "Atlas", "plan.md")))
+        self.assertEqual(rec["archived"], ["Sources/Atlas/plan.md", "Cards/Atlas/plan.md"])
         self.assertEqual(rec["topics"], ["Pilot", "Schedule"])         # the old cards' topics too
-        self.assertTrue(os.path.isfile(self.p("lib", "Cards", "minutes.md")))
+        self.assertTrue(os.path.isfile(self.p("lib", "Cards", "Atlas", "minutes.md")))
 
     def test_missing_part_refused(self):
         b = make_run(self.p("run"), [("long.docx", "long.docx", "", "\n\n".join(["x" * 600] * 4))], limit=1000)
@@ -206,7 +257,7 @@ class PagesTest(LibraryCase):
         # event date 2026-02-20 comes after the source date 2026-03-01
         self.assertLess(page.index("Pilot starts in April"), page.index("Riverside hosts"))
         self.assertIn("- 2026-03-01 · Pilot starts in April", page)
-        self.assertIn("  > The pilot starts in April. [[Sources/plan#^p1]] · [[Cards/plan|card]]", page)
+        self.assertIn("  > The pilot starts in April. [[Sources/Atlas/plan#^p1]] · [[Cards/Atlas/plan|card]]", page)
         self.assertIn("- 2026-02-20 · Riverside hosts", page)
 
     def test_only_named_topics_and_emptied_page(self):
@@ -245,7 +296,7 @@ class CommandLineTest(Tmp):
     def test_file_then_pages(self):
         os.makedirs(self.p("lib"))
         with open(self.p("lib", "_kb.json"), "w", encoding="utf-8") as f:
-            json.dump({"schema": 2, "language": "en", "names": {"topics_dir": "Subjects"}}, f)
+            json.dump({"schema": 3, "language": "en", "names": {"topics_dir": "Subjects"}}, f)
         b = make_run(self.p("run"), [("plan.docx", "plan.docx", "2026-03-01 09:00", PLAN_V1)])
         with open(self.p("acc.jsonl"), "w", encoding="utf-8") as f:
             for c in accepted(b, card("S01", "p1", "The pilot starts in April.", "April start", "Pilot")):
@@ -254,7 +305,8 @@ class CommandLineTest(Tmp):
             json.dump({"S01": "Atlas plan.md"}, f)
         p = cli("file", *b, "--cards", self.p("acc.jsonl"), "--library", self.p("lib"), "--names", self.p("names.json"))
         self.assertEqual(p.returncode, 0, p.stderr)
-        self.assertEqual(json.loads(p.stdout), {"sources": ["Atlas plan.md"], "archived": [], "topics": ["Pilot"],
+        self.assertEqual(json.loads(p.stdout), {"sources": ["Atlas plan.md"], "archived": [], "older": [],
+                                                 "duplicates": [], "topics": ["Pilot"], "without_cards": [],
                                                  "restored": [], "review": []})
         self.assertIn("[[Subjects/Pilot|Pilot]]", read(self.p("lib", "Cards", "Atlas plan.md")))
         p = cli("pages", "--library", self.p("lib"), "--topic", "Pilot")
@@ -270,7 +322,7 @@ class CommandLineTest(Tmp):
         b = make_run(self.p("run"), [("long.docx", "long.docx", "", "\n\n".join(["x" * 600] * 4))], limit=1000)
         os.makedirs(self.p("lib"))
         with open(self.p("lib", "_kb.json"), "w", encoding="utf-8") as f:
-            json.dump({"schema": 2}, f)
+            json.dump({"schema": 3}, f)
         with open(self.p("none.jsonl"), "w", encoding="utf-8") as f:
             f.write("")
         p = cli("file", b[0], "--cards", self.p("none.jsonl"), "--library", self.p("lib"))
@@ -310,7 +362,7 @@ class EndToEndTest(Tmp):
     def test_two_runs(self):
         os.makedirs(self.p("lib"))
         with open(self.p("lib", "_kb.json"), "w", encoding="utf-8") as f:
-            json.dump({"schema": 2, "tier": "weak"}, f)
+            json.dump({"schema": 3, "tier": "weak"}, f)
         os.makedirs(self.p("src1"))
         os.makedirs(self.p("src2"))
         fx.docx(self.p("src1", "report.docx"), english=True)
@@ -319,11 +371,11 @@ class EndToEndTest(Tmp):
                                                             "entities": ["Project Atlas"]})], "1")
         self.assertEqual((rec["sources"], rec["archived"], rec["topics"]), (["report.md"], [], ["Pilot"]))
         self.assertIn("Report covers the pilot", read(self.p("lib", "Topics", "Pilot.md")))
-        fx.docx(self.p("src2", "report.docx"), english=True, modified="2026-05-06T07:08:09Z")
+        fx.docx(self.p("src2", "report.docx"), english=True, modified="2026-05-06T07:08:09Z", intro="This report covers phase two.")
         rec = self.intake(self.p("src2"), [("report.docx", {"anchor": "p3", "quote": "The menu is shown below.",
                                                             "conclusion": "Menu shown", "topic": "Interface",
                                                             "entities": []})], "2")
-        self.assertEqual(rec["archived"], ["Sources/report.md", "Cards/report.md"])
+        self.assertEqual(rec["archived"], ["Sources/report.md", "Cards/report.md"])   # the top of each material folder
         self.assertEqual(rec["topics"], ["Interface", "Pilot"])
         self.assertIn("No current cards", read(self.p("lib", "Topics", "Pilot.md")))
         self.assertIn("- 2026-05-06 · Menu shown", read(self.p("lib", "Topics", "Interface.md")))
@@ -358,7 +410,7 @@ class LibraryCommandsTest(Tmp):
     def library(self, spec=SPEC_FILE, **kb):
         os.makedirs(self.p("lib"), exist_ok=True)
         with open(self.p("lib", "_kb.json"), "w", encoding="utf-8") as f:
-            json.dump(dict({"schema": 2, "partitions": {"max": 9, "topic_start": 2, "fallback": "09"}}, **kb), f)
+            json.dump(dict({"schema": 3, "partitions": {"max": 9, "topic_start": 2, "fallback": "09"}}, **kb), f)
         with open(self.p("lib", "00_Spec.md"), "w", encoding="utf-8") as f:
             f.write(spec)
 
@@ -447,7 +499,7 @@ class VersionsTest(LibraryCase):
         c = got["candidates"][0]
         self.assertGreaterEqual(c["name_score"], 0.8)
         self.assertEqual(c["overlap"], 0.75)
-        self.assertFalse(c["read"])
+        self.assertEqual(c["old_path"], "status report.md")
 
     def test_file_replaces_archives_the_old_version(self):
         self.first_run()
@@ -455,18 +507,18 @@ class VersionsTest(LibraryCase):
         cards = accepted(b, card("S01", "p1", "The pilot starts in May.", "Pilot moves to May", "Schedule"))
         with self.assertRaises(ValueError):
             ingest.file_run(b, cards, self.p("lib"), self.cfg, replaces={"plan final.md": "nothing.md"})
-        self.assertFalse(os.path.exists(self.p("lib", "Sources", "plan final.md")))
+        self.assertFalse(os.path.exists(self.p("lib", "Sources", "Atlas", "plan final.md")))
         rec = ingest.file_run(b, cards, self.p("lib"), self.cfg, replaces={"plan final.md": "plan.md"})
-        self.assertEqual(rec["sources"], ["plan final.md"])
-        self.assertEqual(rec["archived"], ["Sources/plan.md", "Cards/plan.md"])
+        self.assertEqual(rec["sources"], ["Atlas/plan final.md"])
+        self.assertEqual(rec["archived"], ["Sources/Atlas/plan.md", "Cards/Atlas/plan.md"])
         self.assertEqual(rec["topics"], ["Pilot", "Schedule"])
-        self.assertFalse(os.path.exists(self.p("lib", "Sources", "plan.md")))
-        self.assertRegex(os.listdir(self.p("lib", "Archive", "Sources"))[0], r"^plan_old\d{14}\.md$")
+        self.assertFalse(os.path.exists(self.p("lib", "Sources", "Atlas", "plan.md")))
+        self.assertRegex(os.listdir(self.p("lib", "Archive", "Sources", "Atlas"))[0], r"^plan_old\d{14}\.md$")
 
     def test_command_line(self):
         self.first_run()
         with open(self.p("lib", "_kb.json"), "w", encoding="utf-8") as f:
-            json.dump({"schema": 2}, f)
+            json.dump({"schema": 3}, f)
         b = make_run(self.p("run2"), [("plan v2.docx", "plan v2.docx", "2026-04-01 09:00", PLAN_V1 + "\n\nAdded line.")])
         p = cli("versions", *b, "--library", self.p("lib"))
         self.assertEqual(p.returncode, 0, p.stderr)
@@ -475,7 +527,7 @@ class VersionsTest(LibraryCase):
             f.write("")
         p = cli("file", *b, "--cards", self.p("none.jsonl"), "--library", self.p("lib"), "--replaces", "plan v2.md=plan.md")
         self.assertEqual(p.returncode, 0, p.stderr)
-        self.assertEqual(json.loads(p.stdout)["archived"], ["Sources/plan.md", "Cards/plan.md"])
+        self.assertEqual(json.loads(p.stdout)["archived"], ["Sources/Atlas/plan.md", "Cards/Atlas/plan.md"])
         p = cli("file", *b, "--cards", self.p("none.jsonl"), "--library", self.p("lib"), "--replaces", "no-equals-sign")
         self.assertEqual(p.returncode, 2)
 
@@ -606,6 +658,7 @@ Last updated: 2026-01-01
 3. Riverside Clinic hosts the pilot. [[Sources/plan#^p2|plan]] and [[Sources/minutes#^p1]]
 """
 MINUTES_V2 = "The review moved to Monday.\n\n- Next review on Friday"
+STATUS_LIB = STATUS.replace("[[Sources/", "[[Sources/Atlas/")     # a library's sources keep their folder
 
 
 class ConflictsTest(LibraryCase):
@@ -621,16 +674,17 @@ class ConflictsTest(LibraryCase):
         b, cards = self.second_run()
         got = ingest.conflicts(b, cards, self.p("lib"), self.cfg)
         kinds = [(c["id"], c["kind"], c["source"], c["old_source"], c["old"]["conclusion"]) for c in got]
-        self.assertEqual(kinds, [("c1", "changed", "plan.md", "plan.md", "Pilot starts in April"),
-                                 ("c2", "not_carried", "plan.md", "plan.md", "Riverside hosts"),
-                                 ("c3", "removed", "minutes.md", "minutes.md", "Budget unchanged")])
+        self.assertEqual(kinds, [("c1", "changed", "plan.md", "Atlas/plan.md", "Pilot starts in April"),
+                                 ("c2", "not_carried", "plan.md", "Atlas/plan.md", "Riverside hosts"),
+                                 ("c3", "removed", "minutes.md", "Atlas/minutes.md", "Budget unchanged")])
         self.assertEqual(got[0]["new"]["conclusion"], "Pilot starts in May")
         self.assertEqual(got[1]["new_anchor"], "p2")
         self.assertIsNone(got[2]["new"])
 
     def test_replaced_pair_and_unchanged_cards(self):
         self.first_run()
-        b = make_run(self.p("run2"), [("plan final.docx", "Atlas/plan final.docx", "2026-04-01 09:00", PLAN_V1)])
+        b = make_run(self.p("run2"), [("plan final.docx", "Atlas/plan final.docx", "2026-04-01 09:00",
+                                       PLAN_V1 + "\n\nSigned off.")])
         cards = accepted(b, card("S01", "p1", "The pilot starts in April.", "Pilot starts in April", "Pilot"),
                          card("S01", "p2", "Riverside Clinic hosts the pilot.", "Riverside hosts", "Pilot"))
         self.assertEqual(ingest.conflicts(b, cards, self.p("lib"), self.cfg, replaces={"plan final.md": "plan.md"}), [])
@@ -641,27 +695,27 @@ class ConflictsTest(LibraryCase):
         b, cards = self.second_run()
         got = ingest.conflicts(b, cards, self.p("lib"), self.cfg)
         rec = ingest.file_run(b, cards, self.p("lib"), self.cfg, restore=[got[0], got[1]])
-        old = os.listdir(self.p("lib", "Archive", "Sources"))
-        plan_old = [n for n in old if n.startswith("plan_old")][0][:-3]
-        text = read(self.p("lib", "Cards", "plan.md"))
+        old = os.listdir(self.p("lib", "Archive", "Sources", "Atlas"))
+        plan_old = "Atlas/" + [n for n in old if n.startswith("plan_old")][0][:-3]
+        text = read(self.p("lib", "Cards", "Atlas", "plan.md"))
         self.assertIn("> The pilot starts in April. [[Archive/Sources/%s#^p1]]" % plan_old, text)
         self.assertIn("from an earlier version", text)
-        self.assertIn("> Riverside Clinic hosts the pilot. [[Sources/plan#^p2]]", text)
-        self.assertIn("> The pilot starts in May. [[Sources/plan#^p1]]", text)
+        self.assertIn("> Riverside Clinic hosts the pilot. [[Sources/Atlas/plan#^p2]]", text)
+        self.assertIn("> The pilot starts in May. [[Sources/Atlas/plan#^p1]]", text)
         self.assertEqual(rec["restored"], ["c1", "c2"])
         back = quote_check.read_cards(text)["cards"]
         self.assertEqual(sorted(c.get("link", "") for c in back), ["", "", "Archive/Sources/" + plan_old])
         ingest.pages_run(self.p("lib"), self.cfg, ["Pilot"])
         page = read(self.p("lib", "Topics", "Pilot.md"))
-        self.assertIn("[[Archive/Sources/%s#^p1]] · [[Cards/plan|card]] · earlier version" % plan_old, page)
+        self.assertIn("[[Archive/Sources/%s#^p1]] · [[Cards/Atlas/plan|card]] · earlier version" % plan_old, page)
         self.assertIn("Pilot starts in May", page)
         for c in back:
-            self.assertIn("[[%s#^%s]]" % (c.get("link") or "Sources/plan", c["anchor"]), page)
+            self.assertIn("[[%s#^%s]]" % (c.get("link") or "Sources/Atlas/plan", c["anchor"]), page)
 
     def test_command_line(self):
         self.first_run()
         with open(self.p("lib", "_kb.json"), "w", encoding="utf-8") as f:
-            json.dump({"schema": 2}, f)
+            json.dump({"schema": 3}, f)
         b, cards = self.second_run()
         with open(self.p("acc.jsonl"), "w", encoding="utf-8") as f:
             f.write("".join(json.dumps(c) + "\n" for c in cards))
@@ -674,21 +728,23 @@ class ConflictsTest(LibraryCase):
         p = cli("file", *b, "--cards", self.p("acc.jsonl"), "--library", self.p("lib"), "--restore", self.p("restore.json"))
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertEqual(json.loads(p.stdout)["restored"], ["c3"])
-        self.assertIn("Budget unchanged", read(self.p("lib", "Cards", "minutes.md")))
+        self.assertIn("Budget unchanged", read(self.p("lib", "Cards", "Atlas", "minutes.md")))
 
 
 class ReviewMarkTest(LibraryCase):
     def test_items_citing_a_replaced_source_are_marked_once(self):
         self.first_run()
         with open(self.p("lib", "00_Status-Card.md"), "w", encoding="utf-8") as f:
-            f.write(STATUS)
+            f.write(STATUS_LIB)
         b = make_run(self.p("run2"), [("plan.docx", "Atlas/plan.docx", "2026-04-01 09:00", PLAN_V2)])
         rec = ingest.file_run(b, [], self.p("lib"), self.cfg)
-        self.assertEqual(rec["review"], ["1. The pilot starts in April. [[Sources/plan#^p1]]",
-                                         "3. Riverside Clinic hosts the pilot. [[Sources/plan#^p2|plan]] and [[Sources/minutes#^p1]]"])
+        self.assertEqual(rec["review"], ["1. The pilot starts in April. [[Sources/Atlas/plan#^p1]]",
+                                         "3. Riverside Clinic hosts the pilot. [[Sources/Atlas/plan#^p2|plan]] and "
+                                         "[[Sources/Atlas/minutes#^p1]]"])
         text = read(self.p("lib", "00_Status-Card.md"))
-        self.assertRegex(text, r"1\. The pilot starts in April\. \[\[Sources/plan#\^p1\]\] ⏳ review: plan has a new version "
-                               r"\(\d{4}-\d{2}-\d{2}\)\n2\. The budget stays as planned\. \[\[Sources/minutes#\^p1\]\]\n")
+        self.assertRegex(text, r"1\. The pilot starts in April\. \[\[Sources/Atlas/plan#\^p1\]\] ⏳ review: Atlas/plan has a "
+                               r"new version \(\d{4}-\d{2}-\d{2}\)\n2\. The budget stays as planned\. "
+                               r"\[\[Sources/Atlas/minutes#\^p1\]\]\n")
         b = make_run(self.p("run3"), [("plan.docx", "Atlas/plan.docx", "2026-05-01 09:00", PLAN_V1)])
         rec = ingest.file_run(b, [], self.p("lib"), self.cfg)
         self.assertEqual(rec["review"], [])
@@ -698,11 +754,11 @@ class ReviewMarkTest(LibraryCase):
         self.first_run()
         self.cfg["language"] = "zh"
         with open(self.p("lib", "00_Status-Card.md"), "w", encoding="utf-8") as f:
-            f.write(STATUS)
-        b = make_run(self.p("run2"), [("minutes v2.docx", "minutes v2.docx", "2026-04-02 10:00", MINUTES)])
+            f.write(STATUS_LIB)
+        b = make_run(self.p("run2"), [("minutes v2.docx", "minutes v2.docx", "2026-04-02 10:00", MINUTES_V2)])
         rec = ingest.file_run(b, [], self.p("lib"), self.cfg, replaces={"minutes v2.md": "minutes.md"})
         self.assertEqual(len(rec["review"]), 2)
-        self.assertRegex(read(self.p("lib", "00_Status-Card.md")), r"⏳ 待复核：minutes 有新版本（\d{4}-\d{2}-\d{2}）")
+        self.assertRegex(read(self.p("lib", "00_Status-Card.md")), r"⏳ 待复核：Atlas/minutes 有新版本（\d{4}-\d{2}-\d{2}）")
 
     def test_no_status_card_no_marks(self):
         self.first_run()
@@ -779,7 +835,7 @@ class NoteTest(LibraryCase):
     def test_chinese_note_and_command_line(self):
         os.makedirs(self.p("lib"))
         with open(self.p("lib", "_kb.json"), "w", encoding="utf-8") as f:
-            json.dump({"schema": 2, "language": "zh"}, f)
+            json.dump({"schema": 3, "language": "zh"}, f)
         with open(self.p("words.txt"), "w", encoding="utf-8") as f:
             f.write("试点评审改到周四。")
         p = cli("note", "--library", self.p("lib"), "--title", "试点评审", "--text", self.p("words.txt"), "-o", self.p("work"))
@@ -874,11 +930,11 @@ def init(*args):
 class InitTest(Tmp):
     BASE = ["--language", "en", "--timezone", "UTC", "--scope", "work material"]
 
-    def test_new_library_is_a_schema_2_library(self):
+    def test_new_library_is_a_schema_3_library(self):
         p = init("write", "--root", self.p("lib"), "--preset", "work", *self.BASE)
         self.assertEqual(p.returncode, 0, p.stderr)
         kb = json.loads(read(self.p("lib", "_kb.json")))
-        self.assertEqual((kb["schema"], kb["label"]), (2, "Work"))
+        self.assertEqual((kb["schema"], kb["label"]), (3, "Work"))
         self.assertNotIn("tier", kb)
         self.assertEqual(kbconf.validate(kb), [])
         self.assertEqual(sorted(os.listdir(self.p("lib"))),

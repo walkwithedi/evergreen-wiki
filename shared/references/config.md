@@ -45,14 +45,14 @@ A library holds, in its root, _kb.json (settings; its name starts with an unders
 | _kb.json | machine-readable settings, below |
 | the spec (names.spec, default 00_Spec.md) | Table A partitions and topics, Table B term fixes, Table C open issues, Table E entities and their aliases, Table F value filters, folders and names, cards and evidence, scope |
 | the status card (names.status_card) | what is true now, every item citing its source passage; the library's home page |
-| names.sources_dir (Sources) | one Markdown file per source document, named after the original file, paragraphs anchored ^p1, ^p2, ... |
+| names.sources_dir (Sources) | one Markdown file per source document, named after the original file, in the folder it came from below the material root, paragraphs anchored ^p1, ^p2, ... A name is one document wherever its folder is. |
 | names.cards_dir (Cards) | one cards file per source, with the same name: each card a conclusion with its exact source sentence |
 | names.topics_dir (Topics) | one page per topic, every statement citing its card's source passage |
 | names.archive_dir (Archive) | older versions of sources and cards, never deleted |
 
 The spec is the source of every rule about partitions, topics, terms and entities. Read it from the library each time; never fill it in from memory or from these instructions.
 
-The status card holds numbered items ("1. ..."), each citing the source passage it rests on ([[Sources/<source>#^pN]]). Two rules keep it honest:
+The status card holds numbered items ("1. ..."), each citing the source passage it rests on ([[Sources/<folder>/<source>#^pN]]). Two rules keep it honest:
 - When a source it cites gets a new version, kb-ingest's filing script appends a review mark to the item: "⏳ review: <source> has a new version (<date>)" ("⏳ 待复核：<source> 有新版本（<date>）"). A marked item is not to be relied on until it is checked against the current sources; its mark is removed only when the item is rewritten.
 - The status card is never rewritten freely. Write the rewrite to a work file and run python3 scripts/ingest.py status-check --old <status card> --new <rewrite> (kb-ingest's scripts). Exit 3 lists removed items, changed items and source links no longer cited: show each to the user, who accepts it or has it restored in the rewrite; run the check again. Only a rewrite that passes is written (--write --library <library>).
 
@@ -60,7 +60,7 @@ The status card holds numbered items ("1. ..."), each citing the source passage 
 
 ```json
 {
-  "schema": 2,
+  "schema": 3,
   "label": "Work",
   "preset": "work",
   "language": "en",
@@ -70,7 +70,7 @@ The status card holds numbered items ("1. ..."), each citing the source passage 
 }
 ```
 
-- schema: 2. A _kb.json with schema 1 belongs to a 1.x library: this release does not read or migrate it; say so and stop (the 1.x release keeps working for it, or a new library is set up and the material ingested again).
+- schema: 3 (sources and cards in the folders the documents came from). A _kb.json with schema 1 belongs to a 1.x library, one with schema 2 to a 2.0 or 3.0 library (one flat sources folder): this release does not read or migrate them; say so and stop (the release that made it keeps working for it, or a new library is set up and the material ingested again).
 - language: language of replies and new files for this library.
 - timezone: IANA name or a fixed offset such as +08:00. Use it for every time stamp (note times, archive suffixes). The scripts resolve IANA names only on Python 3.9+ with a timezone database; without one, use the fixed offset.
 - batch_chars (optional): characters per batch file (default 20000).

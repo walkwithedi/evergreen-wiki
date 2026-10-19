@@ -41,7 +41,7 @@ Pick the question's keywords: names, terms (the standard form from Table B and t
 
   python3 scripts/answer.py select <library root> <keyword> [<keyword> ...]
 
-It lists the status-card items and the cards the keywords point to (a keyword that names an entity of Table E counts for all its aliases; a keyword that names a topic brings that topic's cards), best first, each with its quote and source link; items marked for review say so; when no card matches, it lists the source paragraphs holding a keyword, marked as not on a card. Answer only from what it lists. When it finds nothing, try once more with other forms of the keywords, then answer as not found.
+It lists the status-card items and the cards the keywords point to (a keyword that names an entity of Table E counts for all its aliases; a keyword that names a topic brings that topic's cards), best first, each with its quote and source link; items marked for review say so; it also lists the source paragraphs holding a keyword, marked as not on a card: those of sources without cards yet ("source without cards yet": filed, their cards still to be written) and, when no card matches, those of any source. Answer only from what it lists. When it finds nothing, try once more with other forms of the keywords, then answer as not found.
 
 Without Python: search yourself, inside the library root only. Status card first (read it whole when it is under 8000 characters), then the cards and topic pages with find_by_text; read a source file only at the paragraph a card cites, or whole when the question needs the whole document.
 
@@ -54,7 +54,7 @@ Rules:
 Every statement of fact is followed by a quote line with the exact sentence it rests on and its link:
 
   The pilot was extended to 2026-04-27.
-  > The steering group approved extending the pilot by two weeks, to 2026-04-27. [[Sources/Atlas steering minutes 2026-03-13#^p2]]
+  > The steering group approved extending the pilot by two weeks, to 2026-04-27. [[Sources/Meetings/Atlas steering minutes 2026-03-13#^p2]]
 
 1. Quote character for character from a card's quote or the source paragraph, with the link the card or select gives. Never shorten, translate or reword a quote; the statement above it says it in your words, in the library language.
 2. Priority: the status card, then cards and topic pages, then source paragraphs. When they disagree, give each with its quote and say which is newer; do not decide who is right.

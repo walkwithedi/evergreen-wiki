@@ -14,7 +14,7 @@ Subcommands (results on stdout, logs on stderr):
             into project instructions (the line plus the registry)
 
 Options for plan/write: --label --id --scope --language --timezone --date.
-Missing options take the values printed by defaults. A new library is _kb.json (schema 2), the spec, the status card and the folders for sources, cards, topics
+Missing options take the values printed by defaults. A new library is _kb.json (schema 3), the spec, the status card and the folders for sources, cards, topics
 and the archive.
 
 Exit codes: 0 ok, 2 bad input, 3 refused (folder holds Markdown files, id already used).
