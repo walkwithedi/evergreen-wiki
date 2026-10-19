@@ -2,9 +2,9 @@
 
 All three skills share one version number. To release, update this file and the "Version:" line of every SKILL.md together and merge to main; the release workflow then publishes v<version>.
 
-## Unreleased
+## 4.0.0
 
-4.0 (in progress, docs/design-4.0.md): one library carries about ten thousand documents.
+4.0 keeps the 3.0 setting (an offline Kylin workstation, OpenCode, local libraries, script-led steps) and makes one library carry about ten thousand documents: sources keep the folders they came from, a library index makes filing, pages and answers independent of the library's size, and the knowledge base client ingests material itself, filing every document at once and writing cards first for the ones the rules pick and later for the rest. Libraries made by 2.0 or 3.0 are not read; 3.0.0 keeps working for them. The design is in docs/design-4.0.md.
 
 Removed and incompatible
 - Libraries are schema 3. A _kb.json of schema 2 (2.0.x and 3.0.x, one flat sources folder) is refused with a message naming 3.0.x, as schema 1 is; libraries are not migrated. install.py refuses such a folder in the same words.

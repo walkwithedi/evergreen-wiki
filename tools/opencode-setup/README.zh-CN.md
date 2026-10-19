@@ -133,4 +133,5 @@ cd tools/opencode-setup
 
 随 evergreen-wiki 发版，版本号与仓库一致，变更记在仓库的 CHANGELOG.md。
 
+- 4.0.0：AK 显示前 4 位、后 4 位和位数，10 位及以下全部打星号。
 - 3.0.0：并入 evergreen-wiki 的 `tools/opencode-setup/`。AK 申请位置与 Node 切换方法的提示改为通用说法，可在本机提示文件里改写；`~/.bashrc` 标记段与自检日志的名称不变，已配置的工作站无须重做。

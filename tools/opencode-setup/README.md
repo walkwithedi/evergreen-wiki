@@ -83,4 +83,5 @@ cd tools/opencode-setup
 
 Released with evergreen-wiki under the repository's version; changes are in CHANGELOG.md.
 
+- 4.0.0: the key is shown as its first and last four characters with its length; ten characters or fewer show as asterisks.
 - 3.0.0: moved into evergreen-wiki as `tools/opencode-setup/`. The hints on where to get a key and how to switch Node are general and can be reworded in a local hints file; the `~/.bashrc` block and the self-check log keep their names, so configured workstations need nothing redone.

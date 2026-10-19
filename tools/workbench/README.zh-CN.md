@@ -55,4 +55,5 @@ evergreen-wiki/              知识库技能、tools/workbench、tools/opencode-
 
 随 evergreen-wiki 发版，版本号与仓库一致，变更记在仓库的 CHANGELOG.md。
 
+- 4.0.0：客户端自己入库（入库、空闲时补抽卡片、投放文件夹自动入库）；客户端正在入库、有对话在处理或等你回答、有管理步骤在运行时，不切换简易版和全版。
 - 3.0.0：并入 evergreen-wiki 的 `tools/workbench/`，直接使用本仓库的 `tools/kb-client` 和 `tools/opencode-setup`，不再另行下载知识库发行包；发版时附工作台发行包 `workbench-bundle-<版本>.zip`。`~/.config/work-kb/` 下的选择、位置与日志沿用原路径。

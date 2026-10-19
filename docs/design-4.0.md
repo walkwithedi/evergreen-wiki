@@ -1,6 +1,6 @@
 # Design: 4.0, libraries of ten thousand documents
 
-Status: in progress. Each step below is its own pull request; 4.0.0 is released after the last one.
+Status: implemented in 4.0.0. Each step below was its own pull request.
 
 ## 1. Scope
 
