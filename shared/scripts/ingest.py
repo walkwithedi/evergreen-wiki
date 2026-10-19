@@ -95,6 +95,16 @@ add-topic: appends topics the owner confirmed to a partition of Table A (partiti
 
 retopic: changes the topic of accepted cards, for a new topic the owner put under a known one.
 
+file --sources S01,S03 files only those sources of the batch files (the others are left for another call).
+
+backfill: batch files for sources already in the library without cards (the newest first, or --source
+  paths), one source per file, kept whole, with the library's anchors; the run then goes on with
+  quote_check.py check and add-cards.
+
+add-cards: writes the cards of such sources. A source must be in the library at its path, with the same
+  content and no cards file; nothing is archived. Prints the sources that got cards, their topics and the
+  sources refused with the reason.
+
 check: a read-only health check (health_check): quotes no longer in their paragraph, links to files that do
   not exist, topic pages missing, out of date or no longer built, cards files without their source,
   status-card items marked for review or citing a source that is not current, runs waiting for decisions
@@ -121,6 +131,8 @@ Usage:
   ingest.py add-topic --library DIR --topic NAME [--topic NAME ...] [--partition NN]
   ingest.py retopic ACCEPTED.jsonl --from TOPIC --to TOPIC
   ingest.py check --library DIR [--json]
+  ingest.py backfill --library DIR -o DIR [--source PATH ...] [--limit N]
+  ingest.py add-cards BATCH.md [BATCH.md ...] --cards ACCEPTED.jsonl --library DIR
 """
 import argparse
 import difflib
@@ -283,11 +295,11 @@ def _read_cards_file(path):
         return quote_check.read_cards(f.read())['cards']
 
 
-def conflicts(batches, cards, target, cfg, names=None, replaces=None, groups=None):
+def conflicts(batches, cards, target, cfg, names=None, replaces=None, groups=None, only=None):
     """Old cards of the sources the run replaces that the new version changes, drops or does not
     carry over: [{id, kind, source, old_source, old, new, new_anchor}]; source is the new name,
     old_source the old version's path below the sources folder."""
-    table, split = _read_run(batches)
+    table, split = _read_run(batches, only)
     srcs = run_sources(table, split, names)
     ix = kbindex.open_index(target, cfg)
     try:
@@ -326,8 +338,8 @@ def conflicts(batches, cards, target, cfg, names=None, replaces=None, groups=Non
     return [dict(id='c%d' % i, **e) for i, e in enumerate(out, 1)]
 
 
-def _read_run(batches):
-    """(source table, split sources) of a run's batch files."""
+def _read_run(batches, only=None):
+    """(source table, split sources) of a run's batch files; only: the source numbers to keep (all when None)."""
     texts = []
     for p in batches:
         with open(p, encoding='utf-8') as f:
@@ -336,6 +348,11 @@ def _read_run(batches):
     for t in texts:
         table.update(kb_batch.sources_table(t))
     split = kb_batch.split_back(texts)
+    if only is not None:
+        unknown = sorted(set(only) - set(split))
+        if unknown:
+            raise ValueError('--sources names %s, not in the batch files; nothing written' % ', '.join(unknown))
+        split = {sid: e for sid, e in split.items() if sid in only}
     for sid, e in split.items():
         table.setdefault(sid, {'name': e['name'], 'path': '', 'modified': ''})
     return table, split
@@ -413,12 +430,13 @@ def _archive_path(folder, fname, old_suffix, stamp0):
         k += 1
 
 
-def file_run(batches, cards, target, cfg, names=None, replaces=None, restore=None, groups=None):
+def file_run(batches, cards, target, cfg, names=None, replaces=None, restore=None, groups=None, only=None):
     """File one run into target (a library or a staging folder); returns the run record.
     cards may be empty: the sources are then filed without cards, to be read and searched until their
     cards are written. replaces: {new file name: library file name it is a new version of};
-    restore: conflicts (from conflicts()) to keep; groups: decisions on same-named sources (plan_run)."""
-    table, split = _read_run(batches)
+    restore: conflicts (from conflicts()) to keep; groups: decisions on same-named sources (plan_run);
+    only: the source numbers of the batch files to file (all when None)."""
+    table, split = _read_run(batches, only)
     missing = ['%s %s (parts %s)' % (sid, e['name'], ', '.join(map(str, e['missing'])))
                for sid, e in split.items() if e['missing']]
     if missing:
@@ -512,6 +530,76 @@ def _restored(restore, srcs, current, split, table, moved):
                                  % (e['old_source'], e.get('id')))
             c.update(anchor=oc['anchor'], date=oc.get('date', ''), link=link)
         out.append(c)
+    return out
+
+
+def add_cards(batches, cards, target, cfg):
+    """Write the cards of sources already in the library that have none yet (batch files made by
+    backfill_batch). Each source must be in the library at its path, with the same content and no cards
+    file; nothing is archived. Returns {"sources", "topics", "refused": [{source, reason}]}."""
+    table, split = _read_run(batches)
+    srcs = run_sources(table, split)
+    n = cfg['names']
+    ix = kbindex.open_index(target, cfg)
+    try:
+        held = {p: fp for p, fp in ix.db.execute('SELECT path, fp FROM sources')}
+        names, refused = {}, []
+        for sid in sorted(split, key=_sid_n):
+            e = srcs[sid]
+            if e['path'] not in held:
+                refused.append({'source': e['path'], 'reason': 'not in the library'})
+            elif held[e['path']] != e['fp']:
+                refused.append({'source': e['path'], 'reason': 'the library file changed since the batch file was made'})
+            elif os.path.isfile(os.path.join(target, n['cards_dir'], *e['path'].split('/'))):
+                refused.append({'source': e['path'], 'reason': 'it has cards already'})
+            else:
+                names[sid] = e['path']
+        mine = [c for c in cards if c['source'] in names]
+        quote_check.write(mine, table, os.path.join(target, n['cards_dir']), names, lang_of(cfg),
+                          n['sources_dir'], n['topics_dir'])
+        ix.refresh()
+    finally:
+        ix.close()
+    with_cards = {c['source'] for c in mine}
+    return {'sources': [names[sid] for sid in sorted(names, key=_sid_n) if sid in with_cards],
+            'topics': sorted({c['topic'] for c in mine}), 'refused': refused}
+
+
+BACKFILL_PREFIX = 'backfill_'
+
+
+def backfill_batch(target, cfg, outdir, paths=None, limit=None):
+    """Batch files for sources of the library without cards: the paths given (below the sources folder),
+    else the newest first, at most limit sources; one source per batch file, kept whole, anchors as in
+    the library (kb_batch.from_library). Returns the batch files written."""
+    n = cfg['names']
+    ix = kbindex.open_index(target, cfg)
+    try:
+        uncarded = ix.uncarded()
+    finally:
+        ix.close()
+    dates = dict(uncarded)
+    if paths is None:
+        paths = [p for p, _ in uncarded]
+    else:
+        missing = [p for p in paths if p not in dates]
+        if missing:
+            raise ValueError('not sources without cards: %s' % ', '.join(missing))
+    if limit:
+        paths = paths[:limit]
+    os.makedirs(outdir, exist_ok=True)
+    stamp = kbconf.now(cfg['timezone']).strftime('%Y%m%d-%H%M%S')
+    out = []
+    for i, p in enumerate(paths, 1):
+        with open(os.path.join(target, n['sources_dir'], *p.split('/')), encoding='utf-8') as f:
+            text = f.read()
+        units = kb_batch.from_library([{'name': p.rsplit('/', 1)[-1], 'path': p, 'modified': dates[p], 'text': text}])
+        name = '%s%s_b%02d' % (BACKFILL_PREFIX, stamp, i)
+        path = os.path.join(outdir, name + '.md')
+        limit_chars, tier = kb_batch.batch_limit(None, cfg.get('batch_chars'))
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(kb_batch.render(units, 1, 1, name, tier, max(limit_chars, units[0]['chars'])))
+        out.append(path)
     return out
 
 
@@ -1246,6 +1334,17 @@ def main(argv=None):
     ck = sub.add_parser('check', help='a read-only check of the library (exit 3 when it finds problems)')
     ck.add_argument('--json', action='store_true', help='print JSON instead of text')
     ck.add_argument('--library', required=True, help='library root')
+    ac = sub.add_parser('add-cards', help='write the cards of library sources that have none yet')
+    ac.add_argument('batches', nargs='+', help='batch files made by backfill')
+    ac.add_argument('--cards', required=True, help='accepted cards (quote_check.py check --accepted)')
+    ac.add_argument('--library', required=True, help='library root')
+    bf = sub.add_parser('backfill', help='batch files for library sources without cards, newest first')
+    bf.add_argument('--library', required=True, help='library root')
+    bf.add_argument('-o', '--outdir', required=True, help='work folder for the batch files')
+    bf.add_argument('--source', action='append', default=None, help='a source path below the sources folder (repeatable)')
+    bf.add_argument('--limit', type=int, default=None, help='at most this many sources')
+    for p in (f, cf):
+        p.add_argument('--sources', default=None, help='file only these source numbers of the batch files, e.g. S01,S03')
     rt = sub.add_parser('retopic', help="change accepted cards' topic")
     rt.add_argument('cards', help='accepted cards (JSON lines), rewritten in place')
     rt.add_argument('--from', dest='old', required=True)
@@ -1275,6 +1374,15 @@ def main(argv=None):
             print('%d card%s now under %s' % (n, '' if n == 1 else 's', a.new))
             return 0
         cfg = kbconf.load_library(a.library)
+        if a.cmd == 'backfill':
+            for path in backfill_batch(a.library, cfg, a.outdir, a.source, a.limit):
+                print(path)
+            return 0
+        if a.cmd == 'add-cards':
+            with open(a.cards, encoding='utf-8') as fh:
+                cards = [json.loads(ln) for ln in fh if ln.strip()]
+            print(json.dumps(add_cards(a.batches, cards, a.library, cfg), ensure_ascii=False))
+            return 0
         if a.cmd == 'check':
             got = health_check(a.library, cfg)
             print(json.dumps(got, ensure_ascii=False) if a.json else render_check(got, lang_of(cfg)), end='')
@@ -1325,10 +1433,11 @@ def main(argv=None):
             return 0
         target = a.target or a.library
         groups = _load(getattr(a, 'groups', None), None)
+        only = [x.strip().upper() for x in a.sources.split(',') if x.strip()] if getattr(a, 'sources', None) else None
         if a.cmd == 'conflicts':
             with open(a.cards, encoding='utf-8') as fh:
                 cards = [json.loads(ln) for ln in fh if ln.strip()]
-            print(json.dumps(conflicts(a.batches, cards, target, cfg, None, dict(a.replaces), groups), ensure_ascii=False))
+            print(json.dumps(conflicts(a.batches, cards, target, cfg, None, dict(a.replaces), groups, only), ensure_ascii=False))
             return 0
         if a.cmd == 'versions':
             print(json.dumps(version_candidates(a.batches, target, cfg, None, groups), ensure_ascii=False))
@@ -1349,7 +1458,7 @@ def main(argv=None):
         if a.restore:
             with open(a.restore, encoding='utf-8') as fh:
                 restore = json.load(fh)
-        print(json.dumps(file_run(a.batches, cards, target, cfg, names, dict(a.replaces), restore, groups),
+        print(json.dumps(file_run(a.batches, cards, target, cfg, names, dict(a.replaces), restore, groups, only),
                          ensure_ascii=False))
         return 0
     except (kbconf.ConfigError, OSError, ValueError, sqlite3.Error) as e:

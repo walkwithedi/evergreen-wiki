@@ -177,11 +177,16 @@ def make_app_class():
 
         def kb_busy(self):
             """工作台此刻在忙什么，不忙时为空：有未完成的管理步骤（安装与建库、备份等，GET /api/state 的
-            job），或有对话窗口在处理、有卡片等人（GET /api/chat/state 的 windows；入库在对话里进行）。"""
+            job），客户端自己的入库在进行或在等你决定（GET /api/ingest），或有对话窗口在处理、有卡片等人
+            （GET /api/chat/state 的 windows；在对话里请助手入库时也是这样）。"""
             r = self.kb_call("GET", "/api/state")
             job = r.get("job") if isinstance(r, dict) else None
             if isinstance(job, dict) and not job.get("done"):
                 return "step"
+            r = self.kb_call("GET", "/api/ingest")  # the client's own ingest run (4.0 clients)
+            run = r.get("run") if isinstance(r, dict) else None
+            if isinstance(run, dict) and run.get("state") in ("running", "stopping", "waiting"):
+                return "ingest"
             r = self.kb_call("GET", "/api/chat/state")
             ag = r.get("agent") if isinstance(r, dict) else None
             wins = ag.get("windows") if isinstance(ag, dict) else None
@@ -218,6 +223,9 @@ def make_app_class():
                     if busy == "step":
                         LOG.info("工作台有管理步骤在运行，不切换版本")
                         return "", "工作台有知识库管理步骤在运行（如安装与建库、备份）：等它完成后再换版本"
+                    if busy == "ingest":
+                        LOG.info("工作台正在入库，不切换版本")
+                        return "", "工作台正在入库（或在等你决定）：等它完成，或在工作台里点「停止」后，再换版本"
                     if busy == "chat":
                         LOG.info("工作台有对话在处理，不切换版本")
                         return "", ("工作台有对话还在处理或等你回答（入库也在对话里进行）：换版本会重启工作台、"

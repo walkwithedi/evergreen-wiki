@@ -550,6 +550,24 @@ body.kb-open .kb-toggle { background: var(--soft); color: var(--accent); }
 .pending-items { margin: 0; padding-left: 18px; font-size: 13.5px; }
 .pending-items li { overflow-wrap: anywhere; margin: 2px 0; }
 
+/* client-run ingest: the material form, the run, backfill and automatic ingest */
+.ingest h3 { font-size: 14px; margin: 12px 0 6px; }
+.ingest .row { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin: 4px 0; }
+.ingest code { overflow-wrap: anywhere; font-size: 12.5px; }
+.ingest-folders { max-height: 220px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+.ingest-folders label { display: block; font-size: 13.5px; }
+.ingest-bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; margin: 6px 0; }
+.ingest-bar > span { display: block; height: 100%; background: var(--accent); transition: width .3s; }
+.ingest-items { list-style: none; margin: 0; padding: 0; max-height: 240px; overflow: auto; font-size: 13px; }
+.ingest-items li { display: flex; gap: 8px; padding: 1px 0; }
+.ingest-items .st { flex: none; width: 6em; color: var(--muted); }
+.ingest-items .st-carded .st, .ingest-items .st-filed .st { color: var(--good); }
+.ingest-items .st-failed .st, .ingest-items .st-empty .st { color: var(--bad); }
+.ingest-items .st-working .st { color: var(--accent); font-weight: 600; }
+.ingest-items .p { overflow-wrap: anywhere; }
+.pending-bulk { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 6px; }
+.pending-grp { flex-direction: column; align-items: flex-start; }
+
 /* health check: one foldable list per kind of finding */
 .health-group { margin: 4px 0; }
 .health-group summary { cursor: pointer; font-size: 13.5px; }

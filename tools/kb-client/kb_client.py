@@ -48,6 +48,8 @@ import kb_manage  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import agent as agent_mod  # noqa: E402
+import auto  # noqa: E402
+import ingest_run  # noqa: E402
 import skills_admin  # noqa: E402
 
 log = logging.getLogger("kb_client")
@@ -70,6 +72,7 @@ RESTART_STEPS = ("setup", "skill_upgrade")  # OpenCode is restarted after these,
 MAX_TEXT = 20000  # characters of one message from the page
 MAX_PATHS = 200  # material paths sent with one message
 MAX_ENTRIES = 2000  # entries listed per folder; the page says when a folder holds more
+PLAN_SHOWN = 300  # documents of a plan listed on the page
 STATIC = {"index.html": "text/html; charset=utf-8", "app.js": "text/javascript; charset=utf-8",
           "style.css": "text/css; charset=utf-8"}
 
@@ -97,6 +100,11 @@ MSG = {
         "cancel": "Cancel",
         "which_item": "Which item should be changed?",
         "started": "Knowledge base client: {url}",
+        "pending_client": "The decisions are saved; the client's ingest goes on with them.",
+        "ingest_library": "Choose a local library that exists on this computer.",
+        "ingest_agent": "OpenCode is not ready yet.",
+        "ingest_running": "An ingest run is going on; wait for it or stop it first.",
+        "ingest_nothing": "There is no ingest run to stop or continue.",
         "stopped": "Knowledge base client stopped.",
     },
     "zh": {
@@ -122,6 +130,11 @@ MSG = {
         "cancel": "取消",
         "which_item": "修改哪一项？",
         "started": "知识库客户端：{url}",
+        "pending_client": "决定已保存，客户端的入库会按这些决定接着做。",
+        "ingest_library": "请选择本机上存在的本地知识库。",
+        "ingest_agent": "OpenCode 还没有就绪。",
+        "ingest_running": "正在入库，等它完成或先停止。",
+        "ingest_nothing": "没有可以停止或继续的入库。",
         "stopped": "知识库客户端已停止。",
     },
 }
@@ -263,6 +276,10 @@ class App:
         self.last_seen = time.time()
         self.output = None
         self.server = None
+        self.ingest = None  # the client-run ingest (ingest_run.Run): the running one, else the latest
+        self.backfills = {}  # library id -> ingest_run.Backfill
+        self.auto = auto.Watcher(self, kb_manage.state_dir())  # automatic ingest from drop folders
+        self.ingest_lock = threading.Lock()
 
     # ---------- steps ----------
 
@@ -350,8 +367,19 @@ class App:
                                              self.start_timeout, chat_first=bool(self.options.get("chat_first")))
                 self.agent.lock_fn = self.write_lock
                 self.agent.guard_fn = self.guard
+                threading.Thread(target=self.after_ready, daemon=True).start()
         self.agent.start()
         return self.agent, None
+
+    def after_ready(self):
+        """Once OpenCode is ready: the backfills switched on earlier start again, and the drop folders are
+        watched."""
+        for _ in range(int(self.start_timeout) + 5):
+            if self.agent is not None and self.agent.state == "ready":
+                self.start_backfills()
+                self.auto.start()
+                return
+            time.sleep(1)
 
     def remembered(self):
         """How many Always allow answers the client keeps (agent.remembered)."""
@@ -372,13 +400,137 @@ class App:
         self.agent.retry(prog)
         return self.agent, None
 
+    # ---------- client-run ingest ----------
+
+    def run_changed(self, obj):
+        """An ingest run or a backfill changed: the page hears of it, and the write lock follows."""
+        if self.agent is None:
+            return
+        if isinstance(obj, ingest_run.Run):
+            self.agent.feed.emit("ingest", run=obj.snapshot())
+        else:
+            self.agent.feed.emit("backfill", backfill=obj.snapshot())
+        self.agent.emit_windows()
+
+    def ingest_running(self):
+        run = self.ingest
+        return run is not None and run.running()
+
+    def ingest_scripts(self):
+        """kb-ingest's scripts folder where OpenCode reads the skill, else this repository's copy."""
+        found = next((f["folder"] for f in kb_skills()["found"] if f["name"] == "kb-ingest"), "")
+        folder = os.path.join(found, "scripts") if found else kb_manage.SCRIPTS
+        return folder if os.path.isfile(os.path.join(folder, "ingest.py")) else kb_manage.SCRIPTS
+
+    def local_library(self, lib_id):
+        return next((x for x in libraries() if x["id"] == lib_id and x["root"] and x["exists"]), None)
+
+    def start_ingest(self, body):
+        """Starts a run for {library, material, rules, parallel}; (run, None) or (None, reason)."""
+        lib = self.local_library(body.get("library"))
+        if lib is None:
+            return None, "library"
+        ag, why = self.start_agent()
+        if ag is None or ag.state != "ready":
+            return None, "agent"
+        with self.ingest_lock:
+            if self.ingest_running():
+                return None, "running"
+            if self.write_lock() is not None:
+                return None, "locked"
+            got = ingest_run.plan(walk_to(str(body.get("material") or ""))[0], body.get("rules"), lib["root"])
+            run_id = time.strftime("%Y%m%d-%H%M%S")
+            work = os.path.join(ingest_run.runs_root(kb_manage.state_dir()), run_id)
+            os.makedirs(work, mode=0o700, exist_ok=True)
+            run = ingest_run.Run(self, {"id": lib["id"], "label": lib["label"], "root": lib["root"]},
+                                 got["material"], body.get("rules"),
+                                 self.ingest_scripts(), work, self.lang, run_id, body.get("parallel") or 1,
+                                 bool(body.get("unattended")))
+            self.ingest = run
+        run.start()
+        return run, None
+
+    def continue_ingest(self):
+        run = self.ingest
+        if run is None or run.running() or run.state == "done":
+            return None, "nothing"
+        ag, _ = self.start_agent()
+        if ag is None or ag.state != "ready":
+            return None, "agent"
+        if self.write_lock() is not None:
+            return None, "locked"
+        run.start()
+        return run, None
+
+    def backfill(self, lib):
+        """The library's Backfill (made on first use)."""
+        bf = self.backfills.get(lib["id"])
+        if bf is None:
+            settings = self.backfill_settings().get(lib["id"], {})
+            bf = ingest_run.Backfill(self, {"id": lib["id"], "label": lib["label"], "root": lib["root"]},
+                                     self.ingest_scripts(), os.path.join(kb_manage.state_dir(), "backfill", lib["id"]),
+                                     self.lang, settings.get("rules"))
+            self.backfills[lib["id"]] = bf
+        return bf
+
+    def backfill_settings(self):
+        data = kb_manage.read_json(os.path.join(kb_manage.state_dir(), "backfill", "settings.json"), {})
+        return data if isinstance(data, dict) else {}
+
+    def set_backfill(self, lib, on, rules=None):
+        """on: True (write cards while idle), False (off), "pause". Kept for the next start except pause."""
+        bf = self.backfill(lib)
+        if rules is not None:
+            bf.rules = ingest_run.check_rules(rules)
+        settings = self.backfill_settings()
+        if on != "pause":
+            settings[lib["id"]] = {"on": bool(on), "rules": bf.rules}
+            path = os.path.join(kb_manage.state_dir(), "backfill", "settings.json")
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            ingest_run.write_json(path, settings)
+        if on == "pause":
+            bf.pause()
+        elif on:
+            bf.start()
+        else:
+            bf.off()
+        return bf
+
+    def start_backfills(self):
+        """Backfills switched on in an earlier session start again once OpenCode is ready."""
+        for lib_id, s in self.backfill_settings().items():
+            lib = self.local_library(lib_id)
+            if lib and isinstance(s, dict) and s.get("on"):
+                self.backfill(lib).start()
+
+    def client_run(self, run_name):
+        """True for a pending run name of the client's own ingest run or of a backfill."""
+        run = self.ingest
+        return bool(run and run_name.startswith(run.id + "-")) or run_name.startswith("backfill-")
+
+    def ingest_state(self):
+        run = self.ingest
+        libs = {x["id"]: x for x in libraries() if x["root"] and x["exists"]}
+        out = {}
+        for lib_id, lib in libs.items():
+            snap = self.backfills[lib_id].snapshot() if lib_id in self.backfills else \
+                {"library": lib_id, "state": "off", "left": 0, "current": "", "written": 0, "held": 0,
+                 "rules": (self.backfill_settings().get(lib_id) or {}).get("rules") or {"folders": [], "since": ""}}
+            out[lib_id] = snap
+        return {"run": run.snapshot() if run else None, "backfill": out, "parallel_max": ingest_run.PARALLEL_MAX,
+                "auto": {lib_id: self.auto.state(lib) for lib_id, lib in libs.items()}}
+
     # ---------- the write lock ----------
 
     def write_lock(self):
-        """Who holds the write lock, or None: {"holder": "step", "action"} for a step that changes libraries."""
+        """Who holds the write lock, or None: {"holder": "step", "action"} for a step that changes libraries,
+        {"holder": "ingest", "win", "library"} while the client's ingest run goes on."""
         job = self.job
         if job is not None and not job.done and job.action in WRITE_STEPS:
             return {"holder": "step", "action": job.action}
+        run = self.ingest
+        if run is not None and run.running():
+            return {"holder": "ingest", "win": run.windows[0] if run.windows else "", "library": run.lib["id"]}
         return None
 
     def guard(self, win):
@@ -398,13 +550,18 @@ class App:
     def places(self):
         pl = agent_places()
         pl["write"] = pl["write"] + [self.work] if os.path.isdir(self.work) else pl["write"]
+        for folder in (ingest_run.runs_root(kb_manage.state_dir()), os.path.join(kb_manage.state_dir(), "backfill")):
+            if os.path.isdir(folder):
+                pl["write"] = pl["write"] + [folder]
         return pl
 
     def idle_watch(self):
         while self.idle:
             time.sleep(min(5, self.idle))
             busy = self.job is not None and not self.job.done
-            busy = busy or (self.agent is not None and self.agent.status != "idle")
+            busy = busy or (self.agent is not None and self.agent.status != "idle") or self.ingest_running()
+            busy = busy or any(b.state in ("idle", "working") for b in list(self.backfills.values()))
+            busy = busy or self.auto.any_on()  # a library with automatic ingest keeps the client going
             if not busy and time.time() - self.last_seen > self.idle:
                 log.info("no page for %s seconds, stopping", self.idle)
                 threading.Thread(target=self.server.shutdown, daemon=True).start()
@@ -974,6 +1131,8 @@ class Handler(BaseHTTPRequestHandler):
             if lib is None:
                 return self.send(404, {"error": "library"})
             return self.send(200, dict(graph(lib["root"], self.app.started), label=lib["label"], root=lib["root"]))
+        if path == "/api/ingest":
+            return self.send(200, self.app.ingest_state())
         if path == "/api/check":
             lib_id = (query.get("lib") or [""])[0]
             lib = next((x for x in libraries() if x["id"] == lib_id and x["root"] and x["exists"]), None)
@@ -1039,6 +1198,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200 if ok else 409, {"ok": ok})
         if path == "/api/pending":
             return self.pending_post(body)
+        if path.startswith("/api/ingest/") or path in ("/api/backfill", "/api/auto"):
+            return self.ingest_post(path, body)
         if path.startswith("/api/chat/"):
             return self.chat_post(path[len("/api/chat/"):], body)
         if path == "/api/quit":
@@ -1158,13 +1319,68 @@ class Handler(BaseHTTPRequestHandler):
         text = MSG[self.app.lang]["pending_said"].format(run=pend.get("run") or body["run"], lib=lib["label"])
         said = False
         ag = self.app.agent
-        if ag is not None and ag.state in ("ready", "simple"):
+        if self.app.client_run(body["run"]):
+            text = MSG[self.app.lang]["pending_client"]  # the client's own run or backfill goes on by itself
+        elif ag is not None and ag.state in ("ready", "simple"):
             try:
                 ag.send(text)
                 said = True
             except (RuntimeError, ValueError) as e:
                 log.info("could not say the decisions: %s", e)
         return self.send(200, {"ok": True, "said": said, "text": text})
+
+    def ingest_post(self, path, body):
+        """Starting, stopping and continuing the client's ingest run; switching backfill."""
+        m = MSG[self.app.lang]
+        if path == "/api/ingest/plan":
+            lib = self.app.local_library(body.get("library"))
+            if lib is None:
+                return self.send(404, {"error": m["ingest_library"]})
+            try:
+                got = ingest_run.plan(walk_to(str(body.get("material") or ""))[0], body.get("rules"), lib["root"])
+            except ValueError as e:
+                return self.send(400, {"error": str(e)})
+            return self.send(200, dict(got, files=got["files"][:PLAN_SHOWN]))
+        if path == "/api/ingest/start":
+            try:
+                run, why = self.app.start_ingest(body)
+            except ValueError as e:
+                return self.send(400, {"error": str(e)})
+            if run is None:
+                return self.send(409, {"error": m["ingest_" + why] if "ingest_" + why in m else m[why], "reason": why})
+            return self.send(200, {"run": run.snapshot()})
+        if path == "/api/ingest/stop":
+            run = self.app.ingest
+            if run is None or not run.running():
+                return self.send(409, {"error": m["ingest_nothing"]})
+            run.stop()
+            return self.send(200, {"ok": True})
+        if path == "/api/ingest/continue":
+            run, why = self.app.continue_ingest()
+            if run is None:
+                return self.send(409, {"error": m["ingest_" + why] if "ingest_" + why in m else m[why], "reason": why})
+            return self.send(200, {"run": run.snapshot()})
+        if path == "/api/auto":
+            lib = self.app.local_library(body.get("library"))
+            if lib is None or not isinstance(body.get("on"), bool):
+                return self.send(400, {"error": m["ingest_library"]})
+            got = self.app.auto.switch(lib, body["on"])
+            if body["on"] and self.app.agent is not None and self.app.agent.state == "ready":
+                self.app.auto.start()
+            return self.send(200, {"auto": got})
+        if path == "/api/backfill":
+            lib = self.app.local_library(body.get("library"))
+            if lib is None:
+                return self.send(404, {"error": m["ingest_library"]})
+            on = body.get("on")
+            if on not in (True, False, "pause"):
+                return self.send(400, {"error": "on"})
+            try:
+                bf = self.app.set_backfill(lib, on, body.get("rules"))
+            except ValueError as e:
+                return self.send(400, {"error": str(e)})
+            return self.send(200, {"backfill": bf.snapshot()})
+        return self.send(404, {"error": "not found"})
 
     def chat_post(self, path_part, body):
         what = CHAT_ACTIONS.get(path_part)  # a fixed name from here on, never the request's own text
@@ -1397,6 +1613,9 @@ def main():
               a.idle, a.start_timeout)
     app.output = Output(sys.stdout)
     sys.stdout = app.output
+    runs = ingest_run.runs_root(kb_manage.state_dir())
+    ingest_run.clean(runs)
+    app.ingest = ingest_run.latest(app, runs)  # an interrupted run shows as stopped, to be continued
     serve(app, a.port, not a.no_browser)
     return 0
 

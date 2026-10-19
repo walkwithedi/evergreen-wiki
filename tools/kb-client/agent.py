@@ -49,7 +49,9 @@ SYSTEM_DIRS = ("/bin", "/boot", "/dev", "/etc", "/lib", "/lib32", "/lib64", "/li
                "/sys", "/usr", "/var")
 MAX_RECENT = 5  # work folders remembered
 MAX_SESSIONS = 50  # conversations listed for a work folder
-MAX_WINDOWS = 8  # conversation windows the user opens
+MAX_WINDOWS = 8  # conversation windows the user opens; the client's own ingest windows are not counted
+# An option a question marks as the recommended one
+RECOMMENDED = re.compile(r"recommend|推荐", re.I)
 EDIT_TOOLS = ("edit", "write", "patch", "multiedit", "apply_patch")
 MAX_DIFF = 200000  # characters of an edit's diff passed to the page
 
@@ -507,9 +509,11 @@ class Window:
     """One conversation window of the page: its OpenCode conversation, the subagents started from it and
     what waits in it."""
 
-    def __init__(self, wid, session=None):
+    def __init__(self, wid, session=None, kind="chat", label=""):
         self.id = wid
         self.session = session
+        self.kind = kind  # chat, or ingest: a window the client's ingest run talks in (not saved)
+        self.label = label
         self.title = ""
         self.status = "idle"
         self.material = []  # paths named as material in this conversation
@@ -533,7 +537,7 @@ class Window:
         return {"id": self.id, "session": self.session, "title": self.title}
 
     def info(self):
-        return dict(self.saved(), status=self.status,
+        return dict(self.saved(), status=self.status, kind=self.kind, label=self.label,
                     cards=len(self.permissions) + len(self.questions), allow_all=self.allow_all)
 
 
@@ -635,8 +639,8 @@ class Agent:
         self._keep_one()
 
     def _keep_one(self):
-        """At least one window; the current one is shown."""
-        if not self.windows:
+        """At least one conversation window; the current one is shown."""
+        if not any(w.kind == "chat" for w in list(self.windows.values())):
             self._add()
         if self.current not in self.windows:
             self.current = next(iter(self.windows))
@@ -684,7 +688,7 @@ class Agent:
             if listed is None:
                 raise LookupError(session)
         with self.lock:
-            if len(self.windows) >= MAX_WINDOWS:
+            if sum(1 for x in list(self.windows.values()) if x.kind == "chat") >= MAX_WINDOWS:
                 raise Refused("too_many")
             w = self._add(session)
             w.title = listed["title"] if session is not None else ""
@@ -712,6 +716,45 @@ class Agent:
     def focus(self, wid):
         self.current = self.window(wid).id
         self._save()
+
+    def ingest_window(self, key, label):
+        """The client's window for an ingest task key (made when there is none); it is not the current
+        window, does not count against MAX_WINDOWS and is not saved."""
+        with self.lock:
+            w = next((x for x in list(self.windows.values()) if x.kind == "ingest" and x.label == key), None)
+            if w is None:
+                self.n += 1
+                w = Window(f"w{self.n}", None, kind="ingest", label=key)
+                w.title = label
+                self.windows[w.id] = w
+        self.emit_windows()
+        return w
+
+    def drop_window(self, wid):
+        """Removes a client window that is idle (its conversation stays in OpenCode)."""
+        with self.lock:
+            w = self.windows.get(wid)
+            if w is None or w.kind != "ingest" or w.busy():
+                return
+            self.windows.pop(wid, None)
+            if self.current == wid:
+                self.current = ""
+            self._keep_one()
+        self.emit_windows()
+
+    def answer_recommended(self, rid, fallback):
+        """Answers a question card with each question's recommended option (one whose label or description
+        says so), else its first option, else fallback as a typed answer. The answers sent, or None."""
+        w = self._card(rid, "questions")
+        if w is None:
+            return None
+        answers = []
+        for x in w.questions[rid]["questions"]:
+            opts = x["options"]
+            pick = next((o for o in opts if RECOMMENDED.search(o["label"] + " " + o["description"])),
+                        opts[0] if opts else None)
+            answers.append([pick["label"]] if pick else [fallback] if x["custom"] else [])
+        return answers if self.reply_question(rid, answers) else None
 
     # ----- start and stop -----
 
@@ -1057,7 +1100,8 @@ class Agent:
         try:
             os.makedirs(os.path.dirname(self.state_file), exist_ok=True)
             tmp = self.state_file + ".tmp"
-            entry = {"windows": [w.saved() for w in list(self.windows.values())], "current": self.current}
+            entry = {"windows": [w.saved() for w in list(self.windows.values()) if w.kind == "chat"],
+                     "current": self.current if self.windows.get(self.current, Window("")).kind == "chat" else ""}
             with open(tmp, "w", encoding="utf-8") as f:
                 data = {"session": self.session, "always": self.always}
                 old = self._load_state()
