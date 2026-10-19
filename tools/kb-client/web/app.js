@@ -33,6 +33,16 @@
       uninstall: "Uninstall",
       move_this: "Move",
       graph: "Graph",
+      health: "Health check", health_title: "Health check: {lib}", health_running: "Checking\u2026",
+      health_intro: "Read only: nothing in the library is changed.",
+      health_summary: "{sources} sources, {uncarded} of them without cards yet; {problems} problems.",
+      health_none: "Nothing to fix.", health_more: "and {n} more",
+      health_fix_pages: "Ask in the conversation to rebuild the topic pages of this library.",
+      hk_quotes: "Cards whose quote is not in its paragraph", hk_links: "Links to files that do not exist",
+      hk_missing: "Topic pages missing", hk_stale: "Topic pages that differ from the cards",
+      hk_extra: "Year pages no longer built", hk_unpaired: "Cards files without their source",
+      hk_review: "Status-card items marked for review", hk_not_current: "Status-card items citing a source that is not current",
+      hk_pending: "Runs waiting for decisions for more than 7 days",
       close: "Close",
       graph_title: "Graph: {lib}",
       kind_entity: "Entities", kind_summary: "Summary files", kind_topic: "Documents", kind_original: "Originals",
@@ -254,6 +264,16 @@
       uninstall: "卸载",
       move_this: "移动",
       graph: "关系图",
+      health: "体检", health_title: "体检：{lib}", health_running: "正在检查\u2026",
+      health_intro: "只读：不改动知识库里的任何文件。",
+      health_summary: "共 {sources} 份来源，其中 {uncarded} 份尚未抽卡；发现 {problems} 个问题。",
+      health_none: "没有需要处理的问题。", health_more: "另有 {n} 条",
+      health_fix_pages: "可以在对话里请助手重建这个知识库的主题页。",
+      hk_quotes: "引文不在所链接段落里的卡片", hk_links: "指向不存在文件的链接",
+      hk_missing: "缺少的主题页", hk_stale: "与卡片不一致的主题页",
+      hk_extra: "已不再生成的年份页", hk_unpaired: "没有对应来源的卡片文件",
+      hk_review: "状态卡中待复核的条目", hk_not_current: "状态卡中引用了非现行来源的条目",
+      hk_pending: "等待决定超过 7 天的入库",
       close: "关闭",
       graph_title: "关系图：{lib}",
       kind_entity: "实体", kind_summary: "汇总文件", kind_topic: "文档", kind_original: "原件",
@@ -642,6 +662,9 @@
         var g = el("button", { type: "button", "class": "quiet small" }, t("graph"));
         g.addEventListener("click", function () { openGraph(lib.id); });
         li.appendChild(g);
+        var h = el("button", { type: "button", "class": "quiet small" }, t("health"));
+        h.addEventListener("click", function () { openHealth(lib); });
+        li.appendChild(h);
       }
       libs.appendChild(li);
     });
@@ -2238,6 +2261,50 @@
 
   function closeGraph() { show($("graph"), false); graph = null; }
 
+  // ---------- health check ----------
+  // The client runs ingest.py's read-only check itself; findings are listed by kind, at most 50 each.
+
+  var HEALTH_ROWS = 50;
+
+  function openHealth(lib) {
+    var box = $("health-body");
+    $("health-title").textContent = t("health_title", { lib: lib.label });
+    box.textContent = t("health_running");
+    show($("health"), true);
+    $("health").scrollIntoView({ behavior: "smooth", block: "start" });
+    api("GET", "/api/check?lib=" + encodeURIComponent(lib.id)).then(function (got) {
+      drawHealth(got);
+    }).catch(function (e) { box.textContent = String(e.message); });
+  }
+
+  function drawHealth(got) {
+    var box = $("health-body");
+    box.textContent = "";
+    box.appendChild(el("p", { "class": got.problems ? "warn" : "good" },
+      t("health_summary", { sources: got.sources, uncarded: got.uncarded, problems: got.problems })));
+    if (!got.problems) { box.appendChild(el("p", { "class": "hint" }, t("health_none"))); return; }
+    var groups = [
+      ["quotes", got.quotes.map(function (q) { return q.cards + "  " + q.link; })],
+      ["links", got.links.map(function (x) { return x.file + "  [[" + x.link + "]]"; })],
+      ["missing", got.pages.missing], ["stale", got.pages.stale], ["extra", got.pages.extra],
+      ["unpaired", got.unpaired], ["review", got.status.review], ["not_current", got.status.not_current],
+      ["pending", got.pending.map(function (p) { return p.run + " (" + p.days + ")"; })]
+    ];
+    groups.forEach(function (g) {
+      if (!g[1].length) return;
+      var d = el("details", { "class": "health-group" });
+      d.appendChild(el("summary", {}, t("hk_" + g[0]) + ": " + g[1].length));
+      var ul = el("ul", { "class": "pending-items" });
+      g[1].slice(0, HEALTH_ROWS).forEach(function (row) { ul.appendChild(el("li", {}, row)); });
+      if (g[1].length > HEALTH_ROWS) ul.appendChild(el("li", { "class": "hint" }, t("health_more", { n: g[1].length - HEALTH_ROWS })));
+      d.appendChild(ul);
+      box.appendChild(d);
+    });
+    if (got.pages.missing.length || got.pages.stale.length || got.pages.extra.length) {
+      box.appendChild(el("p", { "class": "hint" }, t("health_fix_pages")));
+    }
+  }
+
   // ---------- ingest stages ----------
   // The stage comes from the skill script a tool step runs (agent.py stage_script), never from the
   // model's wording, so it costs no tokens and cannot drift.
@@ -2637,6 +2704,7 @@
     api("POST", "/api/chat/forget", {}).then(refresh).catch(function (e) { note(String(e.message), "error"); });
   });
   $("graph-close").addEventListener("click", closeGraph);
+  $("health-close").addEventListener("click", function () { show($("health"), false); });
   $("graph-svg").addEventListener("pointerdown", function (e) { if (graph) panGraph(e); });
   $("graph-svg").addEventListener("wheel", function (e) { if (graph) zoomGraph(e); }, { passive: false });
   $("graph-copy").addEventListener("click", function () {

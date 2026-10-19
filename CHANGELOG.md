@@ -22,6 +22,10 @@ Index (shared/scripts/kbindex.py, copied into the three skills)
 - ingest.py file, conflicts, versions and pages and answer.py select read through it. answer.py select also lists paragraphs of sources without cards yet, marked as such.
 - tests/test_scale.py: 10,000 sources and 100,000 cards; an answer's material within five seconds (SCALE_SOURCES sets the size).
 
+Health check
+- ingest.py check (health_check, read only, exit 3 when it finds problems; --json): cards whose quote is no longer in its paragraph, links of the status card's items and of topic pages to files that do not exist, topic pages missing, out of date or no longer built (compared with what ingest.py pages builds, in memory), cards files without their source, status-card items marked for review or citing a source that is not current, runs waiting for decisions for more than seven days, and the number of sources without cards. ingest.py pages builds its pages through page_texts().
+- kb-ingest has a health check mode ("health check", "check the knowledge base"; 体检). kb-client has a Health check button under each library (GET /api/check), listing the findings by kind.
+
 Examples
 - The sample materials sit in folders (Plans, Meetings, Status reports) and the sample library keeps them.
 

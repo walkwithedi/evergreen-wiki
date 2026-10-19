@@ -107,6 +107,14 @@ class ScaleTest(unittest.TestCase):
         got = answer.select(self.lib, self.cfg, ["needle phrase"])
         self.assertEqual([p["anchor"] for p in got["paragraphs"]], ["p21"])
 
+    def test_health_check_in_time(self):
+        t0 = time.time()
+        got = ingest.health_check(self.lib, self.cfg)
+        took = time.time() - t0
+        sys.stderr.write("[scale] health check: %.1f s, %d problems\n" % (took, got["problems"]))
+        self.assertEqual(got["quotes"], [])
+        self.assertLess(took, ANSWER_SECONDS * 12)
+
     def test_versions_and_pages_in_time(self):
         work = os.path.join(self.tmp, "run")
         units, _ = kb_batch.build_units([{"name": "doc %05d final.docx" % (SOURCES // 3), "path": "new/doc final.docx",

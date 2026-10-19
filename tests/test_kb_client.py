@@ -380,6 +380,18 @@ class KbClientTest(unittest.TestCase):
         self.assertTrue(all(n["new"] for n in g["nodes"] if n["kind"] == "summary"))  # written after the start
         self.assertEqual(self.server.get("/api/graph?lib=../etc")[0], 404)
 
+    def test_health_check_of_a_registered_library(self):
+        self.assertEqual(self.server.get("/api/check?lib=work")[0], 404)
+        self.assertEqual(self.setup_library()[0], "ok")
+        status, got = self.server.get("/api/check?lib=work")
+        self.assertEqual(status, 200, got)
+        self.assertEqual((got["label"], got["problems"], got["sources"]), ("Work", 0, 0))
+        write(self.p("home", "kb", "work", "Topics", "x (2019).md"), "# x\n")
+        write(self.p("home", "kb", "work", "Cards", "a", "lost.md"), "# Cards: [[Sources/a/lost]]\n")
+        got = self.server.get("/api/check?lib=work")[1]
+        self.assertEqual(got["unpaired"], ["a/lost.md"])
+        self.assertFalse(os.path.exists(self.p("home", "kb", "work", "Sources", "a")))   # read only
+
     def test_skills_report_the_release_version(self):
         self.assertEqual(self.setup_library()[0], "ok")
         skills = self.server.get("/api/skills")[1]["skills"]
