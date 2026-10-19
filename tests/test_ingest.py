@@ -741,7 +741,7 @@ class ReviewMarkTest(LibraryCase):
         rec = ingest.file_run(b, [], self.p("lib"), self.cfg)
         self.assertEqual(rec["review"], ["1. The pilot starts in April. [[Sources/Atlas/plan#^p1]]",
                                          "3. Riverside Clinic hosts the pilot. [[Sources/Atlas/plan#^p2|plan]] and "
-                                         "[[Sources/Atlas/minutes#^p1]]"])
+                                         + "[[Sources/Atlas/minutes#^p1]]"])
         text = read(self.p("lib", "00_Status-Card.md"))
         self.assertRegex(text, r"1\. The pilot starts in April\. \[\[Sources/Atlas/plan#\^p1\]\] ⏳ review: Atlas/plan has a "
                                r"new version \(\d{4}-\d{2}-\d{2}\)\n2\. The budget stays as planned\. "
