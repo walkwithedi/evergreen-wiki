@@ -47,7 +47,7 @@ Open a new terminal after setup so the `~/.bashrc` block takes effect.
 ## Using the page
 
 1. Double-click `启动OpenCode配置.desktop` (trust it the first time), or run `python3 ca_web.py` in this folder.
-2. The left column shows the state: Node, opencode, the configuration (only whether a key is set and its length), proxy.
+2. The left column shows the state: Node, opencode, the configuration (the key's first and last four characters and its length, or only asterisks for a key of ten characters or fewer), proxy.
 3. The right column has three steps: check; paste the AK; set up (replace the key, test, switch off downloads, check the first start). Output appears below with a verdict at the end.
 4. Also: test again, cancel the running step, quit. The server stops two minutes after the page is closed.
 

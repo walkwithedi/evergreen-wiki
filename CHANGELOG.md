@@ -29,6 +29,10 @@ Health check
 Examples
 - The sample materials sit in folders (Plans, Meetings, Status reports) and the sample library keeps them.
 
+Workbench and client
+- tools/workbench: switching between the simple and the full version is refused while a conversation of the client works or waits for an answer (an ingest run goes on in a conversation), besides a running management step; the wizard reads GET /api/chat/state for it.
+- tools/kb-client: the write-lock line has a Show button that brings the step panel into view (or the holding window); under the stage bar, a line says that an ingest run takes long, with the command that opens OpenCode in the work folder and a Copy button.
+- tools/opencode-setup: the key is shown as its first and last four characters with its length (「abcd…wxyz（共 N 位）」), so that the key in use can be told apart; ten characters or fewer show as asterisks.
 - tools/kb-client: the Material card and its Build batch files step are removed; documents are ingested by asking in the conversation with a file or folder path, and kb-ingest converts them itself.
 
 ## 3.0.0

@@ -88,8 +88,11 @@ load_hints(){
   done < "$HINTS_FILE"
 }
 
-# AK 只显示长度，不显示其中任何字符
-mask(){ printf '已设置（共 %d 位）' "${#1}"; }
+# AK 只显示前 4 位…后 4 位与长度，便于核对是哪一把；10 位及以下全部打星号
+mask(){
+  local s="$1"
+  if [ "${#s}" -le 10 ]; then printf '%s' "${s//?/*}"; else printf '%s…%s（共 %d 位）' "${s:0:4}" "${s: -4}" "${#s}"; fi
+}
 
 ask_ak(){
   [ -n "$AK" ] && return 0
