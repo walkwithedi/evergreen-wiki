@@ -265,6 +265,10 @@ textarea {
 .stage-list li.now { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .stage-list li.past::before { content: "\2713  "; }
 .stage-why { margin: 6px 0 0; font-size: 13px; }
+.ingest-long { margin: 6px 0 0; font-size: 13px; }
+.ingest-long p { margin: 0 0 4px; overflow-wrap: anywhere; }
+.ingest-long summary { cursor: pointer; }
+.ingest-long code { font-size: 12.5px; overflow-wrap: anywhere; }
 
 /* library graph */
 :root { --k-entity: #8a5a00; --k-summary: #2e7d4f; --k-topic: #2f5fae; --k-original: #7b4d8f; --k-missing: #9aa0a6; --k-new: #c2410c; }

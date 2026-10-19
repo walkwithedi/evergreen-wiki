@@ -123,7 +123,9 @@
       win_busy: "working", win_cards: "waiting for you", win_unread: "new reply",
       win_full: "Eight windows are open; close one first.",
       lock_step: "A management step is running",
-      lock_note: "{what}: the tasks that write the libraries wait until it is done.",
+      lock_note: "{what}: the tasks that write the libraries wait until it is done.", lock_view: "Show",
+      ingest_long: "An ingest run takes a long time (hours for many documents). You can leave this page as it is; the result shows in this window. Meanwhile talk or use other skills in another window; writing a library from there asks first.",
+      ingest_cli: "How to open OpenCode from a terminal", ingest_cli_hint: "In a terminal, run:", copy: "Copy",
       session_open: "(open)",
       task_note: "Quick note",
       task_note_hint: "Keep one sentence in the library at once",
@@ -344,7 +346,9 @@
       win_busy: "处理中", win_cards: "等你处理", win_unread: "有新回复",
       win_full: "已经开了 8 个窗口，先关掉一个。",
       lock_step: "管理步骤正在运行",
-      lock_note: "{what}：写知识库的任务要等它结束。",
+      lock_note: "{what}：写知识库的任务要等它结束。", lock_view: "查看",
+      ingest_long: "入库会运行较长时间（文档多时可能要几个小时），可以把页面留在这里不用管，做完会在这个窗口里显示结果。期间可以在其他窗口对话或使用别的技能；那边要写知识库时会先询问。",
+      ingest_cli: "如何在终端里打开 OpenCode", ingest_cli_hint: "在终端里运行：", copy: "复制",
       session_open: "（已打开）",
       task_note: "随手记",
       task_note_hint: "记一句话，马上存进知识库",
@@ -1285,6 +1289,7 @@
       b.title = noLib ? t("chat_no_library") : "";
     });
     show($("lock-note"), !!lock && chat.ready);
+    show($("lock-view"), !!lock);
     $("lock-text").textContent = lock ? t("lock_note", { what: lockWhat(lock) }) : "";
     $("chat-new").disabled = !chat.ready || chat.busy;
     ["workdir-change", "workdir-recent"].forEach(function (id) { $(id).disabled = !chat.ready || anyBusy || !!lock; });
@@ -2272,7 +2277,22 @@
     if (k !== stages.current) { stages.current = k; stages.shown = ""; }
     clearTimeout(stages.hideTimer);
     show($("stages"), true);
+    $("ingest-cli").textContent = cliCommand();
     drawStages();
+  }
+
+  // The command that opens OpenCode in the work folder, for a terminal of the user's own.
+  function cliCommand() {
+    var d = chat.workdir || "";
+    return d ? "cd '" + d.replace(/'/g, "'\\''") + "' && opencode" : "opencode";
+  }
+
+  // What holds the write lock: its window when it has one, else the step panel.
+  function showLock() {
+    var lock = chat.lock;
+    if (!lock) return;
+    if (lock.win) { showWindow(lock.win); return; }
+    $("step").scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   // Once the assistant has been idle for two minutes, the stages fold away until the next ingest run.
@@ -2616,6 +2636,8 @@
   translate();
   $("check-toggle").addEventListener("click", foldChecklist);
   $("kb-toggle").addEventListener("click", toggleKb);
+  $("lock-view").addEventListener("click", showLock);
+  $("ingest-cli-copy").addEventListener("click", function () { copyText(cliCommand(), $("ingest-cli-copy")); });
   $("side-fold").addEventListener("click", function () { setSide(true); });
   $("side-strip").addEventListener("click", function () { setSide(false); });
   $("workdir-change").addEventListener("click", function () {

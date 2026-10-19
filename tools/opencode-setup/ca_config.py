@@ -187,14 +187,16 @@ def as_dict(value):
 
 
 def mask(value):
-    """AK 的显示：只说有没有、多长或引用自哪里，不显示其中任何字符。"""
+    """AK 的显示：引用自哪里，或前 4 位…后 4 位与长度，便于核对是哪一把；10 位及以下全部打星号。"""
     if not isinstance(value, str) or not value:
         return "（未设置）"
     if value.startswith("{env:"):
         return "取自环境变量"
     if value.startswith("{file:"):
         return "取自文件"
-    return f"已设置（共 {len(value)} 位）"
+    if len(value) <= 10:
+        return "*" * len(value)
+    return f"{value[:4]}…{value[-4:]}（共 {len(value)} 位）"
 
 
 def read_token():
