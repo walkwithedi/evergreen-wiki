@@ -221,6 +221,11 @@ class VersionSwitchTest(unittest.TestCase):
         self.assertEqual(self.app.kb_busy(), "chat")
         self.windows({"id": "w1", "status": "idle", "cards": 1})
         self.assertEqual(self.app.kb_busy(), "chat")
+        self.windows({"id": "w1", "status": "idle", "cards": 0})
+        self.answers["/api/ingest"] = {"run": {"state": "waiting"}}
+        self.assertEqual(self.app.kb_busy(), "ingest")
+        self.answers["/api/ingest"] = {"run": {"state": "done"}}
+        self.assertEqual(self.app.kb_busy(), "")
         self.answers["/api/state"] = {"job": {"id": 1, "action": "install", "done": False}}
         self.assertEqual(self.app.kb_busy(), "step")
 

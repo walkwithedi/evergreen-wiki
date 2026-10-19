@@ -173,9 +173,39 @@ class World:
             ev = self.aborts.setdefault(sid, threading.Event())
             ev.clear()
             self.message(sid, "assistant", "aborted" if ev.wait(20) else "slow done")
+        elif text.startswith(("[Client ingest", "【客户端入库")):
+            self.message(sid, "assistant", write_cards(text))
         else:
             self.message(sid, "assistant", "echo: " + text)
         self.emit("session.status", sessionID=sid, status={"type": "idle"})
+
+
+def write_cards(text):
+    """For the client's card message: one card per anchored paragraph of the named source (at most three),
+    quoting its first 60 characters, topic FAKE_OPENCODE_TOPIC (default Pilot); a source whose name holds
+    "nocards" gets an empty file, one holding "badquote" a card whose quote is not in the source."""
+    import re
+    batch = re.search(r"^(?:Batch file: |批文件：)(.+)$", text, re.M).group(1)
+    sid = re.search(r"(?:cards of source |里的来源 )(S\d+)\s?[（(](.+?)[)）]", text)
+    out = re.search(r"^(?:Write them to (.+?), one JSON object|写进 (.+?)，每行一个)", text, re.M)
+    out = out.group(1) or out.group(2)
+    with open(batch, encoding="utf-8") as f:
+        body = f.read()
+    sec = re.search(r"^# %s .*?(?=^# S\d+ |\Z)" % sid.group(1), body, re.M | re.S).group(0)
+    cards = []
+    for m in re.finditer(r"^(.{8,}?) \^(s\d+-p\d+)$", sec, re.M):
+        quote = m.group(1).strip()[:60]
+        cards.append({"source": sid.group(1), "anchor": m.group(2), "quote": quote, "conclusion": quote,
+                      "topic": os.environ.get("FAKE_OPENCODE_TOPIC", "Pilot"), "entities": []})
+        if len(cards) == 3:
+            break
+    if "nocards" in sid.group(2):
+        cards = []
+    if "badquote" in sid.group(2):
+        cards = [dict(c, quote="words that are nowhere in it") for c in cards[:1]]
+    with open(out, "w", encoding="utf-8") as f:
+        f.write("".join(json.dumps(c, ensure_ascii=False) + "\n" for c in cards))
+    return "cards written: %d" % len(cards)
 
 
 WORLD = World()

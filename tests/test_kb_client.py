@@ -1615,5 +1615,182 @@ class SkillCommandTest(unittest.TestCase):
         self.assertEqual(agent.plain_command("a \\\nb 2>&1"), "a  b")
 
 
+SPEC_PILOT = """00_Spec
+Version: v1
+Last updated: 2026-01-01
+
+1. Table A: partitions and topics
+
+02 Goals and plans: Pilot; work plans.
+09 Reference and templates: reference material.
+
+4. Table E: entities
+
+Name | Type | Aliases | Core | Note
+No entries yet.
+"""
+
+
+class IngestRunTest(unittest.TestCase):
+    """The client's own ingest run and backfill, against the fake OpenCode that writes cards."""
+    setUp, p, start, ready, calls = ChatTest.setUp, ChatTest.p, ChatTest.start, ChatTest.ready, ChatTest.calls
+
+    def library(self):
+        root = self.p("home", "kb", "work")
+        write(os.path.join(root, "_kb.json"), json.dumps({"schema": 3, "label": "Work", "language": "en",
+                                                         "partitions": {"max": 9, "topic_start": 2, "fallback": "09"}}))
+        write(os.path.join(root, "00_Spec.md"), SPEC_PILOT)
+        write(self.p("home", ".config", "kb", "kb-libraries.json"), json.dumps(
+            {"schema": 2, "libraries": [{"id": "work", "label": "Work", "scope": "team projects",
+                                         "backend": {"type": "local", "root": root}}]}))
+        material = self.p("material")
+        shutil.copytree(os.path.join(ROOT, "examples", "sample-materials"), material)
+        return root, material
+
+    def wait_run(self, states=("done",), timeout=90):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            run = self.server.get("/api/ingest")[1]["run"]
+            if run and run["state"] in states:
+                return run
+            if run and run["state"] == "failed":
+                self.fail("run failed: %s\n%s" % (run["reason"], read(run["log"])))
+            time.sleep(0.5)
+        self.fail("run did not reach %s: %s" % (states, run))
+
+    def test_plan_then_run(self):
+        self.env["KB_BACKFILL_IDLE"] = "1"
+        root, material = self.library()
+        self.ready()
+        s = self.server
+        status, plan = s.post("/api/ingest/plan", {"library": "work", "material": material,
+                                                  "rules": {"folders": ["Plans"], "since": ""}})
+        self.assertEqual(status, 200, plan)
+        self.assertEqual((plan["total"], plan["important"]), (3, 1))
+        self.assertEqual([f["folder"] for f in plan["folders"]], ["Meetings", "Plans", "Status reports"])
+        self.assertEqual(s.post("/api/ingest/plan", {"library": "work", "material": root})[0], 400)  # the library itself
+        status, r = s.post("/api/ingest/start", {"library": "work", "material": material,
+                                                 "rules": {"folders": ["Plans"], "since": ""}})
+        self.assertEqual(status, 200, r)
+        run = self.wait_run()
+        self.assertEqual(run["counts"], {"carded": 1, "filed": 2}, read(run["log"]))
+        self.assertTrue(os.path.isfile(os.path.join(root, "Cards", "Plans", "Atlas pilot plan.md")))
+        self.assertTrue(os.path.isfile(os.path.join(root, "Sources", "Meetings", "Atlas steering minutes 2026-03-13.md")))
+        self.assertFalse(os.path.exists(os.path.join(root, "Cards", "Meetings")))
+        self.assertIn("Atlas", read(os.path.join(root, "Topics", "Pilot.md")))
+        self.assertIsNone(s.get("/api/state")[1]["agent"].get("lock"))
+        # the same material again: every document is in the library already
+        self.assertEqual(s.post("/api/ingest/start", {"library": "work", "material": material})[0], 200)
+        run = self.wait_run()
+        self.assertEqual(run["counts"], {"duplicate": 3})
+        # backfill writes the others' cards while the assistant is idle
+        status, r = s.post("/api/backfill", {"library": "work", "on": True})
+        self.assertEqual(status, 200, r)
+        deadline = time.time() + 60
+        while time.time() < deadline and not os.path.isdir(os.path.join(root, "Cards", "Meetings")):
+            time.sleep(0.5)
+        while time.time() < deadline and s.get("/api/ingest")[1]["backfill"]["work"]["state"] != "done":
+            time.sleep(0.5)
+        self.assertTrue(os.path.isfile(os.path.join(root, "Cards", "Status reports", "Atlas weekly status 2026-03-09.md")))
+        self.assertEqual(s.get("/api/ingest")[1]["backfill"]["work"]["written"], 2)
+        self.assertEqual(s.post("/api/backfill", {"library": "work", "on": False})[0], 200)
+
+    def test_new_topic_waits_for_the_owner(self):
+        self.env["FAKE_OPENCODE_TOPIC"] = "Risks"
+        root, material = self.library()
+        self.ready()
+        s = self.server
+        self.assertEqual(s.post("/api/ingest/start", {"library": "work", "material": material,
+                                                      "rules": {"folders": ["Plans"]}})[0], 200)
+        run = self.wait_run(("waiting",))
+        self.assertEqual(run["step"], "decide")
+        self.assertEqual(s.post("/api/ingest/start", {"library": "work", "material": material})[0], 409)  # one at a time
+        pend = s.get("/api/pending")[1]["runs"]
+        self.assertEqual([p["run"] for p in pend], [run["pending"]])
+        status, r = s.post("/api/pending", {"library": "work", "run": run["pending"],
+                                            "decisions": {"topics": {"Risks": {"under": "Pilot"}}}})
+        self.assertEqual(status, 200, r)
+        self.assertFalse(r["said"])                      # the client's own run: nothing said in a conversation
+        self.wait_run()
+        self.assertIn("Pilot", read(os.path.join(root, "Cards", "Plans", "Atlas pilot plan.md")))
+        self.assertFalse(os.path.isdir(os.path.join(root, "_pending")))
+
+    def test_stop_and_continue(self):
+        root, material = self.library()
+        self.ready()
+        s = self.server
+        self.assertEqual(s.post("/api/ingest/start", {"library": "work", "material": material,
+                                                      "rules": {"folders": []}})[0], 200)
+        self.assertEqual(s.post("/api/ingest/stop", {})[0], 200)
+        run = self.wait_run(("stopped",))
+        self.assertEqual(s.post("/api/ingest/continue", {})[0], 200)
+        run = self.wait_run()
+        self.assertEqual(run["counts"], {"carded": 3}, read(run["log"]))
+        self.assertEqual(s.post("/api/ingest/stop", {})[0], 409)
+
+    def test_automatic_ingest_from_the_drop_folder(self):
+        self.env["KB_AUTO_STABLE"] = "1"
+        root, material = self.library()
+        self.ready()
+        s = self.server
+        status, r = s.post("/api/auto", {"library": "work", "on": True})
+        self.assertEqual(status, 200, r)
+        drop = r["auto"]["drop"]
+        self.assertEqual(drop, os.path.join(root, "_Drop"))
+        shutil.copytree(os.path.join(material, "Plans"), os.path.join(drop, "Plans"))
+        write(os.path.join(drop, "empty.pdf"), "not a pdf")
+        deadline = time.time() + 90
+        while time.time() < deadline and not os.path.isdir(os.path.join(root, "_Filed")):
+            time.sleep(0.5)
+        run = self.wait_run()
+        self.assertTrue(run["unattended"])
+        self.assertEqual(run["counts"].get("carded"), 1)
+        self.assertEqual([m["rel"] for m in run["missing"]], ["empty.pdf"])   # no text in it: not filed
+        while time.time() < deadline and os.listdir(drop):
+            time.sleep(0.5)
+        self.assertEqual(os.listdir(drop), [])
+        self.assertTrue(os.path.isfile(os.path.join(root, "_Not filed", "empty.pdf")))
+        [day] = os.listdir(os.path.join(root, "_Filed"))
+        self.assertTrue(os.path.isfile(os.path.join(root, "_Filed", day, "Plans", "Atlas pilot plan.eml")))
+        self.assertTrue(os.path.isfile(os.path.join(root, "Cards", "Plans", "Atlas pilot plan.md")))
+        self.assertTrue(s.get("/api/ingest")[1]["auto"]["work"]["on"])
+
+    def test_same_names_wait_for_the_owner(self):
+        root, material = self.library()
+        write(os.path.join(material, "Copies", "Atlas pilot plan.eml"),
+              read(os.path.join(material, "Plans", "Atlas pilot plan.eml")).replace("will host", "may host"))
+        self.ready()
+        s = self.server
+        self.assertEqual(s.post("/api/ingest/start", {"library": "work", "material": material,
+                                                      "rules": {"folders": ["Plans"]}})[0], 200)
+        run = self.wait_run(("waiting",))
+        self.assertEqual(run["step"], "versions")
+        [pend] = s.get("/api/pending")[1]["runs"]
+        group = pend["pending"]["groups"][0]
+        self.assertEqual(sorted(m["path"] for m in group["members"]),
+                         ["Copies/Atlas pilot plan.md", "Plans/Atlas pilot plan.md"])
+        status, r = s.post("/api/pending", {"library": "work", "run": run["pending"], "decisions": {"groups": {
+            "Atlas pilot plan.md": {"current": "Plans/Atlas pilot plan.md", "separate": ["Copies/Atlas pilot plan.md"]}}}})
+        self.assertEqual(status, 200, r)
+        run = self.wait_run()
+        self.assertEqual(run["counts"].get("carded"), 2, read(run["log"]))   # a group goes together
+        self.assertTrue(os.path.isfile(os.path.join(root, "Cards", "Plans", "Atlas pilot plan.md")))
+        self.assertTrue(os.path.isfile(os.path.join(root, "Sources", "Copies", "Copies_Atlas pilot plan.md")))
+
+    def test_rejected_cards_go_back_once(self):
+        root, material = self.library()
+        shutil.rmtree(os.path.join(material, "Meetings"))
+        shutil.rmtree(os.path.join(material, "Status reports"))
+        os.rename(os.path.join(material, "Plans", "Atlas pilot plan.eml"), os.path.join(material, "Plans", "badquote plan.eml"))
+        self.ready()
+        s = self.server
+        self.assertEqual(s.post("/api/ingest/start", {"library": "work", "material": material, "rules": {}})[0], 200)
+        run = self.wait_run()
+        self.assertEqual(run["counts"], {"failed": 1})
+        log = read(run["log"])
+        self.assertEqual(log.count("quote_check.py check"), 2, log)              # the first answer and the retry
+        self.assertTrue(os.path.isfile(os.path.join(root, "Sources", "Plans", "badquote plan.md")))   # filed all the same
+        self.assertFalse(os.path.exists(os.path.join(root, "Cards", "Plans")))
+
 if __name__ == "__main__":
     unittest.main()

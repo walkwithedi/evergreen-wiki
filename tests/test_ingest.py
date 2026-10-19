@@ -1022,5 +1022,64 @@ class HealthCheckTest(unittest.TestCase):
         self.assertEqual(json.loads(p.stdout)["pages"]["missing"], ["milestones.md"])
 
 
+class BackfillTest(LibraryCase):
+    """Sources filed without cards first, their cards written later."""
+
+    def test_file_part_then_backfill_the_rest(self):
+        b = make_run(self.p("run"), [("plan.docx", "Atlas/plan.docx", "2026-03-01 09:00", PLAN_V1),
+                                     ("minutes.docx", "Atlas/minutes.docx", "2026-03-02 10:00", MINUTES)])
+        cards = accepted(b, card("S01", "p1", "The pilot starts in April.", "Pilot starts in April", "Pilot"))
+        rec = ingest.file_run(b, cards, self.p("lib"), self.cfg, only=["S01"])
+        self.assertEqual(rec["sources"], ["Atlas/plan.md"])
+        rec = ingest.file_run(b, [], self.p("lib"), self.cfg, only=["S02"])
+        self.assertEqual((rec["sources"], rec["without_cards"]), (["Atlas/minutes.md"], ["Atlas/minutes.md"]))
+        with self.assertRaises(ValueError):
+            ingest.file_run(b, [], self.p("lib"), self.cfg, only=["S09"])
+
+        [batch] = ingest.backfill_batch(self.p("lib"), self.cfg, self.p("bf"))
+        self.assertIn("# S01 minutes.md", read(batch))
+        self.assertIn("Budget stays as planned. ^s01-p1", read(batch))
+        acc = accepted([batch], card("S01", "p1", "Budget stays as planned.", "Budget unchanged", "Budget"))
+        rec = ingest.add_cards([batch], acc, self.p("lib"), self.cfg)
+        self.assertEqual((rec["sources"], rec["topics"], rec["refused"]), (["Atlas/minutes.md"], ["Budget"], []))
+        self.assertIn("[[Sources/Atlas/minutes#^p1]]", read(self.p("lib", "Cards", "Atlas", "minutes.md")))
+        self.assertTrue(read(self.p("lib", "Sources", "Atlas", "minutes.md")).startswith("> Original path"))
+        self.assertFalse(os.path.exists(self.p("lib", "Archive")))              # nothing archived
+        self.assertEqual(ingest.backfill_batch(self.p("lib"), self.cfg, self.p("bf2")), [])
+        again = ingest.add_cards([batch], acc, self.p("lib"), self.cfg)        # cards there already
+        self.assertEqual([r["reason"] for r in again["refused"]], ["it has cards already"])
+
+    def test_changed_source_is_refused(self):
+        b = make_run(self.p("run"), [("minutes.docx", "Atlas/minutes.docx", "2026-03-02 10:00", MINUTES)])
+        ingest.file_run(b, [], self.p("lib"), self.cfg)
+        [batch] = ingest.backfill_batch(self.p("lib"), self.cfg, self.p("bf"), ["Atlas/minutes.md"])
+        with open(self.p("lib", "Sources", "Atlas", "minutes.md"), "a", encoding="utf-8") as f:
+            f.write("\nAdded later. ^p3\n")
+        acc = accepted([batch], card("S01", "p1", "Budget stays as planned.", "Budget unchanged", "Budget"))
+        rec = ingest.add_cards([batch], acc, self.p("lib"), self.cfg)
+        self.assertEqual(rec["sources"], [])
+        self.assertIn("changed", rec["refused"][0]["reason"])
+        with self.assertRaises(ValueError):
+            ingest.backfill_batch(self.p("lib"), self.cfg, self.p("bf2"), ["Atlas/nothing.md"])
+
+    def test_command_line(self):
+        os.makedirs(self.p("lib"))
+        with open(self.p("lib", "_kb.json"), "w", encoding="utf-8") as f:
+            json.dump({"schema": 3}, f)
+        b = make_run(self.p("run"), [("plan.docx", "Atlas/plan.docx", "2026-03-01 09:00", PLAN_V1),
+                                     ("minutes.docx", "Atlas/minutes.docx", "2026-03-02 10:00", MINUTES)])
+        p = cli("file", *b, "--library", self.p("lib"), "--sources", "s02")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(json.loads(p.stdout)["sources"], ["Atlas/minutes.md"])
+        p = cli("backfill", "--library", self.p("lib"), "-o", self.p("bf"), "--limit", "1")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        batch = p.stdout.strip()
+        with open(self.p("acc.jsonl"), "w", encoding="utf-8") as f:
+            for c in accepted([batch], card("S01", "p2", "Next review on Friday", "Review on Friday", "Budget")):
+                f.write(json.dumps(c) + "\n")
+        p = cli("add-cards", batch, "--cards", self.p("acc.jsonl"), "--library", self.p("lib"))
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(json.loads(p.stdout)["sources"], ["Atlas/minutes.md"])
+
 if __name__ == "__main__":
     unittest.main()

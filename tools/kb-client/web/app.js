@@ -22,6 +22,11 @@
       type_project: "project", type_team: "department or team", type_organisation: "organisation",
       type_system: "system or product", type_other: "other",
       pending_versions: "Possible new versions", pending_version: "{new} is a new version of {old}",
+      pending_groups: "Documents with the same name", pending_group: "{name}: which one is current?",
+      pending_group_separate: "another document", pending_group_hint: "The others are filed as its older versions; tick \u201canother document\u201d to keep one apart under its folder's name.",
+      pending_duplicates: "Already in the library, not filed again: {n}",
+      pending_all_add: "Add all", pending_all_under: "Put all under\u2026", pending_all_yes: "Tick all", pending_all_no: "Untick all",
+      pending_all_accept: "Accept all", pending_all_restore: "Restore all", pending_filter: "Filter",
       pending_version_score: "name {name}, shared paragraphs {overlap}",
       pending_conflicts: "Conclusions the new versions change or drop",
       conflict_changed: "changed", conflict_removed: "removed", conflict_not_carried: "not carried over",
@@ -33,6 +38,32 @@
       uninstall: "Uninstall",
       move_this: "Move",
       graph: "Graph",
+      ingest_btn: "Ingest", ingest_title: "Ingest into {lib}",
+      ingest_material: "Material folder:", ingest_choose: "Choose\u2026", ingest_none: "none chosen",
+      ingest_rules: "Cards first for", ingest_rules_hint: "Every document is filed and can be searched at once; the ones the rules pick get cards now, the others later (Write cards while idle).",
+      ingest_all_folders: "every folder", ingest_top: "(top of the material folder)", ingest_since: "changed on or after",
+      ingest_list: "List the documents", ingest_listed: "{total} documents: {important} get cards now, {rest} are filed first and get cards later.",
+      ingest_other: "{n} other files (not documents) are left out.", ingest_parallel: "Card runs at once:",
+      ingest_start: "Start the ingest", ingest_stop: "Stop", ingest_continue: "Continue",
+      ingest_progress: "{label}: {done}/{total}", ingest_waiting: "Waiting for your decisions under Waiting for confirmation.",
+      ingest_show_pending: "Show", ingest_log: "Log:", ingest_missing: "Gave no source ({n}):",
+      ingest_step_convert: "Converting the documents", ingest_step_versions: "Looking for duplicates and versions",
+      ingest_step_file: "Filing the documents without cards", ingest_step_cards: "Writing cards",
+      ingest_step_decide: "Checking topics and conflicts", ingest_step_write: "Writing the cards and topic pages",
+      ingest_state_running: "running", ingest_state_stopping: "stopping\u2026", ingest_state_waiting: "waiting for you",
+      ingest_state_done: "done", ingest_state_stopped: "stopped", ingest_state_failed: "failed",
+      ist_waiting: "waiting", ist_working: "cards\u2026", ist_carded: "cards", ist_filed: "filed", ist_duplicate: "in library",
+      ist_older: "older", ist_failed: "no cards", ist_empty: "no text",
+      ingest_summary: "Filed without cards for now: {filed}; with cards: {carded}; topic pages rebuilt: {topics}.",
+      backfill_title: "Write cards while idle", backfill_hint: "Writes the cards of documents filed without them while no conversation needs the assistant, the rules' documents first, newest first; a message in any window makes it give way.",
+      backfill_on: "Switch on", backfill_off: "Switch off", backfill_pause: "Pause", backfill_resume: "Go on",
+      backfill_state: "{state}: {left} to do, {written} written, {held} waiting for decisions",
+      bfs_off: "Off", bfs_idle: "Waiting for the assistant to be free", bfs_working: "Writing cards", bfs_paused: "Paused", bfs_done: "Done", bfs_waiting: "Waiting",
+      backfill_use_rules: "Use the rules above first",
+      auto_title: "Automatic ingest", auto_on: "Ingest what is put in the drop folder", auto_drop: "Drop folder:",
+      auto_hint: "Documents left there for two minutes are ingested with cards when the assistant is free; decisions still wait for you. Done ones move to {filed}, ones without text to {not_filed}. While it is on, closing the page does not stop the client.",
+      auto_waiting: "{n} documents in the drop folder.", auto_last: "Last run {at}: {state}, {files} documents.",
+      lock_ingest: "The client's ingest is running",
       health: "Health check", health_title: "Health check: {lib}", health_running: "Checking\u2026",
       health_intro: "Read only: nothing in the library is changed.",
       health_summary: "{sources} sources, {uncarded} of them without cards yet; {problems} problems.",
@@ -255,6 +286,11 @@
       type_project: "项目", type_team: "部门或团队", type_organisation: "单位",
       type_system: "系统或产品", type_other: "其他",
       pending_versions: "可能的新版本", pending_version: "{new} 是 {old} 的新版本",
+      pending_groups: "同名文件", pending_group: "{name}：以哪一份为现行版？",
+      pending_group_separate: "不是同一份", pending_group_hint: "其余的作为它的旧版本归档；勾选「不是同一份」的会在名字前加上文件夹名，作为另一份文件保存。",
+      pending_duplicates: "库里已有、不再入库：{n} 份",
+      pending_all_add: "全部新增", pending_all_under: "全部并入\u2026", pending_all_yes: "全选", pending_all_no: "全不选",
+      pending_all_accept: "全部接受", pending_all_restore: "全部恢复", pending_filter: "筛选",
       pending_version_score: "名称相似度 {name}，段落重合 {overlap}",
       pending_conflicts: "新版本改变或去掉的结论",
       conflict_changed: "已改变", conflict_removed: "已删除", conflict_not_carried: "未带过来",
@@ -266,6 +302,32 @@
       uninstall: "卸载",
       move_this: "移动",
       graph: "关系图",
+      ingest_btn: "入库", ingest_title: "入库到「{lib}」",
+      ingest_material: "资料文件夹：", ingest_choose: "选择\u2026", ingest_none: "未选择",
+      ingest_rules: "先抽卡的范围", ingest_rules_hint: "所有文档都会先入库，马上能检索；按规则选中的现在抽卡，其余的以后抽（见「空闲时补抽卡片」）。",
+      ingest_all_folders: "全部文件夹", ingest_top: "（资料文件夹最上层）", ingest_since: "修改日期不早于",
+      ingest_list: "列出清单", ingest_listed: "共 {total} 份文档：{important} 份现在抽卡，{rest} 份先入原文、以后抽卡。",
+      ingest_other: "另有 {n} 个非文档文件，不入库。", ingest_parallel: "同时抽卡路数：",
+      ingest_start: "开始入库", ingest_stop: "停止", ingest_continue: "继续",
+      ingest_progress: "{label}：{done}/{total}", ingest_waiting: "有事项等你决定，见「等待确认」。",
+      ingest_show_pending: "查看", ingest_log: "日志：", ingest_missing: "没有生成来源（{n} 份）：",
+      ingest_step_convert: "正在转换文档", ingest_step_versions: "正在查重和比对版本",
+      ingest_step_file: "正在先入原文（暂不抽卡）", ingest_step_cards: "正在抽卡",
+      ingest_step_decide: "正在核对主题和冲突", ingest_step_write: "正在写入卡片和主题页",
+      ingest_state_running: "进行中", ingest_state_stopping: "正在停止\u2026", ingest_state_waiting: "等你决定",
+      ingest_state_done: "完成", ingest_state_stopped: "已停止", ingest_state_failed: "出错",
+      ist_waiting: "等待", ist_working: "抽卡中", ist_carded: "已抽卡", ist_filed: "已入原文", ist_duplicate: "库里已有",
+      ist_older: "旧版", ist_failed: "无卡片", ist_empty: "无文字",
+      ingest_summary: "先入原文（暂未抽卡）{filed} 份，抽卡 {carded} 份，重建主题页 {topics} 个。",
+      backfill_title: "空闲时补抽卡片", backfill_hint: "在没有对话需要助手时，为先入原文、还没抽卡的文档补抽卡片：规则选中的优先，新的在前；任何窗口一发消息就先让出。",
+      backfill_on: "打开", backfill_off: "关闭", backfill_pause: "暂停", backfill_resume: "继续",
+      backfill_state: "{state}：还剩 {left} 份，已写 {written} 份，{held} 份等你决定",
+      bfs_off: "未打开", bfs_idle: "等助手空闲", bfs_working: "正在抽卡", bfs_paused: "已暂停", bfs_done: "已全部完成", bfs_waiting: "等待",
+      backfill_use_rules: "按上面的规则优先",
+      auto_title: "自动入库", auto_on: "放进投放文件夹的文档自动入库", auto_drop: "投放文件夹：",
+      auto_hint: "文档放进去两分钟不再变化、助手空闲时，自动入库并抽卡；需要你决定的事项照样等你。处理完的移到 {filed}，读不出文字的移到 {not_filed}。打开期间，关掉页面客户端也不会停止。",
+      auto_waiting: "投放文件夹里有 {n} 份文档。", auto_last: "上次 {at}：{state}，{files} 份。",
+      lock_ingest: "客户端正在入库",
       health: "体检", health_title: "体检：{lib}", health_running: "正在检查\u2026",
       health_intro: "只读：不改动知识库里的任何文件。",
       health_summary: "共 {sources} 份来源，其中 {uncarded} 份尚未抽卡；发现 {problems} 个问题。",
@@ -666,6 +728,9 @@
         var g = el("button", { type: "button", "class": "quiet small" }, t("graph"));
         g.addEventListener("click", function () { openGraph(lib.id); });
         li.appendChild(g);
+        var ib = el("button", { type: "button", "class": "quiet small" }, t("ingest_btn"));
+        ib.addEventListener("click", function () { openIngest(lib); });
+        li.appendChild(ib);
         var h = el("button", { type: "button", "class": "quiet small" }, t("health"));
         h.addEventListener("click", function () { openHealth(lib); });
         li.appendChild(h);
@@ -932,11 +997,45 @@
     return s;
   }
 
-  function pendingGroup(form, title) {
+  // A group of decisions; with many rows it gets a filter (by the row's text) and the bulk buttons given:
+  // [[label, function (rowControls) {...}]] applied to the rows the filter shows.
+  var PENDING_BULK_ROWS = 8;
+
+  function pendingGroup(form, title, n, bulk) {
     var g = el("fieldset", { "class": "pending-group" });
-    g.appendChild(el("legend", {}, title));
+    g.appendChild(el("legend", {}, title + (n > 1 ? " (" + n + ")" : "")));
     form.appendChild(g);
+    if (bulk && n > 1) {
+      var bar = el("div", { "class": "pending-bulk" });
+      var filter = null;
+      if (n > PENDING_BULK_ROWS) {
+        filter = el("input", { type: "search", placeholder: t("pending_filter"), spellcheck: "false" });
+        filter.addEventListener("input", function () {
+          var q = filter.value.trim().toLowerCase();
+          Array.prototype.forEach.call(g.querySelectorAll(".pending-row, .pending-check"), function (row) {
+            show(row, !q || row.textContent.toLowerCase().indexOf(q) >= 0);
+          });
+        });
+        bar.appendChild(filter);
+      }
+      bulk.forEach(function (b) {
+        var c = b[2] || el("button", { type: "button", "class": "quiet small" }, b[0]);
+        c.addEventListener(b[2] ? "change" : "click", function () {
+          Array.prototype.forEach.call(g.querySelectorAll(".pending-row, .pending-check"), function (row) {
+            if (!row.hidden) b[1](row, c);
+          });
+          if (b[2]) c.value = "";
+        });
+        bar.appendChild(c);
+      });
+      g.appendChild(bar);
+    }
     return g;
+  }
+
+  function setSelect(row, value) {
+    var s = row.querySelector("select");
+    if (s) { s.value = value; s.dispatchEvent(new Event("change")); }
   }
 
   function pendingRow(group, label, controls) {
@@ -971,8 +1070,48 @@
     var pd = r.pending, reads = [];
     var form = el("form", { "class": "pending-run" });
     form.appendChild(el("h3", {}, t("pending_run", { lib: r.label, run: r.run, created: pd.created || "" })));
+    if ((pd.groups || []).length) {
+      var gg = pendingGroup(form, t("pending_groups"), pd.groups.length);
+      gg.appendChild(el("p", { "class": "hint" }, t("pending_group_hint")));
+      pd.groups.forEach(function (grp, k) {
+        var box = el("div", { "class": "pending-row pending-grp" });
+        box.appendChild(el("span", { "class": "pending-what" }, t("pending_group", { name: grp.name })));
+        var picks = [];
+        grp.members.forEach(function (m) {
+          var line = el("label", { "class": "pending-check" });
+          var radio = el("input", { type: "radio", name: "grp-" + r.run + "-" + k, value: m.path });
+          radio.checked = m.path === grp.current;
+          var sep = el("input", { type: "checkbox" });
+          line.appendChild(radio);
+          line.appendChild(document.createTextNode(" " + m.path + (m.modified ? " \u00b7 " + m.modified : "") + "  "));
+          var sl = el("label", { "class": "quiet" });
+          sl.appendChild(sep);
+          sl.appendChild(document.createTextNode(" " + t("pending_group_separate")));
+          line.appendChild(sl);
+          box.appendChild(line);
+          picks.push([radio, sep, m.path]);
+        });
+        gg.appendChild(box);
+        reads.push(function (d) {
+          var cur = picks.filter(function (x) { return x[0].checked; })[0];
+          d.groups[grp.name] = { current: cur ? cur[2] : grp.current,
+            separate: picks.filter(function (x) { return x[1].checked && x[0] !== (cur && cur[0]); }).map(function (x) { return x[2]; }) };
+        });
+      });
+    }
+    if ((pd.duplicates || []).length) {
+      var dups = el("details", { "class": "pending-group" });
+      dups.appendChild(el("summary", {}, t("pending_duplicates", { n: pd.duplicates.length })));
+      var dl = el("ul", { "class": "pending-items" });
+      pd.duplicates.slice(0, 200).forEach(function (x) { dl.appendChild(el("li", {}, x.source + " = " + x.existing)); });
+      dups.appendChild(dl);
+      form.appendChild(dups);
+    }
     if ((pd.new_topics || []).length) {
-      var g = pendingGroup(form, t("pending_topics"));
+      var under = choiceSelect([["", t("pending_all_under")]].concat(pd.topics.map(function (x) { return [x, x]; })), "");
+      var g = pendingGroup(form, t("pending_topics"), pd.new_topics.length, [
+        [t("pending_all_add"), function (row) { setSelect(row, ""); }],
+        ["", function (row, c) { if (c.value) setSelect(row, c.value); }, under]]);
       pd.new_topics.forEach(function (name) {
         var s = choiceSelect([["", t("pending_topic_add")]].concat(pd.topics.map(function (x) {
           return [x, t("pending_topic_under", { topic: x })]; })), "");
@@ -981,7 +1120,8 @@
       });
     }
     if ((pd.entities || []).length) {
-      var ge = pendingGroup(form, t("pending_entities"));
+      var ge = pendingGroup(form, t("pending_entities"), pd.entities.length, [
+        [t("pending_all_add"), function (row) { setSelect(row, ""); }]]);
       pd.entities.forEach(function (e) {
         var to = choiceSelect([["", t("pending_entity_add")]].concat(pd.entity_names.map(function (x) {
           return [x, t("pending_entity_alias", { name: x })]; })), "");
@@ -993,7 +1133,9 @@
       });
     }
     if ((pd.versions || []).length) {
-      var gv = pendingGroup(form, t("pending_versions"));
+      var gv = pendingGroup(form, t("pending_versions"), pd.versions.length, [
+        [t("pending_all_yes"), function (row) { var c = row.querySelector("input"); if (c) c.checked = true; }],
+        [t("pending_all_no"), function (row) { var c = row.querySelector("input"); if (c) c.checked = false; }]]);
       pd.versions.forEach(function (v) {
         var cb = el("input", { type: "checkbox" });
         var label = el("label", { "class": "pending-check" });
@@ -1005,7 +1147,9 @@
       });
     }
     if ((pd.conflicts || []).length) {
-      var gc = pendingGroup(form, t("pending_conflicts"));
+      var gc = pendingGroup(form, t("pending_conflicts"), pd.conflicts.length, [
+        [t("pending_all_accept"), function (row) { setSelect(row, "accept"); }],
+        [t("pending_all_restore"), function (row) { setSelect(row, "restore"); }]]);
       pd.conflicts.forEach(function (c) {
         var s = choiceSelect([["accept", t("pending_accept")], ["restore", t("pending_restore")]], "accept");
         var what = c.id + " \u00b7 " + t("conflict_" + c.kind) + " \u00b7 " + c.old.conclusion +
@@ -1020,7 +1164,7 @@
     form.appendChild(msg);
     form.addEventListener("submit", function (ev) {
       ev.preventDefault();
-      var d = { topics: {}, entities: {}, versions: [], conflicts: {} };
+      var d = { topics: {}, entities: {}, versions: [], conflicts: {}, groups: {} };
       reads.forEach(function (f) { f(d); });
       save.disabled = true;
       api("POST", "/api/pending", { library: r.library, run: r.run, decisions: d }).then(function (res) {
@@ -1237,7 +1381,7 @@
 
   // What holds the write lock (a management step), as a short phrase; "" when nothing does.
   function lockWhat(lock) {
-    return lock ? t("lock_step") : "";
+    return !lock ? "" : t(lock.holder === "ingest" ? "lock_ingest" : "lock_step");
   }
 
   function drawTabs() {
@@ -1881,6 +2025,7 @@
   }
 
   function chatEvent(ev) {
+    if (ev.type === "ingest" || ev.type === "backfill") { ingestSoon(); return; }
     if (ev.type === "windows") {
       chat.windows = ev.windows || [];
       chat.lock = ev.lock || null;
@@ -2265,6 +2410,252 @@
   }
 
   function closeGraph() { show($("graph"), false); graph = null; }
+
+  // ---------- client-run ingest ----------
+  // The client runs kb-ingest's scripts itself; the assistant only writes cards, in windows of the client's own.
+
+  var ING_ITEMS = 300;
+  var ing = { lib: null, plan: null, state: null, timer: null, material: "" };
+
+  function openIngest(lib) {
+    ing.lib = lib;
+    ing.plan = null;
+    $("ingest-title").textContent = t("ingest_title", { lib: lib.label });
+    show($("ingest"), true);
+    $("ingest").scrollIntoView({ behavior: "smooth", block: "start" });
+    drawIngestForm();
+    loadIngest();
+  }
+
+  function ingestSoon() {
+    if ($("ingest").hidden) return;
+    clearTimeout(ing.timer);
+    ing.timer = setTimeout(loadIngest, 300);
+  }
+
+  function loadIngest() {
+    return api("GET", "/api/ingest").then(function (st) {
+      ing.state = st;
+      drawIngestRun();
+      drawBackfill();
+      drawAuto();
+    }).catch(function () {});
+  }
+
+  function rulesNow() {
+    var folders = [];
+    Array.prototype.forEach.call(document.querySelectorAll("#ingest-form input[data-folder]"), function (c) {
+      if (c.checked) folders.push(c.getAttribute("data-folder"));
+    });
+    var all = document.querySelector("#ingest-form input[data-all]");
+    var since = document.querySelector("#ingest-form input[type=date]");
+    return { folders: all && all.checked ? [] : folders, since: since ? since.value : "" };
+  }
+
+  function drawIngestForm() {
+    var box = $("ingest-form");
+    box.textContent = "";
+    var row = el("div", { "class": "row" });
+    row.appendChild(el("span", {}, t("ingest_material")));
+    row.appendChild(el("code", {}, ing.material || t("ingest_none")));
+    var choose = el("button", { type: "button", "class": "quiet small" }, t("ingest_choose"));
+    choose.addEventListener("click", function () {
+      openBrowser(ing.material || (state && state.home) || "", function (path) {
+        ing.material = path;
+        ing.plan = null;
+        drawIngestForm();
+        listPlan([]);
+      });
+    });
+    row.appendChild(choose);
+    box.appendChild(row);
+    var p = ing.plan;
+    if (ing.material && p) {
+      box.appendChild(el("h3", {}, t("ingest_rules")));
+      box.appendChild(el("p", { "class": "hint" }, t("ingest_rules_hint")));
+      var folders = el("div", { "class": "ingest-folders" });
+      var allL = el("label");
+      var all = el("input", { type: "checkbox", "data-all": "1" });
+      all.checked = !p.rules.folders.length;
+      allL.appendChild(all);
+      allL.appendChild(document.createTextNode(" " + t("ingest_all_folders")));
+      folders.appendChild(allL);
+      p.folders.forEach(function (f) {
+        var l = el("label");
+        var c = el("input", { type: "checkbox", "data-folder": f.folder });
+        c.checked = p.rules.folders.indexOf(f.folder) >= 0;
+        c.disabled = !f.folder;
+        l.appendChild(c);
+        l.appendChild(document.createTextNode(" " + (f.folder || t("ingest_top")) + " (" + f.files + ")"));
+        folders.appendChild(l);
+        c.addEventListener("change", function () { if (c.checked) all.checked = false; listPlan(); });
+      });
+      all.addEventListener("change", function () { listPlan(); });
+      box.appendChild(folders);
+      var sr = el("div", { "class": "row" });
+      sr.appendChild(el("span", {}, t("ingest_since")));
+      var since = el("input", { type: "date", value: p.rules.since || "" });
+      since.addEventListener("change", function () { listPlan(); });
+      sr.appendChild(since);
+      box.appendChild(sr);
+      box.appendChild(el("p", {}, t("ingest_listed", { total: p.total, important: p.important, rest: p.total - p.important })));
+      if (p.other) box.appendChild(el("p", { "class": "hint" }, t("ingest_other", { n: p.other })));
+      var go = el("div", { "class": "row" });
+      go.appendChild(el("span", {}, t("ingest_parallel")));
+      var par = choiceSelect([1, 2, 3, 4].slice(0, (ing.state && ing.state.parallel_max) || 4).map(function (n) {
+        return [String(n), String(n)]; }), "1");
+      go.appendChild(par);
+      var start = el("button", { type: "button", "class": "primary small" }, t("ingest_start"));
+      start.disabled = !p.total || (ing.state && ing.state.run && ["running", "stopping", "waiting"].indexOf(ing.state.run.state) >= 0);
+      var msg = el("span", { "class": "hint" });
+      start.addEventListener("click", function () {
+        start.disabled = true;
+        api("POST", "/api/ingest/start", { library: ing.lib.id, material: ing.material, rules: rulesNow(),
+                                           parallel: Number(par.value) }).then(function () {
+          ing.plan = null;
+          drawIngestForm();
+          loadIngest();
+        }).catch(function (e) { start.disabled = false; msg.textContent = String(e.message); });
+      });
+      go.appendChild(start);
+      go.appendChild(msg);
+      box.appendChild(go);
+    }
+  }
+
+  function listPlan(folders) {
+    var rules = folders ? { folders: folders, since: "" } : rulesNow();
+    api("POST", "/api/ingest/plan", { library: ing.lib.id, material: ing.material, rules: rules }).then(function (p) {
+      ing.plan = p;
+      drawIngestForm();
+    }).catch(function (e) { $("ingest-form").appendChild(el("p", { "class": "warn" }, String(e.message))); });
+  }
+
+  function drawIngestRun() {
+    var box = $("ingest-run");
+    box.textContent = "";
+    var r = ing.state && ing.state.run;
+    if (!r) return;
+    var counts = r.counts || {};
+    var done = 0;
+    ["carded", "filed", "duplicate", "older", "failed", "empty"].forEach(function (k) { done += counts[k] || 0; });
+    box.appendChild(el("h3", {}, t("ingest_progress", { label: r.label, done: done, total: r.total }) + " \u00b7 " +
+      t("ingest_state_" + r.state) + (r.step && r.state !== "done" ? " \u00b7 " + t("ingest_step_" + r.step) : "")));
+    var bar = el("div", { "class": "ingest-bar" });
+    var fill = el("span");
+    fill.style.width = (r.total ? Math.round(100 * done / r.total) : 0) + "%";
+    bar.appendChild(fill);
+    box.appendChild(bar);
+    box.appendChild(el("p", { "class": "hint" }, Object.keys(counts).map(function (k) { return t("ist_" + k) + " " + counts[k]; }).join(" \u00b7 ")));
+    if (r.reason) box.appendChild(el("p", { "class": r.state === "failed" ? "warn" : "hint" }, r.reason));
+    if (r.state === "waiting") {
+      var w = el("p", { "class": "warn" }, t("ingest_waiting") + " ");
+      var sh = el("button", { type: "button", "class": "quiet small" }, t("ingest_show_pending"));
+      sh.addEventListener("click", function () { loadPending(); $("pending").scrollIntoView({ behavior: "smooth", block: "start" }); });
+      w.appendChild(sh);
+      box.appendChild(w);
+    }
+    if (r.state === "done" && r.summary) {
+      box.appendChild(el("p", {}, t("ingest_summary", { filed: r.summary.filed || 0, carded: r.summary.carded || 0, topics: r.summary.topics || 0 })));
+    }
+    var row = el("div", { "class": "row" });
+    if (["running", "waiting"].indexOf(r.state) >= 0) {
+      var stop = el("button", { type: "button", "class": "quiet small" }, t("ingest_stop"));
+      stop.addEventListener("click", function () { api("POST", "/api/ingest/stop", {}).then(loadIngest).catch(function () {}); });
+      row.appendChild(stop);
+    }
+    if (r.state === "stopped" || r.state === "failed") {
+      var cont = el("button", { type: "button", "class": "primary small" }, t("ingest_continue"));
+      cont.addEventListener("click", function () {
+        api("POST", "/api/ingest/continue", {}).then(loadIngest).catch(function (e) { box.appendChild(el("p", { "class": "warn" }, String(e.message))); });
+      });
+      row.appendChild(cont);
+    }
+    box.appendChild(row);
+    if (["running", "waiting"].indexOf(r.state) >= 0) box.appendChild(el("p", { "class": "hint" }, t("ingest_long")));
+    var d = el("details");
+    d.appendChild(el("summary", {}, r.material));
+    var ul = el("ul", { "class": "ingest-items" });
+    r.items.slice(0, ING_ITEMS).forEach(function (it) {
+      var li = el("li", { "class": "st-" + it.status });
+      li.appendChild(el("span", { "class": "st" }, t("ist_" + it.status) + (it.cards ? " " + it.cards : "")));
+      li.appendChild(el("span", { "class": "p" }, it.path + (it.reason ? " \u00b7 " + it.reason : "")));
+      ul.appendChild(li);
+    });
+    d.appendChild(ul);
+    if ((r.missing || []).length) {
+      d.appendChild(el("p", { "class": "hint" }, t("ingest_missing", { n: r.missing.length })));
+      var ml = el("ul", { "class": "ingest-items" });
+      r.missing.slice(0, ING_ITEMS).forEach(function (m) { ml.appendChild(el("li", {}, m.rel)); });
+      d.appendChild(ml);
+    }
+    d.appendChild(el("p", { "class": "hint log-where" }, t("ingest_log") + " " + r.log));
+    box.appendChild(d);
+  }
+
+  function drawBackfill() {
+    var box = $("ingest-backfill");
+    box.textContent = "";
+    var bf = ing.lib && ing.state && ing.state.backfill[ing.lib.id];
+    if (!bf) return;
+    box.appendChild(el("h3", {}, t("backfill_title")));
+    box.appendChild(el("p", { "class": "hint" }, t("backfill_hint")));
+    box.appendChild(el("p", {}, bf.state === "off" ? t("bfs_off")
+      : t("backfill_state", { state: t("bfs_" + bf.state), left: bf.left, written: bf.written, held: bf.held })));
+    var row = el("div", { "class": "row" });
+    function act(label, on) {
+      var b = el("button", { type: "button", "class": "quiet small" }, t(label));
+      b.addEventListener("click", function () {
+        var body = { library: ing.lib.id, on: on };
+        if (on === true && use && use.checked && ing.plan) body.rules = rulesNow();
+        api("POST", "/api/backfill", body).then(loadIngest).catch(function (e) { box.appendChild(el("p", { "class": "warn" }, String(e.message))); });
+      });
+      row.appendChild(b);
+    }
+    var use = null;
+    if (bf.state === "off" || bf.state === "done") act("backfill_on", true);
+    if (bf.state === "idle" || bf.state === "working") act("backfill_pause", "pause");
+    if (bf.state === "paused") act("backfill_resume", true);
+    if (bf.state !== "off") act("backfill_off", false);
+    if (ing.plan && (bf.state === "off" || bf.state === "done")) {
+      var l = el("label", { "class": "hint" });
+      use = el("input", { type: "checkbox" });
+      use.checked = true;
+      l.appendChild(use);
+      l.appendChild(document.createTextNode(" " + t("backfill_use_rules")));
+      row.appendChild(l);
+    }
+    box.appendChild(row);
+  }
+
+  function drawAuto() {
+    var box = $("ingest-auto");
+    box.textContent = "";
+    var a = ing.lib && ing.state && ing.state.auto && ing.state.auto[ing.lib.id];
+    if (!a) return;
+    box.appendChild(el("h3", {}, t("auto_title")));
+    var l = el("label");
+    var c = el("input", { type: "checkbox" });
+    c.checked = !!a.on;
+    l.appendChild(c);
+    l.appendChild(document.createTextNode(" " + t("auto_on")));
+    c.addEventListener("change", function () {
+      api("POST", "/api/auto", { library: ing.lib.id, on: c.checked }).then(loadIngest).catch(function () { c.checked = !c.checked; });
+    });
+    box.appendChild(l);
+    box.appendChild(el("p", { "class": "hint" }, t("auto_hint", { filed: a.filed, not_filed: a.not_filed })));
+    if (a.on) {
+      var r = el("div", { "class": "row" });
+      r.appendChild(el("span", {}, t("auto_drop")));
+      r.appendChild(el("code", {}, a.drop));
+      var cp = el("button", { type: "button", "class": "quiet small" }, t("copy_path"));
+      cp.addEventListener("click", function () { copyText(a.drop, cp); });
+      r.appendChild(cp);
+      box.appendChild(r);
+      if (a.waiting) box.appendChild(el("p", {}, t("auto_waiting", { n: a.waiting })));
+    }
+    if (a.last) box.appendChild(el("p", { "class": "hint" }, t("auto_last", { at: a.last.at, state: t("ingest_state_" + a.last.state), files: a.last.files })));
+  }
 
   // ---------- health check ----------
   // The client runs ingest.py's read-only check itself; findings are listed by kind, at most 50 each.
@@ -2727,6 +3118,7 @@
   });
   $("graph-close").addEventListener("click", closeGraph);
   $("health-close").addEventListener("click", function () { show($("health"), false); });
+  $("ingest-close").addEventListener("click", function () { show($("ingest"), false); });
   $("graph-svg").addEventListener("pointerdown", function (e) { if (graph) panGraph(e); });
   $("graph-svg").addEventListener("wheel", function (e) { if (graph) zoomGraph(e); }, { passive: false });
   $("graph-copy").addEventListener("click", function () {

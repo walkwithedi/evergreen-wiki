@@ -271,6 +271,30 @@ def build_units(sources, limit):
     return units, oversized
 
 
+LIB_ANCHOR_RE = re.compile(r'(^| )\^p(\d+)$', re.M)
+
+
+def from_library(sources):
+    """Units (one per source, never cut) made from sources already in a library, keeping their anchors:
+    sources are dicts with name (file name), path (folder/name), modified and text (the library file).
+    The notes at the top stay notes, headings are demoted and ^pN becomes ^sNN-pN, so that split_back
+    gives the library text again."""
+    units = []
+    for i, s in enumerate(sources, 1):
+        sid = source_id(i)
+        lines = s['text'].replace('\r\n', '\n').strip('\n').split('\n')
+        k = 0
+        while k < len(lines) and lines[k].startswith('>'):
+            k += 1
+        meta, body = '\n'.join(lines[:k]), '\n'.join(lines[k:]).strip('\n')
+        prefix = anchor_prefix(sid)
+        body = LIB_ANCHOR_RE.sub(lambda m: '%s^%s%s' % (m.group(1), prefix, m.group(2)), demote(body))
+        text = '# %s %s\n%s\n\n%s\n' % (sid, s['name'], meta, body) if meta else '# %s %s\n\n%s\n' % (sid, s['name'], body)
+        units.append({'sid': sid, 'name': s['name'], 'path': s.get('path', ''), 'modified': s.get('modified', ''),
+                      'part': (1, 1), 'chars': len(text), 'text': text})
+    return units
+
+
 def render(batch, number, total, name, tier, limit, labels=None):
     lb = dict(LABELS, **(labels or {}))
     w = [lb['title'] % (name, number, total), '', lb['limit'] % (tier, limit), '',
