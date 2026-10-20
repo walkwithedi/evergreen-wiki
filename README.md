@@ -89,12 +89,14 @@ work-kb/
   Archive/                 older versions of sources and cards, in the same folders
   _index/                  the search index the scripts keep; made from the files, can be deleted
   _pending/                decisions an ingest run waits for (removed after filing)
+  .kb-work/                one work folder per ingest run (hidden; removed when the run is finished)
 ```
 
 Every name is configurable in `_kb.json`. A quick note is a source like any other ("Note <YYYYMMDD-HHMM> <title>"). Table E of the spec is the alias table of entities, and status-card items citing a source that got a new version carry a review mark (⏳) until they are checked.
 
 ## Coming from earlier releases
 
+- 4.0.x: 4.0 libraries are read and written by 5.0 as they are. quote_check.py check is now quote_check.py verify, so scripts or prompts of your own that call it need the new name. Each ingest run works in `.kb-work/` inside the library; the folder is removed when the run is finished.
 - 3.0.x and 2.0.x: 4.0 libraries keep each source in the folder it came from (schema 3). A library made by 2.0 or 3.0 (schema 2, one flat sources folder) is not read and not migrated; keep using [v3.0.0](../../releases/tag/v3.0.0) for it, or set up a new library and ingest the material again.
 - 2.0.x in 3.0.0: a local library made by 2.0 works in 3.0 as it is; its `tier` setting is read and ignored, and topic pages are always built by the script. Libraries in Google Drive and the ChatGPT versions of the skills stay with [v2.0.0](../../releases/tag/v2.0.0), which is not developed further.
 - 1.x: libraries of schema 1 are not migrated; the skills say so and stop when they meet one. Keep using [v1.22.1](../../releases/tag/v1.22.1) for such a library, or set up a new library in an empty folder and ingest the material again.

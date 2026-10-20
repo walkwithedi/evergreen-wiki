@@ -13,7 +13,9 @@ entity_types, the assistant's suggested type for entities not yet in the spec's 
 ({"Riverside Clinic": "organisation"}; one of ENTITY_TYPES). The card's date is not the
 assistant's to give: it is the source's last-modified time from the batch file.
 
-check: every card is checked against the batch files of its run (kb_batch.py format):
+verify: every card is checked against the batch files of its run (kb_batch.py format). CARDS is
+  one JSON-lines file or a folder of them (one per source, S01.jsonl, S02.jsonl, ...), read in name
+  order; a rejected card from a folder is reported with its file and line:
   - the fields are there and the source number exists;
   - the quote is QUOTE_MIN to QUOTE_MAX characters and occurs in the paragraph (list item,
     table) of its anchor. Comparison ignores white space, the difference between full- and
@@ -33,10 +35,10 @@ the source file (kb_batch.py split names, --names the same map; a name may hold 
 
 Python 3 standard library only.
 
-Exit codes: 0 every card passed (check) or files written (write); 3 some cards rejected;
+Exit codes: 0 every card passed (verify) or files written (write); 3 some cards rejected;
 2 bad arguments or unreadable input.
 Usage:
-  quote_check.py check CARDS.jsonl BATCH.md [BATCH.md ...] --accepted OUT.jsonl --report OUT.json
+  quote_check.py verify CARDS.jsonl|CARDS_DIR BATCH.md [BATCH.md ...] --accepted OUT.jsonl --report OUT.json
                  [--topics TOPICS.txt] [--quote-min 6] [--quote-max 300]
   quote_check.py write ACCEPTED.jsonl BATCH.md [BATCH.md ...] -o CARDS_DIR [--names NAMES.json]
                  [--lang en|zh]
@@ -211,8 +213,13 @@ def _anchor_n(a):
     return int(a.rsplit('p', 1)[1])
 
 
-def check(lines, table, by_sid, topics=None, qmin=QUOTE_MIN, qmax=QUOTE_MAX):
-    """(accepted cards, report) for the card lines given."""
+def check(lines, table, by_sid, topics=None, qmin=QUOTE_MIN, qmax=QUOTE_MAX, origins=None):
+    """(accepted cards, report) for the card lines given; origins, one (file, line) per line, names
+    where each line came from when the cards were read from a folder."""
+    def where(i):
+        if not origins:
+            return {'line': i}
+        return {'file': origins[i - 1][0], 'line': origins[i - 1][1]}
     accepted, rejected, fixed, seen = [], [], [], set()
     new_topics, dups, total = [], 0, 0
     known = {topic_key(t): t for t in topics or ()}
@@ -225,11 +232,11 @@ def check(lines, table, by_sid, topics=None, qmin=QUOTE_MIN, qmax=QUOTE_MAX):
         except ValueError:
             card = None
         if card is None or not isinstance(card, dict):
-            rejected.append({'line': i, 'card': ln.strip(), 'reason': REASONS['bad_json']})
+            rejected.append(dict(where(i), card=ln.strip(), reason=REASONS['bad_json']))
             continue
         out, reason, note = check_card(card, table, by_sid, qmin, qmax)
         if reason:
-            rejected.append({'line': i, 'card': card, 'reason': reason})
+            rejected.append(dict(where(i), card=card, reason=reason))
             continue
         key = (out['source'], norm(out['quote']), norm(out['conclusion']))
         if key in seen:
@@ -237,7 +244,7 @@ def check(lines, table, by_sid, topics=None, qmin=QUOTE_MIN, qmax=QUOTE_MAX):
             continue
         seen.add(key)
         if note:
-            fixed.append({'line': i, 'from': note[0], 'to': note[1]})
+            fixed.append(dict(where(i), **{'from': note[0], 'to': note[1]}))
         if topics is not None:
             out['topic'] = known.get(topic_key(out['topic']), out['topic'])
             if out['topic'] not in topics and out['topic'] not in new_topics:
@@ -362,14 +369,29 @@ def read_lines(path):
         return f.read().replace('\r\n', '\n').split('\n')
 
 
+def read_cards_input(path):
+    """(lines, origins) of a cards file or of the .jsonl files of a folder, in name order; origins is
+    None for a file, else one (file name, line number) per line."""
+    if not os.path.isdir(path):
+        return read_lines(path), None
+    lines, origins = [], []
+    for name in sorted(n for n in os.listdir(path) if n.endswith('.jsonl')):
+        for k, ln in enumerate(read_lines(os.path.join(path, name)), 1):
+            lines.append(ln)
+            origins.append((name, k))
+    if not lines:
+        raise ValueError('no .jsonl cards files in %s' % path)
+    return lines, origins
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description='Check cards against their batch files and write the ones that pass.')
     ap.add_argument('--log-level', default=os.environ.get('LOG_LEVEL', 'WARNING').upper(),
                     type=str.upper, choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'],
                     help='default: environment variable LOG_LEVEL, else WARNING')
     sub = ap.add_subparsers(dest='cmd', required=True)
-    c = sub.add_parser('check', help='check cards; write the accepted ones and a report')
-    c.add_argument('cards', help='cards, one JSON object per line')
+    c = sub.add_parser('verify', help='check cards; write the accepted ones and a report')
+    c.add_argument('cards', help='cards, one JSON object per line: a file, or a folder of .jsonl files')
     c.add_argument('batches', nargs='+', help='batch files of the run')
     c.add_argument('--accepted', required=True, help='output: accepted cards (JSON lines)')
     c.add_argument('--report', required=True, help='output: report (JSON)')
@@ -388,12 +410,12 @@ def main(argv=None):
 
     try:
         table, by_sid = load_batches(a.batches)
-        lines = read_lines(a.cards)
-        if a.cmd == 'check':
+        if a.cmd == 'verify':
+            lines, origins = read_cards_input(a.cards)
             topics = None
             if a.topics:
                 topics = {t.strip() for t in read_lines(a.topics) if t.strip() and not t.startswith('#')}
-            accepted, report = check(lines, table, by_sid, topics, a.quote_min, a.quote_max)
+            accepted, report = check(lines, table, by_sid, topics, a.quote_min, a.quote_max, origins)
             with open(a.accepted, 'w', encoding='utf-8') as f:
                 for card in accepted:
                     f.write(json.dumps(card, ensure_ascii=False) + '\n')
@@ -403,6 +425,7 @@ def main(argv=None):
                   % (report['cards'], report['accepted'], len(report['rejected']),
                      len(report['anchors_fixed']), report['duplicates'], len(report['new_topics'])))
             return 3 if report['rejected'] else 0
+        lines = read_lines(a.cards)
         names = {}
         if a.names:
             with open(a.names, encoding='utf-8') as f:

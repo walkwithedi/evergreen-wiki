@@ -8,7 +8,7 @@ folders, named by kbconf names: sources_dir (default Sources), cards_dir (Cards)
 
 file: the run's batch files are split back into one file per source, Sources/<folder>/<original
   name>.md, where folder is the one the document came from below the material root (kbconf
-  rel_folder). The accepted cards (quote_check.py check) go to Cards/<folder>/<same name>.md; a run
+  rel_folder). The accepted cards (quote_check.py verify) go to Cards/<folder>/<same name>.md; a run
   filed without --cards writes the sources only, to be searched until their cards are written. A
   name is one document wherever its folder is: a source whose name is already in the library is a
   new version, and the old source file and its cards file move to Archive/Sources/<old folder> and
@@ -40,7 +40,7 @@ note: a quick note (the user's words, in a text file) as the batch file of a run
   "Note <YYYYMMDD-HHMM> <title>.md" ("随手记 ..." in a Chinese library). The words are the source
   text, one anchor per paragraph; where it came from, when it was recorded and --context go into
   note lines (">"), which cards cannot quote. Prints the batch file paths; the run then goes on as
-  any other (quote_check.py check, file, pages).
+  any other (quote_check.py verify, file, pages).
 
 pending: the owner's decisions of a run of a local library through a file, so that the knowledge base
   client can show them as a form. "write" puts the run's new topics (--report, quote_check.py's
@@ -99,23 +99,36 @@ file --sources S01,S03 files only those sources of the batch files (the others a
 
 backfill: batch files for sources already in the library without cards (the newest first, or --source
   paths), one source per file, kept whole, with the library's anchors; the run then goes on with
-  quote_check.py check and add-cards.
+  quote_check.py verify and add-cards.
 
 add-cards: writes the cards of such sources. A source must be in the library at its path, with the same
   content and no cards file; nothing is archived. Prints the sources that got cards, their topics and the
   sources refused with the reason.
 
+progress --work DIR: how far the run in a work folder got, judged only from the files its steps leave
+  there: batch files (*_bNN.md), one cards file per source (cards/S01.jsonl, ...), accepted.jsonl and
+  report.json newer than the cards (report2.json once rejected cards were rewritten), entities.json,
+  versions.json and conflicts.json (not for notes and backfill runs), and filed.json and pages.json,
+  which file, add-cards and pages append their records to when given --work. A run is finished when it
+  was filed and every topic it touched has its page rebuilt. Prints the step reached and the next one.
+
+work: run folders, <library>/.kb-work/<chat|client>-<YYYYMMDD-HHMMSS>/. "new" makes one and prints its
+  path; "list" lists them, finished or not; "done --work DIR" removes a run folder once progress says it
+  is finished; "drop --run NAME" removes an unfinished one the owner gave up. Nothing outside .kb-work
+  is ever removed.
+
 check: a read-only health check (health_check): quotes no longer in their paragraph, links to files that do
   not exist, topic pages missing, out of date or no longer built, cards files without their source,
   status-card items marked for review or citing a source that is not current, runs waiting for decisions
-  for more than PENDING_DAYS days, and the number of sources without cards. Writes nothing; exit 3 when
+  for more than PENDING_DAYS days, run folders left unfinished for more than WORK_DAYS days, and the number
+  of sources without cards. Writes nothing; exit 3 when
   it finds problems.
 
 Python 3 standard library only.
 
 Exit codes: 0 done; 3 status-check or check found problems; 2 bad arguments, unreadable input or a part missing.
 Usage:
-  ingest.py file BATCH.md [BATCH.md ...] [--cards ACCEPTED.jsonl] --library DIR [--target DIR]
+  ingest.py file BATCH.md [BATCH.md ...] [--cards ACCEPTED.jsonl] --library DIR [--target DIR] [--work DIR]
                  [--names NAMES.json] [--replaces NEW.md=OLD.md ...] [--restore RESTORE.json] [--groups GROUPS.json]
   ingest.py conflicts BATCH.md [BATCH.md ...] --cards ACCEPTED.jsonl --library DIR [--target DIR]
                  [--replaces NEW.md=OLD.md ...] [--groups GROUPS.json]
@@ -126,13 +139,18 @@ Usage:
   ingest.py pending done --library DIR --run NAME
   ingest.py versions BATCH.md [BATCH.md ...] --library DIR [--target DIR] [--groups GROUPS.json]
   ingest.py entities ACCEPTED.jsonl --library DIR [--apply [--map MAP.json]]
-  ingest.py pages --library DIR [--target DIR] (--topic NAME ... | --all)
+  ingest.py pages --library DIR [--target DIR] (--topic NAME ... | --all) [--work DIR]
   ingest.py topics --library DIR [--out FILE]
   ingest.py add-topic --library DIR --topic NAME [--topic NAME ...] [--partition NN]
   ingest.py retopic ACCEPTED.jsonl --from TOPIC --to TOPIC
   ingest.py check --library DIR [--json]
   ingest.py backfill --library DIR -o DIR [--source PATH ...] [--limit N]
-  ingest.py add-cards BATCH.md [BATCH.md ...] --cards ACCEPTED.jsonl --library DIR
+  ingest.py add-cards BATCH.md [BATCH.md ...] --cards ACCEPTED.jsonl --library DIR [--work DIR]
+  ingest.py progress --work DIR [--json]
+  ingest.py work new --library DIR [--prefix chat|client]
+  ingest.py work list --library DIR
+  ingest.py work done --work DIR
+  ingest.py work drop --library DIR --run NAME
 """
 import argparse
 import difflib
@@ -1141,6 +1159,7 @@ def health_check(library, cfg, today=None):
       unpaired    cards files without their source
       status      status-card items marked for review, and items citing a source that is not current
       pending     runs waiting for the owner's decisions for more than PENDING_DAYS days
+      work        run folders under .kb-work left unfinished for more than WORK_DAYS days
       uncarded    sources without cards yet (counted, not a problem)
     """
     n = cfg['names']
@@ -1228,10 +1247,173 @@ def health_check(library, cfg, today=None):
             age = (today - datetime.fromtimestamp(os.path.getmtime(os.path.join(folder, fname))).date()).days
             if age > PENDING_DAYS:
                 pending.append({'run': fname[:-5], 'days': age})
+    work = [{'run': r['run'], 'days': r['days']} for r in work_runs(library) if not r['done'] and r['days'] > WORK_DAYS]
     problems = (len(quotes) + len(links) + sum(len(v) for v in pages.values()) + len(unpaired)
-                + len(status['review']) + len(status['not_current']) + len(pending))
+                + len(status['review']) + len(status['not_current']) + len(pending) + len(work))
     return {'problems': problems, 'quotes': quotes, 'links': links, 'pages': pages, 'unpaired': unpaired,
-            'status': status, 'pending': pending, 'uncarded': uncarded, 'sources': len(sources)}
+            'status': status, 'pending': pending, 'work': work, 'uncarded': uncarded, 'sources': len(sources)}
+
+
+# ---------------------------------------------------------------- work folders
+
+WORK_DIR = '.kb-work'
+WORK_RE = re.compile(r'^(chat|client)-\d{8}-\d{6}(?:-\d+)?$')
+WORK_DAYS = 7       # a run left unfinished longer than this is reported by the health check
+FILED_LOG, PAGES_LOG = 'filed.json', 'pages.json'
+BATCH_NAME_RE = re.compile(r'_b\d{2,}\.md$')
+
+
+def work_new(library, cfg, prefix='chat'):
+    """Make <library>/.kb-work/<prefix>-<YYYYMMDD-HHMMSS>/ (a -2, -3, ... suffix when taken); returns its path."""
+    if prefix not in ('chat', 'client'):
+        raise ValueError('a work folder prefix is chat or client, got %r' % prefix)
+    base = '%s-%s' % (prefix, kbconf.now(cfg['timezone']).strftime('%Y%m%d-%H%M%S'))
+    root = os.path.join(library, WORK_DIR)
+    os.makedirs(root, exist_ok=True)
+    name, k = base, 1
+    while True:
+        path = os.path.join(root, name)
+        try:
+            os.mkdir(path)
+            return path
+        except FileExistsError:
+            k += 1
+            name = '%s-%d' % (base, k)
+
+
+def work_place(work):
+    """(library root, run name) of a run's work folder; refuses any folder that is not
+    <library>/.kb-work/<chat|client>-<time>."""
+    real = os.path.realpath(work)
+    parent, run = os.path.split(real)
+    if os.path.basename(parent) != WORK_DIR or not WORK_RE.match(run) or not os.path.isdir(real):
+        raise ValueError('not a run folder under %s/: %s' % (WORK_DIR, work))
+    return os.path.dirname(parent), run
+
+
+def log_step(work, fname, record):
+    """Append a step's record to <work>/<fname> (a JSON list), for progress."""
+    if not work:
+        return
+    path = os.path.join(work, fname)
+    done = _load(path if os.path.isfile(path) else None, [])
+    done.append(record)
+    _write(path, json.dumps(done, ensure_ascii=False, indent=1) + '\n')
+
+
+def _mtime(path):
+    return os.path.getmtime(path) if os.path.exists(path) else 0
+
+
+def work_progress(work):
+    """How far the run in a work folder got, from the files the steps leave there; see progress."""
+    if not os.path.isdir(work):
+        raise ValueError('no such work folder: %s' % work)
+    batches = []
+    for here, dirs, names in os.walk(work):
+        dirs[:] = sorted(d for d in dirs if d != 'cards')
+        batches += [os.path.join(here, n) for n in sorted(names) if BATCH_NAME_RE.search(n)]
+    kind = 'ingest'
+    if batches and all(os.path.basename(b).startswith('note_') for b in batches):
+        kind = 'note'
+    elif batches and all(os.path.basename(b).startswith(BACKFILL_PREFIX) for b in batches):
+        kind = 'backfill'
+    sources = sorted(quote_check.load_batches(batches)[0], key=_sid_n) if batches else []
+    cards_dir = os.path.join(work, 'cards')
+    have = {os.path.splitext(n)[0].upper(): os.path.join(cards_dir, n)
+            for n in (os.listdir(cards_dir) if os.path.isdir(cards_dir) else []) if n.endswith('.jsonl')}
+    missing = [s for s in sources if s not in have]
+    p = lambda name: os.path.join(work, name)
+    newest_cards = max([_mtime(x) for x in have.values()] + [0])
+    verified = os.path.isfile(p('accepted.jsonl')) and os.path.isfile(p('report.json')) \
+        and _mtime(p('report.json')) >= newest_cards
+    rejected = len(_load(p('report.json'), {}).get('rejected', [])) if verified else 0
+    retried = os.path.isfile(p('report2.json'))
+    filed = _load(p(FILED_LOG) if os.path.isfile(p(FILED_LOG)) else None, [])
+    built = _load(p(PAGES_LOG) if os.path.isfile(p(PAGES_LOG)) else None, [])
+    touched = {kbconf.topic_key(t): t for r in filed for t in r.get('topics', [])}
+    if any(b.get('all') for b in built):
+        unbuilt = []
+    else:
+        done = {kbconf.topic_key(t) for b in built for t in b.get('topics', [])}
+        unbuilt = sorted(v for k, v in touched.items() if k not in done)
+    got = {'work': work, 'kind': kind, 'batches': batches, 'sources': sources, 'cards_missing': missing,
+           'verified': verified, 'rejected': rejected, 'retried': retried,
+           'entities': os.path.isfile(p('entities.json')), 'versions': os.path.isfile(p('versions.json')),
+           'conflicts': os.path.isfile(p('conflicts.json')), 'filed': bool(filed), 'pages_missing': unbuilt}
+    got['done'] = bool(filed) and not unbuilt
+    if got['done']:
+        step, nxt = 11, 'finished: report from filed.json, then ingest.py work done --work %s' % work
+    elif filed:
+        step, nxt = 10, 'ingest.py pages --library <library> %s --work %s' % (
+            ' '.join('--topic "%s"' % t for t in unbuilt), work)
+    elif not batches:
+        step, nxt = 1, 'make the batch files (doc2kb_core.py ... -o %s)' % os.path.join(work, 'batches')
+    elif missing:
+        step, nxt = 2, 'write the cards of %s to %s/<Snn>.jsonl, one file per source (an empty file for a ' \
+            'source with nothing worth a card)' % (', '.join(missing), cards_dir)
+    elif not verified:
+        step, nxt = 3, 'ingest.py topics, then quote_check.py verify %s <batch files> --accepted %s --report %s' % (
+            cards_dir, p('accepted.jsonl'), p('report.json'))
+    elif rejected and not retried:
+        step, nxt = 3, 'rewrite the %d rejected cards to %s and verify them (report2.json)' % (rejected, p('retry.jsonl'))
+    elif not got['entities']:
+        step, nxt = 5, 'ingest.py entities %s --library <library> > %s' % (p('accepted.jsonl'), p('entities.json'))
+    elif kind == 'ingest' and not got['versions']:
+        step, nxt = 6, 'ingest.py versions <batch files> --library <library> > %s' % p('versions.json')
+    elif kind == 'ingest' and not got['conflicts']:
+        step, nxt = 7, 'ingest.py conflicts <batch files> --cards %s --library <library> > %s' % (
+            p('accepted.jsonl'), p('conflicts.json'))
+    else:
+        cmd = 'add-cards' if kind == 'backfill' else 'file'
+        step, nxt = 8, 'show the preview; after the user confirms, ingest.py %s <batch files> --cards %s ' \
+            '--library <library> --work %s' % (cmd, p('accepted.jsonl'), work)
+    got['step'], got['next'] = step, nxt
+    return got
+
+
+def render_progress(got):
+    w = ['work folder: %s' % got['work'], 'step reached: %d' % got['step'],
+         'sources: %d, without a cards file: %d' % (len(got['sources']), len(got['cards_missing']))]
+    if got['cards_missing']:
+        w.append('  ' + ', '.join(got['cards_missing']))
+    w.append('filed: %s' % ('yes' if got['filed'] else 'no'))
+    if got['pages_missing']:
+        w.append('topic pages not yet rebuilt: ' + ', '.join(got['pages_missing']))
+    w.append('finished: %s' % ('yes' if got['done'] else 'no'))
+    w.append('next: ' + got['next'])
+    return '\n'.join(w) + '\n'
+
+
+def work_runs(library):
+    """[{run, days, done}] of the run folders under <library>/.kb-work, newest first; days counts from
+    the newest file in the folder."""
+    root = os.path.join(library, WORK_DIR)
+    today = datetime.now()
+    out = []
+    for name in sorted(os.listdir(root), reverse=True) if os.path.isdir(root) else []:
+        path = os.path.join(root, name)
+        if not (WORK_RE.match(name) and os.path.isdir(path)):
+            continue
+        newest = os.path.getmtime(path)
+        for here, _, names in os.walk(path):
+            for n in names:
+                newest = max(newest, _mtime(os.path.join(here, n)))
+        try:
+            done = work_progress(path)['done']
+        except (OSError, ValueError):
+            done = False
+        out.append({'run': name, 'days': (today - datetime.fromtimestamp(newest)).days, 'done': done})
+    return out
+
+
+def work_remove(work, finished):
+    """Remove a run folder under .kb-work: finished=True only once progress says the run is finished
+    (work done); finished=False removes it whatever its state (work drop, after the user agreed)."""
+    work_place(work)
+    if finished and not work_progress(work)['done']:
+        raise ValueError('the run is not finished (ingest.py progress --work %s says what is left)' % work)
+    shutil.rmtree(work)
 
 
 CHECK_LABELS = {
@@ -1241,6 +1423,7 @@ CHECK_LABELS = {
            'extra': 'Year pages no longer built', 'unpaired': 'Cards files without their source',
            'review': 'Status-card items marked for review', 'not_current': 'Status-card items citing a source that is not current',
            'pending': 'Runs waiting for decisions for more than %d days' % PENDING_DAYS,
+           'work': 'Unfinished runs in %s for more than %d days (continue, or ingest.py work drop)' % (WORK_DIR, WORK_DAYS),
            'summary': '%d sources, %d of them without cards yet; %d problems.'},
     'zh': {'quotes': '引文不在所链接段落里的卡片', 'links': '指向不存在文件的链接',
            'missing': '缺少的主题页（ingest.py pages --all 可生成）',
@@ -1248,6 +1431,7 @@ CHECK_LABELS = {
            'extra': '已不再生成的年份页', 'unpaired': '没有对应来源的卡片文件',
            'review': '状态卡中待复核的条目', 'not_current': '状态卡中引用了非现行来源的条目',
            'pending': '等待决定超过 %d 天的入库' % PENDING_DAYS,
+           'work': '%s 里超过 %d 天未完成的入库（可继续，或用 ingest.py work drop 放弃）' % (WORK_DIR, WORK_DAYS),
            'summary': '共 %d 份来源，其中 %d 份尚未抽卡；发现 %d 个问题。'},
 }
 
@@ -1259,7 +1443,8 @@ def render_check(got, lang):
               ('missing', got['pages']['missing']), ('stale', got['pages']['stale']), ('extra', got['pages']['extra']),
               ('unpaired', got['unpaired']), ('review', got['status']['review']),
               ('not_current', got['status']['not_current']),
-              ('pending', ['%s (%d)' % (p['run'], p['days']) for p in got['pending']])]
+              ('pending', ['%s (%d)' % (p['run'], p['days']) for p in got['pending']]),
+              ('work', ['%s (%d)' % (r['run'], r['days']) for r in got['work']])]
     w = [lb['summary'] % (got['sources'], got['uncarded'], got['problems'])]
     for key, rows in groups:
         if rows:
@@ -1282,13 +1467,13 @@ def main(argv=None):
     sub = ap.add_subparsers(dest='cmd', required=True)
     f = sub.add_parser('file', help='split the batch files back, archive old versions, write the cards')
     f.add_argument('batches', nargs='+', help='batch files of the run')
-    f.add_argument('--cards', default=None, help='accepted cards (quote_check.py check --accepted); '
+    f.add_argument('--cards', default=None, help='accepted cards (quote_check.py verify --accepted); '
                    'without it the sources are filed without cards')
     f.add_argument('--names', default=None,
                    help='JSON file mapping a source number or original file name to a file name')
     cf = sub.add_parser('conflicts', help='old cards that a new version changes, drops or does not carry over')
     cf.add_argument('batches', nargs='+', help='batch files of the run')
-    cf.add_argument('--cards', required=True, help='accepted cards (quote_check.py check --accepted)')
+    cf.add_argument('--cards', required=True, help='accepted cards (quote_check.py verify --accepted)')
     for p in (f, cf):
         p.add_argument('--replaces', action='append', type=replace_pair, default=[],
                        help='NEW.md=OLD.md: the run\'s source NEW is a new version of the library\'s OLD (repeatable)')
@@ -1331,13 +1516,25 @@ def main(argv=None):
         p.add_argument('--target', default=None, help='work on this folder, laid out like the library, instead')
     for p in (f, vs, cf):
         p.add_argument('--groups', default=None, help='JSON file with the decisions on same-named sources of the run')
+    pr = sub.add_parser('progress', help='how far the run in a work folder got, and the next step')
+    pr.add_argument('--work', required=True, help='the run\'s work folder')
+    pr.add_argument('--json', action='store_true', help='print JSON instead of text')
+    wk = sub.add_parser('work', help='run folders under <library>/%s' % WORK_DIR)
+    wk.add_argument('what', choices=['new', 'list', 'done', 'drop'])
+    wk.add_argument('--library', default=None, help='library root (new, list, drop)')
+    wk.add_argument('--prefix', choices=['chat', 'client'], default='chat', help='new: who runs it (default chat)')
+    wk.add_argument('--work', default=None, help='done: the finished run\'s work folder')
+    wk.add_argument('--run', default=None, help='drop: the run folder\'s name')
+    for p in (f, pg):
+        p.add_argument('--work', default=None, help='the run\'s work folder: the step is recorded there for progress')
     ck = sub.add_parser('check', help='a read-only check of the library (exit 3 when it finds problems)')
     ck.add_argument('--json', action='store_true', help='print JSON instead of text')
     ck.add_argument('--library', required=True, help='library root')
     ac = sub.add_parser('add-cards', help='write the cards of library sources that have none yet')
     ac.add_argument('batches', nargs='+', help='batch files made by backfill')
-    ac.add_argument('--cards', required=True, help='accepted cards (quote_check.py check --accepted)')
+    ac.add_argument('--cards', required=True, help='accepted cards (quote_check.py verify --accepted)')
     ac.add_argument('--library', required=True, help='library root')
+    ac.add_argument('--work', default=None, help='the run\'s work folder: the step is recorded there for progress')
     bf = sub.add_parser('backfill', help='batch files for library sources without cards, newest first')
     bf.add_argument('--library', required=True, help='library root')
     bf.add_argument('-o', '--outdir', required=True, help='work folder for the batch files')
@@ -1369,6 +1566,31 @@ def main(argv=None):
                 with open(os.path.join(a.library, cfg['names']['status_card']), 'w', encoding='utf-8') as fh:
                     fh.write(new)
             return 0
+        if a.cmd == 'progress':
+            got = work_progress(a.work)
+            print(json.dumps(got, ensure_ascii=False) if a.json else render_progress(got), end='')
+            return 0
+        if a.cmd == 'work':
+            if a.what == 'done':
+                if not a.work:
+                    raise ValueError('work done needs --work')
+                work_remove(a.work, True)
+                print('removed: ' + a.work)
+                return 0
+            if not a.library:
+                raise ValueError('work %s needs --library' % a.what)
+            if a.what == 'new':
+                print(work_new(a.library, kbconf.load_library(a.library), a.prefix))
+            elif a.what == 'list':
+                for r in work_runs(a.library):
+                    print('%s  %s  %d days' % (r['run'], 'finished' if r['done'] else 'unfinished', r['days']))
+            else:
+                if not a.run or not WORK_RE.match(a.run):
+                    raise ValueError('work drop needs --run with a run folder name')
+                path = os.path.join(a.library, WORK_DIR, a.run)
+                work_remove(path, False)
+                print('removed: ' + path)
+            return 0
         if a.cmd == 'retopic':
             n = retopic(a.cards, a.old, a.new)
             print('%d card%s now under %s' % (n, '' if n == 1 else 's', a.new))
@@ -1381,7 +1603,9 @@ def main(argv=None):
         if a.cmd == 'add-cards':
             with open(a.cards, encoding='utf-8') as fh:
                 cards = [json.loads(ln) for ln in fh if ln.strip()]
-            print(json.dumps(add_cards(a.batches, cards, a.library, cfg), ensure_ascii=False))
+            got = add_cards(a.batches, cards, a.library, cfg)
+            log_step(a.work, FILED_LOG, got)
+            print(json.dumps(got, ensure_ascii=False))
             return 0
         if a.cmd == 'check':
             got = health_check(a.library, cfg)
@@ -1445,6 +1669,7 @@ def main(argv=None):
         if a.cmd == 'pages':
             for p in pages_run(target, cfg, None if a.all else a.topic):
                 print(p)
+            log_step(a.work, PAGES_LOG, {'all': True} if a.all else {'topics': a.topic})
             return 0
         names = None
         if a.names:
@@ -1458,8 +1683,9 @@ def main(argv=None):
         if a.restore:
             with open(a.restore, encoding='utf-8') as fh:
                 restore = json.load(fh)
-        print(json.dumps(file_run(a.batches, cards, target, cfg, names, dict(a.replaces), restore, groups, only),
-                         ensure_ascii=False))
+        got = file_run(a.batches, cards, target, cfg, names, dict(a.replaces), restore, groups, only)
+        log_step(a.work, FILED_LOG, got)
+        print(json.dumps(got, ensure_ascii=False))
         return 0
     except (kbconf.ConfigError, OSError, ValueError, sqlite3.Error) as e:
         log.error('%s', e)

@@ -890,9 +890,9 @@ class ChatTest(unittest.TestCase):
 
     def test_tool_step_names_the_stage_script(self):
         ev = self.ready()
-        self.send("RUN cd /skills/kb-ingest && python3 scripts/quote_check.py check cards.jsonl b01.md")
+        self.send("RUN cd /skills/kb-ingest && python3 scripts/quote_check.py verify cards.jsonl b01.md")
         step = ev.until(lambda e: e["type"] == "part" and e["kind"] == "tool", "tool step")
-        self.assertEqual((step["script"], step["detail"]), ("quote_check check", "Run a script"))
+        self.assertEqual((step["script"], step["detail"]), ("quote_check verify", "Run a script"))
 
     def test_work_folder_is_written_without_a_card(self):
         ev = self.ready()
@@ -1361,7 +1361,7 @@ class DecideTest(unittest.TestCase):
 
     def test_stage_script(self):
         for command, script in (("python3 /s/kb-ingest/scripts/doc2kb_core.py --batch m -o w --kb-batch", "doc2kb_core"),
-                                ('cd /s && python3 scripts/quote_check.py check c.jsonl "b 01.md"', "quote_check check"),
+                                ('cd /s && python3 scripts/quote_check.py verify c.jsonl "b 01.md"', "quote_check verify"),
                                 ("python3 -I '/a b/scripts/pick_materials.py' --out x", "pick_materials"),
                                 ("python3 scripts/ingest.py file b01.md --cards a.jsonl --library l", "ingest file"),
                                 ("python3 scripts/ingest.py pages --library l --topic Pilot", "ingest pages"),
@@ -1724,11 +1724,36 @@ class IngestRunTest(unittest.TestCase):
         self.assertEqual(s.post("/api/ingest/start", {"library": "work", "material": material,
                                                       "rules": {"folders": []}})[0], 200)
         self.assertEqual(s.post("/api/ingest/stop", {})[0], 200)
-        self.wait_run(("stopped",))
+        run = self.wait_run(("stopped",))
+        work = os.path.join(root, ".kb-work", "client-" + run["id"])
+        self.assertTrue(os.path.isfile(os.path.join(work, "run.json")))         # the run's folder is in its library
         self.assertEqual(s.post("/api/ingest/continue", {})[0], 200)
         run = self.wait_run()
         self.assertEqual(run["counts"], {"carded": 3}, read(run["log"]))
         self.assertEqual(s.post("/api/ingest/stop", {})[0], 409)
+        self.assertFalse(os.path.exists(work))                                  # removed once finished
+        self.assertEqual(os.path.basename(run["log"]), "ingest-%s.log" % run["id"])   # its log kept
+        self.assertIn("run %s done" % run["id"], read(run["log"]))
+        self.assertEqual(s.post("/api/ingest/discard", {})[0], 409)             # nothing stopped to give up
+
+    def test_stopped_run_after_a_restart_and_discard(self):
+        root, material = self.library()
+        self.ready()
+        s = self.server
+        self.assertEqual(s.post("/api/ingest/start", {"library": "work", "material": material,
+                                                      "rules": {"folders": []}})[0], 200)
+        self.assertEqual(s.post("/api/ingest/stop", {})[0], 200)
+        run = self.wait_run(("stopped",))
+        work = os.path.join(root, ".kb-work", "client-" + run["id"])
+        s.stop()
+        self.ready()                                                            # a client started again
+        s = self.server
+        again = self.wait_run(("stopped",))
+        self.assertEqual(again["id"], run["id"])
+        self.assertEqual(s.post("/api/ingest/discard", {})[0], 200)
+        self.assertFalse(os.path.exists(work))
+        self.assertIsNone(s.get("/api/ingest")[1]["run"])
+        self.assertTrue(os.path.isfile(os.path.join(root, "_kb.json")))         # the library stays
 
     def test_automatic_ingest_from_the_drop_folder(self):
         self.env["KB_AUTO_STABLE"] = "1"
@@ -1790,7 +1815,7 @@ class IngestRunTest(unittest.TestCase):
         run = self.wait_run()
         self.assertEqual(run["counts"], {"failed": 1})
         log = read(run["log"])
-        self.assertEqual(log.count("quote_check.py check"), 2, log)              # the first answer and the retry
+        self.assertEqual(log.count("quote_check.py verify"), 2, log)              # the first answer and the retry
         self.assertTrue(os.path.isfile(os.path.join(root, "Sources", "Plans", "badquote plan.md")))   # filed all the same
         self.assertFalse(os.path.exists(os.path.join(root, "Cards", "Plans")))
 

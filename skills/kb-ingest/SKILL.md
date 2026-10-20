@@ -5,16 +5,17 @@ description: Ingests documents into an evergreen knowledge base (a local or Obsi
 
 # Knowledge base ingest
 
-Version: 4.0.0
+Version: 5.0.0
 
 This skill files material into a library. Every conclusion it writes carries the source sentence it rests on, and a script checks that sentence before anything is written. The rules of a library (partitions, topics, folder names) live in the library's own spec and _kb.json; read them each time, never from memory or from this file.
 
 ## Modes
 
 - Ingest: the steps below.
+- Continue: "continue the ingest", "继续入库", or a run that stopped before it was finished. Choose the library as in step 0, run python3 scripts/ingest.py work list --library <library>, take the unfinished run the user means (ask when there are several), run python3 scripts/ingest.py progress --work <work> and go on from the step it names, with that folder as <work>. Never judge from memory how far a run got.
 - Init and getting started: "set up a knowledge base", "new library", "first time", "get started with the knowledge base", or no registry yet while the user wants a library. Read references/init.md and follow it instead of the steps below; it does not run step 0.
-- Missing cards: "write the missing cards", "补抽卡片". A library may hold sources filed without cards (step 9 without --cards, or the knowledge base client). python3 scripts/ingest.py backfill --library <library> -o <work>/backfill --limit <n> writes batch files for the newest of them (or --source <path> for given ones); write their cards as in step 2, check them as in step 3, settle new topics and entities as in steps 4 and 5, then python3 scripts/ingest.py add-cards <batch files> --cards <work>/accepted.jsonl --library <library> and the topic pages as in step 10. add-cards archives nothing and refuses a source that changed or has cards already.
-- Health check: "check the knowledge base", "health check". Choose the library as in step 0, run python3 scripts/ingest.py check --library <library> and reply with its findings in the user's words, grouped as it groups them, with what fixes each kind: topic pages missing, out of date or no longer built are rebuilt with python3 scripts/ingest.py pages --library <library> --all after the user agrees (year pages no longer built are removed by it); cards whose quote is gone and cards files without their source come back right when the source is ingested again; status-card items go through the status-card rules (references/config.md, section 2). The check writes nothing; change nothing without the user's agreement.
+- Missing cards: "write the missing cards", "补抽卡片". A library may hold sources filed without cards (step 9 without --cards, or the knowledge base client). Make the work folder as in step 0, then python3 scripts/ingest.py backfill --library <library> -o <work>/backfill --limit <n> writes batch files for the newest of them (or --source <path> for given ones); write their cards as in step 2, check them as in step 3, settle new topics and entities as in steps 4 and 5, then python3 scripts/ingest.py add-cards <batch files> --cards <work>/accepted.jsonl --library <library> --work <work> and the topic pages and the end of the run as in step 10. add-cards archives nothing and refuses a source that changed or has cards already.
+- Health check: "check the knowledge base", "health check". Choose the library as in step 0, run python3 scripts/ingest.py check --library <library> and reply with its findings in the user's words, grouped as it groups them, with what fixes each kind: topic pages missing, out of date or no longer built are rebuilt with python3 scripts/ingest.py pages --library <library> --all after the user agrees (year pages no longer built are removed by it); cards whose quote is gone and cards files without their source come back right when the source is ingested again; status-card items go through the status-card rules (references/config.md, section 2); unfinished runs are continued (mode Continue) or, when the user gives them up, removed with python3 scripts/ingest.py work drop --library <library> --run <name>. The check writes nothing; change nothing without the user's agreement.
 
 Before the first step, read references/config.md and references/environment.md once. Scripts are run as references/environment.md describes; paths such as scripts/ingest.py are relative to this skill's folder.
 
@@ -28,6 +29,7 @@ The summary files (status card, spec, indexes) sit in the library root. Beside t
 - names.topics_dir (Topics): one page per topic.
 - names.archive_dir (Archive): older versions of sources and cards, in the same folders, never deleted.
 - _index: the search index the scripts keep (scripts/kbindex.py); it is made from the files and can be deleted. Never edit it.
+- .kb-work: one folder per run (references/environment.md), removed when the run is finished. It is not part of the library's content.
 
 ## Step 0: choose the library (always first)
 
@@ -35,25 +37,26 @@ The summary files (status card, spec, indexes) sit in the library root. Beside t
 2. Otherwise match the material against each library's scope. Exactly one fits: propose it in one line and continue when the user agrees or the request already made it clear. None or several: ask which. Never default.
 3. Read references/backend-local.md, then _kb.json and the spec from the library root. A _kb.json of schema 1 or 2 is a 1.x, 2.0 or 3.0 library: stop and say what references/init.md, rule 4, says. A "tier" in _kb.json is ignored; when it says strong, say once that topic pages are now always built by the script.
 4. First line of the reply: Library: <label>. From here on, read and write only inside that library.
+5. python3 scripts/ingest.py work new --library <library> prints the run's work folder; every <work> below is that path.
 
 Every library needs a code environment to run the scripts (hard rule 8). Without one, stop before step 2: say that writing to the library needs a code environment and that reading and questions still work.
 
 ## Step 1: batch files
 
 - Batch files (made by doc2kb --kb-batch, names ending _b01.md, _b02.md, ...) are used as they are. All batch files of one run go through the steps together.
-- Documents or folders: make the batch files with python3 scripts/doc2kb_core.py --batch <folder> -o <work>/batches --kb-batch --library <library root>. The folders below <folder> become the sources' folders in the library. For chosen files inside one folder, add --only <list file> with their paths relative to it; files from several places go in with --files <list file> instead of --batch and land at the top of the sources folder. The library's batch_chars (default 20000 characters) sets the batch size. Never move or change the user's documents.
+- Documents or folders: make the batch files with python3 scripts/doc2kb_core.py --batch <folder> -o <work>/batches --kb-batch --library <library root>. Batch files the user handed over are copied to <work>/batches as they are, so that the run can be followed from its folder. The folders below <folder> become the sources' folders in the library. For chosen files inside one folder, add --only <list file> with their paths relative to it; files from several places go in with --files <list file> instead of --batch and land at the top of the sources folder. The library's batch_chars (default 20000 characters) sets the batch size. Never move or change the user's documents.
 
 ## Step 2: cards
 
 Read references/extract.md and follow it. Work one source at a time (one section "# Snn ...", or one part of it): write that source's cards, then go on to the next.
 
-Write all cards of the run to <work>/cards.jsonl, one JSON object per line.
+Each source's cards go to their own file, <work>/cards/Snn.jsonl, one JSON object per line; a source with nothing worth a card gets an empty file. With many sources, run python3 scripts/ingest.py progress --work <work> now and then: it lists the sources that have no cards file yet. Step 3 starts only when it lists none.
 
 ## Step 3: quote check
 
 1. python3 scripts/ingest.py topics --library <library> --out <work>/topics.txt
-2. python3 scripts/quote_check.py check <work>/cards.jsonl <batch files> --accepted <work>/accepted.jsonl --report <work>/report.json --topics <work>/topics.txt, adding --quote-min and --quote-max when _kb.json sets quote_min or quote_max.
-3. Exit 3 means cards were rejected. Read each rejected card's reason in the report and write that card once more from the source, copying the sentence exactly (references/extract.md, "Fixing a rejected card"), into <work>/retry.jsonl. Check it the same way with --accepted <work>/accepted2.jsonl --report <work>/report2.json, then append the lines of accepted2.jsonl to accepted.jsonl. Cards rejected twice are dropped and listed in the ingest report. Never write a card that did not pass.
+2. python3 scripts/quote_check.py verify <work>/cards <batch files> --accepted <work>/accepted.jsonl --report <work>/report.json --topics <work>/topics.txt, adding --quote-min and --quote-max when _kb.json sets quote_min or quote_max.
+3. Exit 3 means cards were rejected. Read each rejected card's reason in the report (with its cards file and line) and write that card once more from the source, copying the sentence exactly (references/extract.md, "Fixing a rejected card"), into <work>/retry.jsonl. Check it the same way with --accepted <work>/accepted2.jsonl --report <work>/report2.json, then append the lines of accepted2.jsonl to accepted.jsonl. Cards rejected twice are dropped and listed in the ingest report. Never write a card that did not pass.
 
 ## Step 4: new topics
 
@@ -114,7 +117,7 @@ Answering on the knowledge base client: before showing the preview, write the de
 ## Step 9: file
 
 1. When step 5 found new names or merged ones: python3 scripts/ingest.py entities <work>/accepted.jsonl --library <library> --apply, adding --map <work>/entity-map.json when the user changed anything. It rewrites the cards with the table's names and adds the new entities and aliases to Table E, raising the spec's version once.
-2. python3 scripts/ingest.py file <batch files> --cards <work>/accepted.jsonl --library <library>, adding --replaces "<new>=<old>" for each pair confirmed in step 6, --restore <work>/restore.json when the user restored any conflict and --groups <work>/groups.json when the user decided on any group.
+2. python3 scripts/ingest.py file <batch files> --cards <work>/accepted.jsonl --library <library> --work <work>, adding --replaces "<new>=<old>" for each pair confirmed in step 6, --restore <work>/restore.json when the user restored any conflict and --groups <work>/groups.json when the user decided on any group.
 
 When the user asks to file material first and write its cards later (a large amount, for example), run step 9 without --cards after the preview: the sources are filed and can be searched and quoted at once; their cards come later, and until then they are not on topic pages or the status card.
 
@@ -124,11 +127,13 @@ It writes the sources and cards files, archives older versions, marks the status
 
 Take the topics from the record of step 9.
 
-python3 scripts/ingest.py pages --library <library> --topic "<topic>" (repeat --topic for each). The pages are built by the script from the cards; do not write or edit them.
+python3 scripts/ingest.py pages --library <library> --topic "<topic>" (repeat --topic for each) --work <work>. The pages are built by the script from the cards; do not write or edit them.
+
+Then python3 scripts/ingest.py progress --work <work>. Only when it says finished: yes, read the records in <work>/filed.json for step 11 and run python3 scripts/ingest.py work done --work <work>. Otherwise do the step it names first.
 
 ## Step 11: ingest report
 
-Reply with: sources filed (new and new versions, with their folders), duplicates not filed, older versions of a group filed to the archive, files archived, cards written per source, cards dropped with their reasons, topics added or merged, entities added or recorded as aliases, conflicts accepted and restored, status-card items marked for review, topic pages rebuilt. Name the work folder only when a file there is useful to the user.
+Every number in the report comes from the records of step 9 (filed.json) and of the scripts of this run, never from counting by hand. Reply with: sources filed (new and new versions, with their folders), duplicates not filed, older versions of a group filed to the archive, files archived, cards written per source, cards dropped with their reasons, topics added or merged, entities added or recorded as aliases, conflicts accepted and restored, status-card items marked for review, topic pages rebuilt. Name the work folder only when a file there is useful to the user.
 
 ## Hard rules
 
@@ -140,3 +145,5 @@ Reply with: sources filed (new and new versions, with their folders), duplicates
 6. Replies follow the library language and preferences.output (references/environment.md).
 7. Never rewrite the status card without ingest.py status-check (references/config.md, section 2); review marks are added only by the filing script.
 8. Without a code environment (Python), write nothing to the library and say so; reading and answering still work.
+9. A run is finished only when ingest.py progress --work <work> says finished: yes, which needs the record of ingest.py file (or add-cards) and the topic pages it touched. Until then never say that the material was ingested, filed or is done, and never give a number of cards in the library: say which step the run reached (cards written, checked, waiting for confirmation, ...), that nothing is in the library yet, and the next step progress names. Run progress before every reply that ends a run or says how far it got.
+10. The run's files live only in its work folder under .kb-work; the cards of a source live only in their own file, <work>/cards/Snn.jsonl.

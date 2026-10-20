@@ -451,14 +451,14 @@ class Feed:
 
 # The skill scripts whose runs mark a stage of an ingest run on the page: script name, then the
 # subcommands that count (None: any). Only these fixed names reach the page, never the command line itself.
-STAGE_SCRIPTS = {"doc2kb_core": None, "quote_check": ("check", "write"), "kb_batch": ("split",),
+STAGE_SCRIPTS = {"doc2kb_core": None, "quote_check": ("verify", "write"), "kb_batch": ("split",),
                  "ingest": ("file", "pages", "topics", "add", "retopic"), "pick_materials": None,
                  "init_library": ("plan", "write", "register", "instructions")}
 SCRIPT_RE = re.compile(r"(?:^|[\s/'\"])(\w+)\.py['\"]?(?:\s+([a-z]+))?")
 
 
 def stage_script(command):
-    """"doc2kb_core", "quote_check check" and the like for a command running one of STAGE_SCRIPTS, else ""."""
+    """"doc2kb_core", "quote_check verify" and the like for a command running one of STAGE_SCRIPTS, else ""."""
     for m in SCRIPT_RE.finditer(str(command)):
         name, sub = m.group(1), m.group(2) or ""
         if name not in STAGE_SCRIPTS:

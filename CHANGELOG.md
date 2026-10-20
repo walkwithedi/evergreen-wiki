@@ -2,6 +2,32 @@
 
 All three skills share one version number. To release, update this file and the "Version:" line of every SKILL.md together and merge to main; the release workflow then publishes v<version>.
 
+## 5.0.0
+
+5.0 makes an ingest run traceable from its own folder: each run works in <library>/.kb-work/, its cards are kept one file per source, a script says how far the run got, and a run counts as finished only once the filing script has written it into the library.
+
+Removed and incompatible
+- quote_check.py check is renamed verify; the name check is gone. Scripts or prompts that call quote_check.py check must call quote_check.py verify. ingest.py check (the health check) keeps its name.
+- The work folder of kb-ingest and kb-note is no longer a temporary directory or a folder named in the request: it is always <library>/.kb-work/chat-<YYYYMMDD-HHMMSS>/. kb-query keeps a temporary directory outside the library.
+
+Work folders (shared/scripts/ingest.py)
+- ingest.py work new --library DIR makes a run folder and prints its path (--prefix chat or client); work list lists them, finished or not; work done --work DIR removes a run folder once progress says the run is finished; work drop --library DIR --run NAME removes an unfinished one the owner gave up. Only folders under .kb-work are removed.
+- ingest.py progress --work DIR [--json]: the step a run reached and the next one, judged from the files in its folder (batch files, cards/Snn.jsonl per source, accepted.jsonl and report.json, entities.json, versions.json, conflicts.json, filed.json, pages.json).
+- ingest.py file, add-cards and pages take --work DIR and append their records to filed.json and pages.json there. A run is finished when it was filed and every topic it touched has its page rebuilt.
+- The health check lists run folders left unfinished for more than seven days.
+
+Cards
+- quote_check.py verify takes a folder of cards files (one per source, read in name order) as well as one file; a rejected card from a folder is reported with its file and line.
+- Writing cards (references/extract.md): each source's cards go to <work>/cards/Snn.jsonl; a source with nothing worth a card gets an empty file.
+
+Skills
+- kb-ingest: a Continue mode ("continue the ingest") picks an unfinished run with work list and goes on from the step progress names. Step 0 makes the run folder; steps 9 and 10 pass --work; the run ends with progress and work done; the ingest report takes its numbers from the filing records. New hard rules: a run is finished only when progress says so, and until then the reply says which step it reached and that nothing is in the library yet; the run's files live only in its folder.
+- kb-note: the note's work folder is a run folder under .kb-work; a note is reported as saved only once progress says the run is finished.
+
+Client (tools/kb-client)
+- A client-run ingest works in <library>/.kb-work/client-<id>/ instead of the client's state folder; Continue after a restart works as before. A finished run's folder is removed at once and its log kept as ingest-<id>.log in the client's log folder. A stopped or failed run can be discarded (Discard, POST /api/ingest/discard), which removes its folder. Runs saved by 4.0 in the state folder are still found.
+- The ingest stages and steps follow the rename to quote_check.py verify.
+
 ## 4.0.0
 
 4.0 keeps the 3.0 setting (an offline Kylin workstation, OpenCode, local libraries, script-led steps) and makes one library carry about ten thousand documents: sources keep the folders they came from, a library index makes filing, pages and answers independent of the library's size, and the knowledge base client ingests material itself, filing every document at once and writing cards first for the ones the rules pick and later for the rest. Libraries made by 2.0 or 3.0 are not read; 3.0.0 keeps working for them. The design is in docs/design-4.0.md.
