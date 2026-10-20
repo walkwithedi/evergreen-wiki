@@ -234,7 +234,7 @@ class CommandLineTest(unittest.TestCase):
         with open(topics, "w", encoding="utf-8") as f:
             f.write("# known topics\nPilot\n")
         acc, rep = os.path.join(self.d, "acc.jsonl"), os.path.join(self.d, "rep.json")
-        p = run([sys.executable, QC, "check", cards, *batches, "--accepted", acc, "--report", rep, "--topics", topics])
+        p = run([sys.executable, QC, "verify", cards, *batches, "--accepted", acc, "--report", rep, "--topics", topics])
         self.assertEqual(p.returncode, 3, p.stderr)
         report = json.loads(read(rep))
         self.assertEqual(report["accepted"], 1)
@@ -248,9 +248,33 @@ class CommandLineTest(unittest.TestCase):
         text = read(os.path.join(self.d, "Cards", "report-en.md"))
         self.assertIn("> Owner list follows. [[report-en#^p5]]", text)
         self.assertIn("- Date: 2026-03-04 05:06", text)
-        p = run([sys.executable, QC, "check", cards, os.path.join(self.d, "missing.md"),
+        p = run([sys.executable, QC, "verify", cards, os.path.join(self.d, "missing.md"),
                  "--accepted", acc, "--report", rep], check=False)
         self.assertEqual(p.returncode, 2)
+
+        # a folder of cards files, one per source: read in name order, rejects named by file and line
+        folder = os.path.join(self.d, "cards")
+        os.makedirs(folder)
+        with open(cards, encoding="utf-8") as f:
+            lines = f.read().splitlines()
+        with open(os.path.join(folder, "S02.jsonl"), "w", encoding="utf-8") as f:
+            f.write(lines[2] + "\n")
+        with open(os.path.join(folder, "S01.jsonl"), "w", encoding="utf-8") as f:
+            f.write(lines[0] + "\n" + lines[1] + "\n")
+        with open(os.path.join(folder, "notes.txt"), "w", encoding="utf-8") as f:
+            f.write("not cards\n")
+        p = run([sys.executable, QC, "verify", folder, *batches, "--accepted", acc, "--report", rep], check=False)
+        self.assertEqual(p.returncode, 3, p.stderr)
+        report = json.loads(read(rep))
+        self.assertEqual((report["cards"], report["accepted"]), (3, 1))
+        self.assertEqual(sorted((r["file"], r["line"]) for r in report["rejected"]),
+                         [("S01.jsonl", 2), ("S02.jsonl", 1)])
+        empty = os.path.join(self.d, "empty")
+        os.makedirs(empty)
+        p = run([sys.executable, QC, "verify", empty, *batches, "--accepted", acc, "--report", rep], check=False)
+        self.assertEqual(p.returncode, 2)
+        p = run([sys.executable, QC, "check", cards, *batches, "--accepted", acc, "--report", rep], check=False)
+        self.assertEqual(p.returncode, 2)                                    # the old name is gone
 
 
 if __name__ == "__main__":

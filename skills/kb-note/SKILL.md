@@ -5,7 +5,7 @@ description: Saves a small piece of information from the conversation into the u
 
 # Quick notes: save a piece of the conversation
 
-Version: 4.0.0
+Version: 5.0.0
 
 A note becomes a source of the library on the spot: the user's words are the source text, cards are taken from them and checked like any other, and the topic pages they touch are rebuilt. It only adds files and rebuilds generated pages; it never edits or deletes an existing source or card.
 
@@ -25,7 +25,7 @@ Load the registry. Match the content against each library's scope.
 1. The user named a library: use it.
 2. Exactly one scope fits: use it.
 3. None or several fit: ask "Which library: <labels>?" in one sentence. Never default.
-Then read references/backend-local.md, the library's _kb.json (language, timezone, names; schema 1 is a 1.x library this release does not write: say so) and its spec.
+Then read references/backend-local.md, the library's _kb.json (language, timezone, names; schema 1 is a 1.x library this release does not write: say so) and its spec. python3 scripts/ingest.py work new --library <library> prints the note's work folder; every <work> below is that path.
 
 Writing needs Python (hard rule 5). Without it, do not write: show the note's words in the reply and say that saving needs a code environment.
 
@@ -38,22 +38,23 @@ It prints the batch file of a one-source run: the source "Note <YYYYMMDD-HHMM> <
 
 ## Step 4: cards and checks
 
-1. Write the cards from the words, as references/extract.md says, to <work>/cards.jsonl. A relative date gets the computed date in the conclusion, marked "computed"; never put it in the quote.
-2. python3 scripts/ingest.py topics --library <library> --out <work>/topics.txt, then python3 scripts/quote_check.py check <work>/cards.jsonl <batch file> --accepted <work>/accepted.jsonl --report <work>/report.json --topics <work>/topics.txt. A rejected card is written once more from the words; one rejected twice is dropped and named in the reply.
+1. Write the cards from the words, as references/extract.md says, to <work>/cards/S01.jsonl. A relative date gets the computed date in the conclusion, marked "computed"; never put it in the quote.
+2. python3 scripts/ingest.py topics --library <library> --out <work>/topics.txt, then python3 scripts/quote_check.py verify <work>/cards <batch file> --accepted <work>/accepted.jsonl --report <work>/report.json --topics <work>/topics.txt. A rejected card is written once more from the words; one rejected twice is dropped and named in the reply.
 3. python3 scripts/ingest.py entities <work>/accepted.jsonl --library <library>.
 4. Only when the report lists new topics or the entity report lists new names, ask before writing, in one question: each new topic under an existing topic or as a new one (ingest.py retopic, add-topic), each new name as a new entity or as an alias of an existing one (--map). Otherwise go on without asking.
 
 ## Step 5: file
 
 1. When the entity report listed any name: python3 scripts/ingest.py entities <work>/accepted.jsonl --library <library> --apply (with --map when the user chose aliases or types).
-2. python3 scripts/ingest.py file <batch file> --cards <work>/accepted.jsonl --library <library>
-3. Topic pages, for the topics in the record: python3 scripts/ingest.py pages --library <library> --topic "<topic>" (repeat --topic).
+2. python3 scripts/ingest.py file <batch file> --cards <work>/accepted.jsonl --library <library> --work <work>
+3. Topic pages, for the topics in the record: python3 scripts/ingest.py pages --library <library> --topic "<topic>" (repeat --topic) --work <work>.
+4. python3 scripts/ingest.py progress --work <work>. When it says finished: yes, python3 scripts/ingest.py work done --work <work>; otherwise do the step it names first.
 
 On a write failure, retry once; if it still fails, give the reason and show the note's words in the reply.
 
 ## Step 6: reply
 
-In two or three lines, in the library language and preferences.output:
+Only after step 5 finished (hard rule 7). In two or three lines, in the library language and preferences.output:
   Saved to <label>: <source name>
   Cards: <the conclusions, one line each>
   Topic pages rebuilt: <topics>
@@ -66,3 +67,4 @@ In two or three lines, in the library language and preferences.output:
 4. A new topic or entity is written only after the user agrees.
 5. Without a code environment (Python), write nothing to the library and say so; reading and answering still work. Show the note's words in the reply so nothing is lost.
 6. Replies follow the library language and preferences.output.
+7. Never say a note was saved before ingest.py progress says finished: yes; until then say what is left. The note's files live only in its work folder under .kb-work.

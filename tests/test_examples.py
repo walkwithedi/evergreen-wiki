@@ -45,7 +45,7 @@ def build(work):
     topics = os.path.join(work, "topics.txt")
     run("ingest.py", "topics", "--library", lib, "--out", topics)
     acc, report = os.path.join(work, "accepted.jsonl"), os.path.join(work, "report.json")
-    run("quote_check.py", "check", CARDS, *batches, "--accepted", acc, "--report", report, "--topics", topics)
+    run("quote_check.py", "verify", CARDS, *batches, "--accepted", acc, "--report", report, "--topics", topics)
     run("ingest.py", "file", *batches, "--cards", acc, "--library", lib)
     run("ingest.py", "pages", "--library", lib, "--all")
     with open(report, encoding="utf-8") as f:

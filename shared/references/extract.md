@@ -30,7 +30,9 @@ A card is one claim taken from one source, with the exact sentence it rests on. 
 
 ## One source at a time
 
-Read one source section (or one part), write its cards, then move on. Do not carry claims over from a source read earlier. A source that holds nothing worth a card gets no cards; say so in the report.
+Read one source section (or one part), write its cards, then move on. Do not carry claims over from a source read earlier.
+
+Each source has its own cards file, <work>/cards/<source number>.jsonl (S01.jsonl, S02.jsonl, ...), written once that source's cards are done. A source cut into parts adds the cards of each later part to the end of the same file; never write a source's file over with fewer cards. A source that holds nothing worth a card gets an empty file, so that the run can see it was read; say so in the report.
 
 ## Fixing a rejected card
 

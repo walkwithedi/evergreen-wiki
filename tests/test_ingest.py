@@ -354,7 +354,7 @@ class EndToEndTest(Tmp):
             for name, c in cards:
                 f.write(json.dumps(dict(c, source=sid[name])) + "\n")
         acc = self.p("acc-" + tag)
-        self.run_tool("quote_check.py", "check", self.p("cards-" + tag), *batches, "--accepted", acc,
+        self.run_tool("quote_check.py", "verify", self.p("cards-" + tag), *batches, "--accepted", acc,
                       "--report", self.p("rep-" + tag))
         rec = json.loads(self.run_tool("ingest.py", "file", *batches, "--cards", acc, "--library", self.p("lib")))
         self.run_tool("ingest.py", "pages", "--library", self.p("lib"), *sum([["--topic", t] for t in rec["topics"]], []))
@@ -380,6 +380,103 @@ class EndToEndTest(Tmp):
         self.assertEqual(rec["topics"], ["Interface", "Pilot"])
         self.assertIn("No current cards", read(self.p("lib", "Topics", "Pilot.md")))
         self.assertIn("- 2026-05-06 · Menu shown", read(self.p("lib", "Topics", "Interface.md")))
+
+
+class WorkFolderTest(Tmp):
+    """A run in <library>/.kb-work: progress step by step, work done only when finished, work drop."""
+
+    run_tool = EndToEndTest.run_tool
+
+    def tool(self, script, *args):
+        e = dict(os.environ, PYTHONIOENCODING="utf-8", LOG_LEVEL="WARNING")
+        return subprocess.run([sys.executable, os.path.join(SCRIPTS, script), *args],
+                              capture_output=True, text=True, encoding="utf-8", errors="replace", env=e)
+
+    def progress(self, work):
+        return json.loads(self.run_tool("ingest.py", "progress", "--work", work, "--json"))
+
+    def test_run_from_start_to_done(self):
+        lib = self.p("lib")
+        os.makedirs(lib)
+        with open(os.path.join(lib, "_kb.json"), "w", encoding="utf-8") as f:
+            json.dump({"schema": 3}, f)
+        with open(os.path.join(lib, "00_Spec.md"), "w", encoding="utf-8") as f:
+            f.write(SPEC_FILE)
+        os.makedirs(self.p("src"))
+        fx.docx(self.p("src", "report.docx"), english=True)
+        fx.docx(self.p("src", "notes.docx"), english=True, intro="These notes cover the pilot.")
+        work = self.run_tool("ingest.py", "work", "new", "--library", lib).strip()
+        self.assertEqual(os.path.dirname(work), os.path.join(lib, ".kb-work"))
+        self.assertRegex(os.path.basename(work), r"^chat-\d{8}-\d{6}$")
+        self.assertEqual(self.progress(work)["step"], 1)
+
+        batches_dir = os.path.join(work, "batches")
+        self.run_tool("doc2kb_core.py", "--batch", self.p("src"), "-o", batches_dir, "--kb-batch", "--library", lib)
+        batches = sorted(os.path.join(batches_dir, n) for n in os.listdir(batches_dir) if re.search(r"_b\d+\.md$", n))
+        table, _ = quote_check.load_batches(batches)
+        sid = {v["name"]: s for s, v in table.items()}
+        got = self.progress(work)
+        self.assertEqual((got["step"], got["cards_missing"]), (2, sorted(sid.values())))
+
+        cards = os.path.join(work, "cards")
+        os.makedirs(cards)
+        with open(os.path.join(cards, sid["report.docx"] + ".jsonl"), "w", encoding="utf-8") as f:
+            f.write(json.dumps({"source": sid["report.docx"], "anchor": "p1", "quote": "This report covers the pilot.",
+                                "conclusion": "Report covers the pilot", "topic": "Pilot", "entities": []}) + "\n")
+        got = self.progress(work)
+        self.assertEqual((got["step"], got["cards_missing"]), (2, [sid["notes.docx"]]))
+        open(os.path.join(cards, sid["notes.docx"] + ".jsonl"), "w").close()      # nothing worth a card
+        self.assertEqual(self.progress(work)["step"], 3)
+
+        acc, rep = os.path.join(work, "accepted.jsonl"), os.path.join(work, "report.json")
+        self.run_tool("quote_check.py", "verify", cards, *batches, "--accepted", acc, "--report", rep)
+        self.assertEqual(self.progress(work)["step"], 5)
+        for name, args in (("entities.json", ["entities", acc]), ("versions.json", ["versions", *batches]),
+                           ("conflicts.json", ["conflicts", *batches, "--cards", acc])):
+            with open(os.path.join(work, name), "w", encoding="utf-8") as f:
+                f.write(self.run_tool("ingest.py", *args, "--library", lib))
+        got = self.progress(work)
+        self.assertEqual(got["step"], 8)
+        self.assertIn("--work", got["next"])
+        p = self.tool("ingest.py", "work", "done", "--work", work)
+        self.assertEqual(p.returncode, 2)                                   # not filed yet
+        self.assertIn("not finished", p.stderr)
+        self.assertTrue(os.path.isdir(work))
+
+        self.run_tool("ingest.py", "file", *batches, "--cards", acc, "--library", lib, "--work", work)
+        got = self.progress(work)
+        self.assertEqual((got["step"], got["filed"], got["pages_missing"], got["done"]), (10, True, ["Pilot"], False))
+        self.assertTrue(os.path.isfile(os.path.join(lib, "Cards", "report.md")))
+        self.run_tool("ingest.py", "pages", "--library", lib, "--topic", "Pilot", "--work", work)
+        got = self.progress(work)
+        self.assertEqual((got["step"], got["done"]), (11, True))
+        self.assertIn("finished", self.run_tool("ingest.py", "work", "list", "--library", lib))
+        self.run_tool("ingest.py", "work", "done", "--work", work)
+        self.assertFalse(os.path.exists(work))
+        self.assertTrue(os.path.isfile(os.path.join(lib, "Cards", "report.md")))  # the library is left as it is
+
+    def test_only_run_folders_are_removed(self):
+        lib = self.p("lib")
+        os.makedirs(lib)
+        with open(os.path.join(lib, "_kb.json"), "w", encoding="utf-8") as f:
+            json.dump({"schema": 3}, f)
+        for bad in (lib, self.p("elsewhere"), os.path.join(lib, ".kb-work", "mine")):
+            os.makedirs(bad, exist_ok=True)
+            with self.subTest(bad=bad):
+                self.assertEqual(self.tool("ingest.py", "work", "done", "--work", bad).returncode, 2)
+                self.assertTrue(os.path.isdir(bad))
+        for run in ("../lib", "mine", "chat-1"):
+            with self.subTest(run=run):
+                self.assertEqual(self.tool("ingest.py", "work", "drop", "--library", lib, "--run", run).returncode, 2)
+        self.assertTrue(os.path.isfile(os.path.join(lib, "_kb.json")))
+        work = self.run_tool("ingest.py", "work", "new", "--library", lib, "--prefix", "client").strip()
+        self.assertTrue(os.path.basename(work).startswith("client-"))
+        again = self.run_tool("ingest.py", "work", "new", "--library", lib, "--prefix", "client").strip()
+        self.assertNotEqual(work, again)
+        self.assertIn("unfinished", self.run_tool("ingest.py", "work", "list", "--library", lib))
+        self.run_tool("ingest.py", "work", "drop", "--library", lib, "--run", os.path.basename(work))
+        self.assertFalse(os.path.exists(work))
+        self.assertTrue(os.path.isdir(again))
 
 
 
@@ -996,6 +1093,14 @@ class HealthCheckTest(unittest.TestCase):
         with open(old, "w", encoding="utf-8") as f:
             f.write("{}")
         os.utime(old, (0, 0))
+        for run, stamp in (("chat-20260101-000000", 0), ("chat-20991231-000000", None), ("leftover", 0)):
+            os.makedirs(self.path(".kb-work", run, "cards"))
+            with open(self.path(".kb-work", run, "cards", "S01.jsonl"), "w", encoding="utf-8") as f:
+                f.write("{}\n")
+            if stamp is not None:
+                for here in (self.path(".kb-work", run, "cards", "S01.jsonl"), self.path(".kb-work", run, "cards"),
+                             self.path(".kb-work", run)):
+                    os.utime(here, (stamp, stamp))
         got = ingest.health_check(self.lib, self.cfg)
         self.assertIn("quote not in the paragraph", [q["reason"] for q in got["quotes"]])
         self.assertIn("no such paragraph", [q["reason"] for q in got["quotes"]])   # the removed source's cards
@@ -1007,6 +1112,7 @@ class HealthCheckTest(unittest.TestCase):
         self.assertEqual(got["status"]["review"], ["2. Another fact. [[Sources/Plans/Atlas pilot plan#^p2]]"])
         self.assertEqual(got["status"]["not_current"], ["1. A fact. [[Sources/Plans/Gone#^p1]]"])
         self.assertEqual([p["run"] for p in got["pending"]], ["20260101-000000"])
+        self.assertEqual([r["run"] for r in got["work"]], ["chat-20260101-000000"])   # old and unfinished only
         self.assertGreater(got["problems"], 8)
         text = ingest.render_check(got, "zh")
         self.assertIn("缺少的主题页", text)

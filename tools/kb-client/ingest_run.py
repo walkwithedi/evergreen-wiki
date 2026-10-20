@@ -13,20 +13,22 @@ confirms the list, then Run.main() goes through the steps:
   file      the sources that are not important are filed without cards (ingest.py file --sources):
             they can be searched and quoted at once, and get their cards later (Backfill)
   cards     the important sources, and every source that replaces one in the library, get cards: per
-            batch file a new conversation, per source one message; quote_check.py check checks them and
+            batch file a new conversation, per source one message; quote_check.py verify checks them and
             a rejected card is sent back once with the reason
   decide    new topics and conflicts with the old versions wait for the owner's decisions
   write     ingest.py entities --apply, file --cards, pages
 
-Each run keeps its state in <state dir>/ingest/<id>/run.json, written at every change, so that a client
-started again shows an interrupted run as stopped and Continue picks it up where it was; run.log says
-what happened (scripts with exit codes, the assistant's turns; never a document's text). Finished runs
-are removed after KEEP_DAYS days.
+Each run works in its library, <library>/.kb-work/client-<id>/ (the run folders of kb-ingest), and keeps
+its state there in run.json, written at every change, so that a client started again shows an interrupted
+run as stopped and Continue picks it up where it was; Discard removes a stopped run's folder. run.log says
+what happened (scripts with exit codes, the assistant's turns; never a document's text). A finished run's
+folder is removed at once, its run.log kept in the client's log folder as ingest-<id>.log. Runs of earlier
+versions under <state dir>/ingest are still found, and finished ones there removed after KEEP_DAYS days.
 
 Backfill writes the cards of sources filed without them while the assistant is idle: the important ones
 first (the rules of the run that filed them), newest first; it gives way as soon as a conversation window
 gets busy, and can be paused. Sources whose cards name new topics wait for the owner's decisions; the
-others are written at once (ingest.py backfill, quote_check.py check, entities --apply, add-cards, pages).
+others are written at once (ingest.py backfill, quote_check.py verify, entities --apply, add-cards, pages).
 
 Python 3 standard library only.
 """
@@ -45,6 +47,7 @@ log = logging.getLogger("kb_client.ingest")
 
 STATE = "run.json"
 LOG = "run.log"
+WORK_DIR = ".kb-work"  # kb-ingest's run folders, inside the library
 KEEP_DAYS = 7
 MAX_FILES = 20000  # documents of one material folder
 ASK_TIMEOUT = 1200  # seconds for one turn of the assistant
@@ -203,6 +206,7 @@ class Run:
         self.lock = threading.RLock()
         self.thread = None
         self.windows = []
+        self.log_file = os.path.join(work, LOG)  # moves to the client's log folder when the run is finished
 
     # ----- saving and the page -----
 
@@ -235,7 +239,7 @@ class Run:
                     "pending": self.pending, "total": len(self.items), "counts": counts, "items": list(self.items),
                     "missing": list(self.missing), "summary": dict(self.summary), "parallel": self.parallel,
                     "windows": list(self.windows), "unattended": self.unattended,
-                    "log": os.path.join(self.work, LOG), "started": self.started}
+                    "log": self.log_file, "started": self.started}
 
     def save(self):
         with self.lock:
@@ -334,6 +338,32 @@ class Run:
                 self.windows = []
             self.note("run %s %s%s" % (self.id, self.state, ": " + self.reason if self.reason else ""))
             self.changed()
+            if self.state == "done":
+                self.finish()
+
+    def finish(self):
+        """A finished run: its log goes to the client's log folder and its folder is removed."""
+        logs = getattr(self.app, "log_dir", None)
+        kept = ""
+        if logs:
+            try:
+                os.makedirs(logs, exist_ok=True)
+                kept = os.path.join(logs, "ingest-%s.log" % self.id)
+                shutil.copyfile(os.path.join(self.work, LOG), kept)
+            except OSError as e:
+                log.warning("ingest log of %s not kept: %s", self.id, e)
+                kept = ""
+        shutil.rmtree(self.work, ignore_errors=True)
+        with self.lock:
+            self.log_file = kept
+        self.app.run_changed(self)
+
+    def discard(self):
+        """Removes the folder of a run that is not going on (the owner gave it up); False while it runs."""
+        if self.running():
+            return False
+        shutil.rmtree(self.work, ignore_errors=True)
+        return True
 
     # ----- scripts -----
 
@@ -545,7 +575,7 @@ class Run:
                  reason="" if accepted else WHY[self.lang]["no_cards"])
 
     def check(self, cards, acc, rep, sid):
-        """quote_check.py check of one source's cards; returns how many were accepted."""
+        """quote_check.py verify of one source's cards; returns how many were accepted."""
         lines = [ln for ln in read_lines(cards) if ln.strip()]
         mine = []
         for ln in lines:
@@ -559,7 +589,7 @@ class Run:
                 mine.append(json.dumps(c, ensure_ascii=False))
         with open(cards, "w", encoding="utf-8") as f:
             f.write("".join(x + "\n" for x in mine))
-        self.script("quote_check.py", "check", cards, *self.batches(), "--accepted", acc, "--report", rep,
+        self.script("quote_check.py", "verify", cards, *self.batches(), "--accepted", acc, "--report", rep,
                     "--topics", self.path("topics.txt"), ok=(0, 3))
         return len([x for x in read_lines(acc) if x.strip()])
 
@@ -747,15 +777,24 @@ class Asker:
 # ---------------------------------------------------------------- runs on disk
 
 def runs_root(state_dir):
+    """Where runs of earlier versions were kept."""
     return os.path.join(state_dir, "ingest")
 
 
-def latest(app, root):
-    """The most recent run saved under root, or None."""
-    try:
-        dirs = [os.path.join(root, d) for d in os.listdir(root)]
-    except OSError:
-        return None
+def run_folder(lib_root, run_id):
+    """The folder of a client run in its library."""
+    return os.path.join(lib_root, WORK_DIR, "client-" + run_id)
+
+
+def latest(app, roots):
+    """The most recent run saved in the folders under roots (each library's .kb-work, the old runs
+    root), or None."""
+    dirs = []
+    for root in roots:
+        try:
+            dirs += [os.path.join(root, d) for d in os.listdir(root)]
+        except OSError:
+            continue
     dirs = [d for d in dirs if os.path.isfile(os.path.join(d, STATE))]
     for d in sorted(dirs, key=lambda d: os.path.getmtime(os.path.join(d, STATE)), reverse=True):
         run = Run.restore(app, d)
@@ -937,7 +976,7 @@ class Backfill:
                                         batch=batch, sid="S01", name=path.rsplit("/", 1)[-1], extract=extract,
                                         topics=os.path.join(work, "topics.txt"), out=cards))
             acc, rep = os.path.join(work, "accepted.jsonl"), os.path.join(work, "report.json")
-            Run.script(self, "quote_check.py", "check", cards, batch, "--accepted", acc, "--report", rep,
+            Run.script(self, "quote_check.py", "verify", cards, batch, "--accepted", acc, "--report", rep,
                        "--topics", os.path.join(work, "topics.txt"), ok=(0, 3))
             report = read_json(rep, {}) or {}
             if not [x for x in read_lines(acc) if x.strip()]:

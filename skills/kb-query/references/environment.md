@@ -4,8 +4,8 @@ These skills follow the Agent Skills format and run in any assistant that suppor
 
 ## Work and output folders
 
-- Work folder: a scratch folder for copies of summary files, change lists and plan files. Use a temporary directory outside the library and create work/ and out/ inside it. When the request names a work folder ("Work folder: <path>", "工作文件夹：<路径>"), use that folder and create work/ and out/ inside it.
-- Never use the library root as the work folder.
+- Work folder, kb-ingest and kb-note: each run has its own folder inside the library, <library>/.kb-work/chat-<YYYYMMDD-HHMMSS>/, made by python3 scripts/ingest.py work new --library <library>, which prints its path; <work> in the steps is that path. A folder whose name starts with a dot is not shown by Obsidian and not read by the index, and a run left unfinished can be continued from it later. Never pick another folder, not even one named in the request, and never put run files anywhere else in the library. When a run is finished (ingest.py progress says so), python3 scripts/ingest.py work done --work <work> removes its folder; python3 scripts/ingest.py work drop --library <library> --run <name> removes an unfinished one, only after the user agrees to give it up.
+- Work folder, kb-query: a temporary directory outside the library, so that answering never writes into it.
 - Handing a file to the user: give its path on disk. Files an ingest run writes land in the library; there is nothing to hand over.
 
 ## Running scripts

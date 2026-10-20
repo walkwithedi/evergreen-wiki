@@ -105,6 +105,7 @@ MSG = {
         "ingest_agent": "OpenCode is not ready yet.",
         "ingest_running": "An ingest run is going on; wait for it or stop it first.",
         "ingest_nothing": "There is no ingest run to stop or continue.",
+        "ingest_not_stopped": "Only a stopped or failed ingest run can be discarded.",
         "stopped": "Knowledge base client stopped.",
     },
     "zh": {
@@ -135,6 +136,7 @@ MSG = {
         "ingest_agent": "OpenCode 还没有就绪。",
         "ingest_running": "正在入库，等它完成或先停止。",
         "ingest_nothing": "没有可以停止或继续的入库。",
+        "ingest_not_stopped": "只有已停止或失败的入库可以放弃。",
         "stopped": "知识库客户端已停止。",
     },
 }
@@ -270,6 +272,7 @@ class App:
         # The skills' work folder for this client: outside every library (mkdtemp makes it private), so
         # that their copies and output files are written there without a permission card each time.
         self.work = tempfile.mkdtemp(prefix="kb-client-work-")
+        self.log_dir = log_folder()  # a finished ingest run's log is kept here
         self.token = secrets.token_urlsafe(24)
         self.job = None
         self.lock = threading.Lock()
@@ -440,7 +443,7 @@ class App:
                 return None, "locked"
             got = ingest_run.plan(walk_to(str(body.get("material") or ""))[0], body.get("rules"), lib["root"])
             run_id = time.strftime("%Y%m%d-%H%M%S")
-            work = os.path.join(ingest_run.runs_root(kb_manage.state_dir()), run_id)
+            work = ingest_run.run_folder(lib["root"], run_id)
             os.makedirs(work, mode=0o700, exist_ok=True)
             run = ingest_run.Run(self, {"id": lib["id"], "label": lib["label"], "root": lib["root"]},
                                  got["material"], body.get("rules"),
@@ -461,6 +464,18 @@ class App:
             return None, "locked"
         run.start()
         return run, None
+
+    def discard_ingest(self):
+        """Gives up a stopped or failed run: its folder is removed. (True, None) or (False, reason)."""
+        with self.ingest_lock:
+            run = self.ingest
+            if run is None:
+                return False, "nothing"
+            if run.state not in ("stopped", "failed") or not run.discard():
+                return False, "not_stopped"
+            self.ingest = None
+        self.windows_changed()
+        return True, None
 
     def backfill(self, lib):
         """The library's Backfill (made on first use)."""
@@ -1355,6 +1370,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(409, {"error": m["ingest_nothing"]})
             run.stop()
             return self.send(200, {"ok": True})
+        if path == "/api/ingest/discard":
+            ok, why = self.app.discard_ingest()
+            if not ok:
+                return self.send(409, {"error": m["ingest_" + why], "reason": why})
+            return self.send(200, {"ok": True})
         if path == "/api/ingest/continue":
             run, why = self.app.continue_ingest()
             if run is None:
@@ -1615,7 +1635,8 @@ def main():
     sys.stdout = app.output
     runs = ingest_run.runs_root(kb_manage.state_dir())
     ingest_run.clean(runs)
-    app.ingest = ingest_run.latest(app, runs)  # an interrupted run shows as stopped, to be continued
+    roots = [os.path.join(lib["root"], ingest_run.WORK_DIR) for lib in libraries() if lib["root"] and lib["exists"]]
+    app.ingest = ingest_run.latest(app, roots + [runs])  # an interrupted run shows as stopped, to be continued
     serve(app, a.port, not a.no_browser)
     return 0
 

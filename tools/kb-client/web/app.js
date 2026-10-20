@@ -44,7 +44,8 @@
       ingest_all_folders: "every folder", ingest_top: "(top of the material folder)", ingest_since: "changed on or after",
       ingest_list: "List the documents", ingest_listed: "{total} documents: {important} get cards now, {rest} are filed first and get cards later.",
       ingest_other: "{n} other files (not documents) are left out.", ingest_parallel: "Card runs at once:",
-      ingest_start: "Start the ingest", ingest_stop: "Stop", ingest_continue: "Continue",
+      ingest_start: "Start the ingest", ingest_stop: "Stop", ingest_continue: "Continue", ingest_discard: "Discard",
+      ingest_discard_ask: "Give up this ingest run? Its work folder is removed; what was already filed stays in the library.",
       ingest_progress: "{label}: {done}/{total}", ingest_waiting: "Waiting for your decisions under Waiting for confirmation.",
       ingest_show_pending: "Show", ingest_log: "Log:", ingest_missing: "Gave no source ({n}):",
       ingest_step_convert: "Converting the documents", ingest_step_versions: "Looking for duplicates and versions",
@@ -308,7 +309,8 @@
       ingest_all_folders: "全部文件夹", ingest_top: "（资料文件夹最上层）", ingest_since: "修改日期不早于",
       ingest_list: "列出清单", ingest_listed: "共 {total} 份文档：{important} 份现在抽卡，{rest} 份先入原文、以后抽卡。",
       ingest_other: "另有 {n} 个非文档文件，不入库。", ingest_parallel: "同时抽卡路数：",
-      ingest_start: "开始入库", ingest_stop: "停止", ingest_continue: "继续",
+      ingest_start: "开始入库", ingest_stop: "停止", ingest_continue: "继续", ingest_discard: "放弃",
+      ingest_discard_ask: "放弃这次入库？它的工作文件夹会被删除，已经入库的内容留在库里。",
       ingest_progress: "{label}：{done}/{total}", ingest_waiting: "有事项等你决定，见「等待确认」。",
       ingest_show_pending: "查看", ingest_log: "日志：", ingest_missing: "没有生成来源（{n} 份）：",
       ingest_step_convert: "正在转换文档", ingest_step_versions: "正在查重和比对版本",
@@ -2570,6 +2572,12 @@
         api("POST", "/api/ingest/continue", {}).then(loadIngest).catch(function (e) { box.appendChild(el("p", { "class": "warn" }, String(e.message))); });
       });
       row.appendChild(cont);
+      var drop = el("button", { type: "button", "class": "quiet small" }, t("ingest_discard"));
+      drop.addEventListener("click", function () {
+        if (!window.confirm(t("ingest_discard_ask"))) return;
+        api("POST", "/api/ingest/discard", {}).then(loadIngest).catch(function (e) { box.appendChild(el("p", { "class": "warn" }, String(e.message))); });
+      });
+      row.appendChild(drop);
     }
     box.appendChild(row);
     if (["running", "waiting"].indexOf(r.state) >= 0) box.appendChild(el("p", { "class": "hint" }, t("ingest_long")));
@@ -2589,7 +2597,7 @@
       r.missing.slice(0, ING_ITEMS).forEach(function (m) { ml.appendChild(el("li", {}, m.rel)); });
       d.appendChild(ml);
     }
-    d.appendChild(el("p", { "class": "hint log-where" }, t("ingest_log") + " " + r.log));
+    if (r.log) d.appendChild(el("p", { "class": "hint log-where" }, t("ingest_log") + " " + r.log));
     box.appendChild(d);
   }
 
@@ -2708,7 +2716,7 @@
   var STAGES = ["convert", "check", "file", "pages"];
   var SCRIPT_STAGE = {
     "pick_materials": "convert", "doc2kb_core": "convert", "kb_batch split": "convert",
-    "ingest topics": "check", "quote_check check": "check", "ingest retopic": "check", "ingest add": "check",
+    "ingest topics": "check", "quote_check verify": "check", "ingest retopic": "check", "ingest add": "check",
     "quote_check write": "file", "ingest file": "file", "ingest pages": "pages"
   };
   var stages = { current: "", shown: "", hideTimer: null };
