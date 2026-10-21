@@ -17,9 +17,17 @@ What it holds:
               topic (and its key), entities, date, event date, and the link of a card citing an
               earlier version.
 
-Paragraph search uses SQLite's full-text index with the trigram tokenizer when this Python's SQLite
-has it (any text of three or more characters matches); shorter keywords, and SQLites without it,
-use LIKE. A folder the index cannot be written to gets an index in memory for that run.
+Search uses SQLite's full-text index (FTS5) when this Python's SQLite has it: paragraphs, and each
+card's conclusion and quote, are split into words (tokens()): Chinese, Japanese and Korean text into
+overlapping pairs of characters, other text into words. A keyword matches as a phrase of its words,
+so a keyword of two or more such characters matches wherever the text holds it, and a keyword
+ending in a word matches at the start of a word. Results are ranked with BM25. Keywords that leave
+a single CJK character, and SQLites without FTS5, use LIKE. An index made by an earlier version is
+made again. A folder the index cannot be written to gets an index in memory for that run.
+
+search() is the search of the client's search bar: a query of words and "quoted phrases" that must
+all match, a word naming an entity of the spec's Table E standing for any of its names; paragraphs
+and cards ranked together by BM25 with a small weight for newer documents.
 
 fingerprint() is the content fingerprint of a source's text: the text without its notes (lines
 starting with ">"), anchors and white space, compared as quote_check compares quotes. Two files with
@@ -32,6 +40,7 @@ Usage:
   kbindex.py refresh LIBRARY          bring it up to date; prints what changed
   kbindex.py stats LIBRARY            counts, as JSON
   kbindex.py search LIBRARY KEYWORD [KEYWORD ...] [--limit 20]   paragraphs holding any keyword
+  kbindex.py query LIBRARY "QUERY" [--limit 30]                  search(), as JSON
 """
 import argparse
 import hashlib
@@ -51,10 +60,16 @@ log = logging.getLogger('kbindex')
 
 INDEX_DIR = '_index'
 INDEX_FILE = 'kb.sqlite'
-INDEX_VERSION = 1
-USE_FULL_TEXT = os.environ.get('KBINDEX_FULL_TEXT', '1') != '0'   # 0: LIKE only, as on an SQLite without trigram
+INDEX_VERSION = 2
+USE_FULL_TEXT = os.environ.get('KBINDEX_FULL_TEXT', '1') != '0'   # 0: LIKE only, as on an SQLite without FTS5
 ANCHORED_RE = re.compile(r'^(.*?)\s*\^(p\d+)\s*$', re.S)
 ANCHOR_END_RE = re.compile(r'\s*\^(?:s\d{2,}-)?p\d+\s*$', re.M)
+CJK = '\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uac00-\ud7af\U00020000-\U0002ffff'
+RUN_RE = re.compile('([%s]+)|((?:(?![%s])[^\\W_])+)' % (CJK, CJK))
+QUERY_RE = re.compile(r'"([^"]+)"|\u201c([^\u201d]+)\u201d|(\S+)')
+FRESH_DAYS = 1825     # a document this many days older than the newest result gets no freshness weight
+FRESH_WEIGHT = 0.2    # the newest result's score is raised by this share
+CARD_WEIGHT = 0.1     # added to a card's score, so that a card comes before its own paragraph's equals
 MODIFIED_RE = re.compile(r'^>\s*(?:Document last modified|文档最后修改)\s*[:：]\s*(\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2})?)', re.M)
 
 TABLES = '''
@@ -78,6 +93,73 @@ def fingerprint(text):
     body = '\n'.join(ln for ln in text.replace('\r\n', '\n').split('\n') if not ln.lstrip().startswith('>'))
     body = ANCHOR_END_RE.sub('', body)
     return hashlib.sha256(quote_check.norm(body).encode('utf-8')).hexdigest()
+
+
+def tokens(text):
+    """The words of a text for the full-text index: runs of CJK characters as overlapping pairs (a run of
+    one character as itself), other letters and digits as words; case folded."""
+    out = []
+    for m in RUN_RE.finditer(text.casefold()):
+        run = m.group(1)
+        if run:
+            out += [run] if len(run) == 1 else [run[i:i + 2] for i in range(len(run) - 1)]
+        else:
+            out.append(m.group(2))
+    return out
+
+
+def body(text):
+    """A text as the full-text index holds it."""
+    return ' '.join(tokens(text))
+
+
+def _cjk(tok):
+    return RUN_RE.match(tok).group(1) is not None
+
+
+def phrase(term):
+    """The full-text query of one keyword: its words as a phrase, the last one as a prefix when it is not
+    CJK; '' when the index cannot answer it (no words, or a single CJK character among them)."""
+    toks = tokens(term)
+    if not toks or any(len(t) == 1 and _cjk(t) for t in toks):
+        return ''
+    return '"%s"%s' % (' '.join(toks), '' if _cjk(toks[-1]) else '*')
+
+
+def parse_query(query):
+    """The keywords of a search-bar query: words, and phrases in straight or curly double quotes."""
+    out = []
+    for m in QUERY_RE.finditer(query or ''):
+        t = ' '.join((m.group(1) or m.group(2) or m.group(3) or '').split())
+        if t and t not in out:
+            out.append(t)
+    return out
+
+
+def expand(keywords, entities=()):
+    """[[keyword, other names...]]: a keyword naming an entity (its name or an alias, entities as
+    kbconf.entities gives them) stands for all of that entity's names."""
+    groups = []
+    for k in keywords:
+        g = [k]
+        for row in entities:
+            names = [row['name']] + list(row['aliases'])
+            if any(kbconf.topic_key(n) == kbconf.topic_key(k) for n in names):
+                g += [n for n in names if kbconf.topic_key(n) not in map(kbconf.topic_key, g)]
+        groups.append(g)
+    return groups
+
+
+def _day(text):
+    m = re.match(r'\d{4}-\d{2}-\d{2}', text or '')
+    return m.group(0) if m else ''
+
+
+def _days(a, b):
+    """Days from a to b ('YYYY-MM-DD'), 0 when either is missing."""
+    if not (a and b):
+        return 0
+    return (time.mktime(time.strptime(b, '%Y-%m-%d')) - time.mktime(time.strptime(a, '%Y-%m-%d'))) / 86400
 
 
 def anchored(text):
@@ -167,6 +249,7 @@ class Index:
             row = db.execute("SELECT v FROM meta WHERE k = 'version'").fetchone()
             if db.execute("SELECT 1 FROM meta WHERE k = 'fts'").fetchone():
                 db.execute('SELECT rowid FROM paragraphs_fts LIMIT 1').fetchall()
+                db.execute('SELECT rowid FROM cards_fts LIMIT 1').fetchall()
         except sqlite3.Error:
             return False
         return bool(row) and row[0] == str(INDEX_VERSION)
@@ -177,10 +260,13 @@ class Index:
         try:
             if not USE_FULL_TEXT:
                 raise sqlite3.OperationalError('switched off (KBINDEX_FULL_TEXT=0)')
-            db.execute("CREATE VIRTUAL TABLE paragraphs_fts USING fts5(text, tokenize='trigram')")
-            db.execute("INSERT INTO meta VALUES ('fts', 'trigram')")
+            db.execute("CREATE VIRTUAL TABLE paragraphs_fts USING fts5(body, tokenize='unicode61')")
+            db.execute("CREATE VIRTUAL TABLE cards_fts USING fts5(body, tokenize='unicode61')")
+            db.execute("INSERT INTO meta VALUES ('fts', 'pairs')")
         except sqlite3.Error as e:
-            log.info('no trigram full-text index (%s); paragraphs are searched with LIKE', e)
+            for t in ('paragraphs_fts', 'cards_fts'):
+                db.execute('DROP TABLE IF EXISTS %s' % t)
+            log.info('no full-text index (%s); the index is searched with LIKE', e)
         db.execute("INSERT INTO meta VALUES ('version', ?)", (str(INDEX_VERSION),))
         db.commit()
 
@@ -232,6 +318,8 @@ class Index:
             self.db.execute('DELETE FROM paragraphs WHERE source = ?', (rel,))
             self.db.execute('DELETE FROM sources WHERE path = ?', (rel,))
         else:
+            if self.fts:
+                self.db.execute('DELETE FROM cards_fts WHERE rowid IN (SELECT id FROM cards WHERE cards = ?)', (rel,))
             self.db.execute('DELETE FROM cards WHERE cards = ?', (rel,))
 
     def _read(self, path):
@@ -253,15 +341,18 @@ class Index:
             for anchor, ptext in paras.items():
                 cur = self.db.execute('INSERT INTO paragraphs (source, anchor, text) VALUES (?, ?, ?)', (rel, anchor, ptext))
                 if self.fts:
-                    self.db.execute('INSERT INTO paragraphs_fts (rowid, text) VALUES (?, ?)', (cur.lastrowid, ptext))
+                    self.db.execute('INSERT INTO paragraphs_fts (rowid, body) VALUES (?, ?)', (cur.lastrowid, body(ptext)))
             return
         got = quote_check.read_cards(text)
         for c in got['cards']:
-            self.db.execute('INSERT INTO cards (cards, source, anchor, quote, conclusion, topic, tkey, entities, date, '
+            cur = self.db.execute('INSERT INTO cards (cards, source, anchor, quote, conclusion, topic, tkey, entities, date, '
                             'event_date, link) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                             (rel, got['source'], c['anchor'], c['quote'], c['conclusion'], c['topic'],
                              kbconf.topic_key(c['topic']), json.dumps(c['entities'], ensure_ascii=False),
                              c['date'], c.get('event_date', ''), c.get('link', '')))
+            if self.fts:
+                self.db.execute('INSERT INTO cards_fts (rowid, body) VALUES (?, ?)',
+                                (cur.lastrowid, body(c['conclusion'] + '\n' + c['quote'])))
 
     # ------------------------------------------------------------ lookups
 
@@ -303,10 +394,17 @@ class Index:
 
     def find_cards(self, terms, entity_names=(), topic_keys=(), cap=5000):
         """Cards whose conclusion or quote holds a term, or whose entities or topic are named; at most cap."""
-        where, args = [], []
+        where, args, phrases = [], [], []
         for t in terms:
+            ph = phrase(t) if self.fts else ''
+            if ph:
+                phrases.append(ph)
+                continue
             where.append('(conclusion LIKE ? ESCAPE \'\\\' OR quote LIKE ? ESCAPE \'\\\')')
             args += [_like(t)] * 2
+        if phrases:
+            where.append('id IN (SELECT rowid FROM cards_fts WHERE cards_fts MATCH ?)')
+            args.append(' OR '.join(phrases))
         for e in entity_names:
             where.append('entities LIKE ? ESCAPE \'\\\'')
             args.append(_like(json.dumps(e, ensure_ascii=False)))
@@ -325,19 +423,93 @@ class Index:
         terms = [t for t in (' '.join(x.split()) for x in terms) if t]
         if not terms:
             return []
-        order = 'ORDER BY s.carded, p.source, p.id' if uncarded_first else 'ORDER BY p.source, p.id'
-        long_terms = [t for t in terms if len(t) >= 3]
-        if self.fts and long_terms and len(long_terms) == len(terms):
-            match = ' OR '.join('"%s"' % t.replace('"', '""') for t in long_terms)
-            q = ('SELECT p.source, p.anchor, p.text FROM paragraphs_fts f JOIN paragraphs p ON p.id = f.rowid '
-                 'JOIN sources s ON s.path = p.source WHERE paragraphs_fts MATCH ? %s LIMIT ?' % order)
-            rows = self.db.execute(q, (match, limit))
+        first = 's.carded, ' if uncarded_first else ''
+        phrases = [phrase(t) for t in terms] if self.fts else []
+        if phrases and all(phrases):
+            q = ('SELECT p.source, p.anchor, p.text FROM paragraphs_fts JOIN paragraphs p ON p.id = paragraphs_fts.rowid '
+                 'JOIN sources s ON s.path = p.source WHERE paragraphs_fts MATCH ? '
+                 'ORDER BY %sbm25(paragraphs_fts), p.source, p.id LIMIT ?' % first)
+            rows = self.db.execute(q, (' OR '.join(phrases), limit))
         else:
             where = ' OR '.join(["p.text LIKE ? ESCAPE '\\'"] * len(terms))
             q = ('SELECT p.source, p.anchor, p.text FROM paragraphs p JOIN sources s ON s.path = p.source '
-                 'WHERE %s %s LIMIT ?' % (where, order))
+                 'WHERE %s ORDER BY %sp.source, p.id LIMIT ?' % (where, first))
             rows = self.db.execute(q, [_like(t) for t in terms] + [limit])
         return [{'source': s, 'anchor': a, 'text': t} for s, a, t in rows]
+
+    def _matches(self, kind, groups, cap):
+        """[(row id, relevance)] of the paragraphs or cards (kind) matching every group of keywords; the
+        groups the full-text index can answer are matched there and give BM25, the others use LIKE."""
+        table, text = ('paragraphs', 'x.text') if kind == 'paragraphs' else ('cards', "x.conclusion || ' ' || x.quote")
+        fts, where, args = [], [], []
+        for g in groups:
+            phrases = [phrase(t) for t in g] if self.fts else []
+            if phrases and all(phrases):
+                fts.append('(%s)' % ' OR '.join(phrases))
+            else:
+                where.append('(%s)' % ' OR '.join(["%s LIKE ? ESCAPE '\\'" % text] * len(g)))
+                args += [_like(t) for t in g]
+        if fts:
+            q = ('SELECT x.id, -bm25({t}_fts) FROM {t}_fts JOIN {t} x ON x.id = {t}_fts.rowid WHERE {t}_fts MATCH ?{w} '
+                 'ORDER BY bm25({t}_fts) LIMIT ?').format(t=table, w=''.join(' AND ' + w for w in where))
+            return list(self.db.execute(q, [' AND '.join(fts)] + args + [cap]))
+        q = 'SELECT x.id, 1.0 FROM %s x WHERE %s LIMIT ?' % (table, ' AND '.join(where))
+        return list(self.db.execute(q, args + [cap]))
+
+    def search(self, query, entities=(), limit=30):
+        """{"keywords": [[keyword, other names...]], "results": [...]} for a search-bar query: paragraphs and
+        cards holding every keyword (a group: any of its names), best first. Relevance is BM25 (1 for
+        all when only LIKE could answer), divided by the best of its kind; a result gains up to
+        FRESH_WEIGHT of it for a newer document (none for one FRESH_DAYS older than the newest result),
+        and a card CARD_WEIGHT. A paragraph a listed card quotes is left out. Each result:
+        {kind: "card" or "paragraph", source (path below the sources folder), link, anchor, text (the
+        paragraph, or the card's quote), date, carded; a card also conclusion and topic, score}."""
+        groups = expand(parse_query(query), entities)
+        if not groups:
+            return {'keywords': [], 'results': []}
+        sdir = self.names['sources_dir']
+        cap = max(limit * 4, 100)
+        found = []
+        for kind in ('cards', 'paragraphs'):
+            hits = self._matches(kind, groups, cap)
+            best = max([r for _, r in hits] or [1]) or 1
+            rel = {i: r / best for i, r in hits}
+            if not rel:
+                continue
+            ids = ','.join(str(i) for i in rel)
+            if kind == 'cards':
+                q = ('SELECT id, cards, source, anchor, quote, conclusion, topic, entities, date, event_date, link '
+                     'FROM cards WHERE id IN (%s)' % ids)
+                for r in self.db.execute(q):
+                    _, src, c = _card_row(r[1:])
+                    link = c.get('link') or src
+                    found.append({'kind': 'card', 'source': link.split('/', 1)[-1] + '.md', 'link': link,
+                                  'anchor': c['anchor'], 'text': c['quote'], 'conclusion': c['conclusion'],
+                                  'topic': c['topic'], 'date': _day(c['date']), 'carded': True, 'rel': rel[r[0]]})
+            else:
+                q = ('SELECT p.id, p.source, p.anchor, p.text, s.modified, s.carded FROM paragraphs p '
+                     'JOIN sources s ON s.path = p.source WHERE p.id IN (%s)' % ids)
+                for pid, src, anchor, text, modified, carded in self.db.execute(q):
+                    found.append({'kind': 'paragraph', 'source': src, 'link': '%s/%s' % (sdir, src[:-3]),
+                                  'anchor': anchor, 'text': text, 'date': _day(modified), 'carded': bool(carded),
+                                  'rel': rel[pid]})
+        quoted = {(f['link'], f['anchor']) for f in found if f['kind'] == 'card'}
+        found = [f for f in found if f['kind'] == 'card' or (f['link'], f['anchor']) not in quoted]
+        newest = max([f['date'] for f in found if f['date']] or [''])
+        for f in found:
+            fresh = max(0.0, 1 - _days(f['date'], newest) / FRESH_DAYS) if f['date'] else 0.0
+            f['score'] = round(f.pop('rel') * (1 + FRESH_WEIGHT * fresh) + (CARD_WEIGHT if f['kind'] == 'card' else 0), 4)
+        found.sort(key=lambda f: (-f['score'], -int(f['date'].replace('-', '') or 0), f['source'], f['anchor']))
+        return {'keywords': groups, 'results': found[:limit]}
+
+    def context(self, source, anchor, around=2):
+        """[{anchor, text, hit}] of the paragraph source#anchor and up to around paragraphs before and after it,
+        in the source's order; [] when there is no such paragraph."""
+        rows = list(self.db.execute('SELECT anchor, text FROM paragraphs WHERE source = ? ORDER BY id', (source,)))
+        at = next((i for i, (a, _) in enumerate(rows) if a == anchor), None)
+        if at is None:
+            return []
+        return [{'anchor': a, 'text': t, 'hit': a == anchor} for a, t in rows[max(0, at - around):at + around + 1]]
 
     def uncarded(self):
         """[(path, modified)] of the sources without a cards file, newest first."""
@@ -366,6 +538,15 @@ def _card_row(r):
     return cards, source, c
 
 
+def library_entities(root, cfg):
+    """The entities of the library's spec (Table E), as kbconf.entities gives them; [] without a spec."""
+    try:
+        with open(os.path.join(root, cfg['names']['spec']), encoding='utf-8') as f:
+            return kbconf.entities(f.read())
+    except OSError:
+        return []
+
+
 def open_index(root, cfg, refresh=True):
     """The library's index, brought up to date unless refresh is False."""
     ix = Index(root, cfg)
@@ -384,6 +565,10 @@ def main(argv=None):
     s.add_argument('library')
     s.add_argument('keywords', nargs='+')
     s.add_argument('--limit', type=int, default=20)
+    s = sub.add_parser('query')
+    s.add_argument('library')
+    s.add_argument('query')
+    s.add_argument('--limit', type=int, default=30)
     a = ap.parse_args(argv)
     kbconf.setup_logging(a.log_level)
     try:
@@ -398,6 +583,9 @@ def main(argv=None):
             ix.refresh()
             for p in ix.find_paragraphs(a.keywords, a.limit):
                 print('%s#^%s\t%s' % (p['source'], p['anchor'], ' '.join(p['text'].split())))
+        elif a.cmd == 'query':
+            ix.refresh()
+            print(json.dumps(ix.search(a.query, library_entities(a.library, cfg), a.limit), ensure_ascii=False))
         elif a.cmd == 'stats':
             ix.refresh()
             print(json.dumps(ix.stats(), ensure_ascii=False))

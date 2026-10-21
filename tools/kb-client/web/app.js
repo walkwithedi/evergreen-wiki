@@ -261,6 +261,11 @@
       skills_filter: "Filter skills", skills_no_match: "No skill matches.",
       copy_code: "Copy", copy_answer: "Copy answer", copy_cite: "({name})",
       ingest_details: "Details", ingest_close: "Hide",
+      search_go: "Search", search_ph: "Search the library: words, \"a phrase\"", search_hide: "Hide", search_show: "Show",
+      search_none: "Nothing in the library matches.", search_count: "{n} results", search_card: "Card",
+      search_para: "Source", search_uncarded: "no cards yet", search_sent: "The top {n} went to the conversation for a summary.",
+      search_busy: "The conversation is busy.", search_summarize: "Summarise with AI", search_back: "Back to the results",
+      search_around: "{name} \u00a7{n}, with the paragraphs around it", search_missing: "That paragraph is not in the library's index.",
       workdir_label: "Work folder:", workdir_none: "none chosen (your home folder; edits ask first)",
       workdir_change: "Change\u2026", workdir_recent: "Recent folders", workdir_title: "Choose the work folder",
       workdir_hint: "The assistant reads and edits files in this folder without asking; commands and anything outside it still ask.",
@@ -527,6 +532,11 @@
       skills_filter: "筛选技能", skills_no_match: "没有匹配的技能。",
       copy_code: "复制", copy_answer: "复制回答", copy_cite: "（{name}）",
       ingest_details: "详情", ingest_close: "收起",
+      search_go: "搜索", search_ph: "搜索知识库：空格分隔多个词，引号内为短语", search_hide: "收起", search_show: "展开",
+      search_none: "知识库里没有匹配的内容。", search_count: "{n} 条结果", search_card: "卡片",
+      search_para: "原文", search_uncarded: "未抽卡", search_sent: "已把前 {n} 条发给对话做总结。",
+      search_busy: "对话正忙。", search_summarize: "交给 AI 总结", search_back: "返回结果",
+      search_around: "{name} \u00a7{n} 及前后段落", search_missing: "知识库索引里没有这一段。",
       workdir_label: "工作文件夹：", workdir_none: "未选择（家目录；改文件前会先问）",
       workdir_change: "更换\u2026", workdir_recent: "最近的文件夹", workdir_title: "选择工作文件夹",
       workdir_hint: "助手在这个文件夹里读、改文件不再询问；运行命令和文件夹以外的操作仍会询问。",
@@ -702,6 +712,7 @@
       if (first && s.lang !== lang) { lang = s.lang; translate(); }
       if (first) { carousel($("ideas"), false); carousel($("ideas-mini"), true); }
       render();
+      drawSearchBar();
       loadPending();
       if (first && s.job && !s.job.done) follow(s.job.id, s.job.action);
     }).catch(lost);
@@ -1754,7 +1765,7 @@
     return wrap;
   }
 
-  var MD_INLINE = /(`+)([\s\S]*?[^`])\1(?!`)|\*\*(?=\S)([\s\S]*?\S)\*\*|__(?=\S)([\s\S]*?\S)__|\*(?=[^\s*])([^*]*?[^\s*])\*|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>()　-〿＀-￯]+[^\s<>().,;:!?'"　-〿＀-￯])/g;
+  var MD_INLINE = /(`+)([\s\S]*?[^`])\1(?!`)|\*\*(?=\S)([\s\S]*?\S)\*\*|__(?=\S)([\s\S]*?\S)__|\*(?=[^\s*])([^*]*?[^\s*])\*|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>()　-〿＀-￯]+[^\s<>().,;:!?'"　-〿＀-￯])|\[\[([^\]|#]+)#\^(p\d+)(?:\|[^\]]*)?\]\]/g;
 
   function mdInline(text, into) {
     var re = new RegExp(MD_INLINE.source, "g"), last = 0, m;  // its own: bold and italic call this again
@@ -1769,6 +1780,13 @@
         var e = el("em");
         mdInline(m[5], e);
         into.appendChild(e);
+      } else if (m[9] !== undefined) {
+        // a source link: opens the paragraph and its neighbours under the search bar
+        var link = m[9].trim(), anchor = m[10];
+        var cite = el("button", { type: "button", "class": "cite", title: link + "#^" + anchor },
+                      sourceName(link) + " \u00a7" + anchor.slice(1));
+        cite.addEventListener("click", function () { openContext(link, anchor, false); });
+        into.appendChild(cite);
       } else {
         var href = m[7] || m[8];
         var a = el("a", { href: href, target: "_blank", rel: "noopener noreferrer" }, m[6] || href);
@@ -2469,6 +2487,167 @@
   }
 
   function closeGraph() { show($("graph"), false); graph = null; }
+
+  // ---------- search bar ----------
+  // Keyword search in one local library's index (GET /api/search), results at once; the best ones then go to
+  // the conversation for a summary (POST /api/search/summary), or, while it is busy, wait for a click.
+
+  var srch = { lib: "", q: "", got: null, list: null };
+  var SNIPPET = 160;  // characters shown on each side of the first hit
+
+  function drawSearchBar() {
+    var libs = localLibs();
+    show($("search-bar"), libs.length > 0);
+    if (!libs.length) { show($("search-box"), false); return; }
+    $("search-q").placeholder = t("search_ph");
+    var sel = $("search-lib");
+    var keep = srch.lib || store("kb-search-lib") || "";
+    sel.textContent = "";
+    libs.forEach(function (l) { sel.appendChild(el("option", { value: l.id }, l.label)); });
+    sel.value = libs.some(function (l) { return l.id === keep; }) ? keep : libs[0].id;
+    srch.lib = sel.value;
+    show(sel, libs.length > 1);
+  }
+
+  function store(key, value) {
+    try {
+      if (value === undefined) return window.localStorage.getItem(key);
+      window.localStorage.setItem(key, value);
+    } catch (e) { /* storage blocked: nothing remembered */ }
+    return null;
+  }
+
+  function searchBox(on) {
+    show($("search-box"), on);
+    if (on) $("search-list").hidden = false;
+    $("search-fold").textContent = t("search_hide");
+  }
+
+  // The text with every keyword (any name of a group) marked, as DOM nodes.
+  function marked(text, groups, into) {
+    var words = [];
+    (groups || []).forEach(function (g) { g.forEach(function (w) { if (w) words.push(w.toLowerCase()); }); });
+    var low = text.toLowerCase(), at = 0;
+    while (at < text.length) {
+      var best = -1, len = 0;
+      words.forEach(function (w) {
+        var k = low.indexOf(w, at);
+        if (k >= 0 && (best < 0 || k < best || k === best && w.length > len)) { best = k; len = w.length; }
+      });
+      if (best < 0) break;
+      if (best > at) into.appendChild(document.createTextNode(text.slice(at, best)));
+      into.appendChild(el("mark", {}, text.slice(best, best + len)));
+      at = best + len;
+    }
+    if (at < text.length) into.appendChild(document.createTextNode(text.slice(at)));
+    return into;
+  }
+
+  function snippet(text, groups) {
+    text = text.split(/\s+/).join(" ");
+    var low = text.toLowerCase(), first = -1;
+    (groups || []).forEach(function (g) { g.forEach(function (w) {
+      var k = low.indexOf(w.toLowerCase());
+      if (k >= 0 && (first < 0 || k < first)) first = k;
+    }); });
+    var from = Math.max(0, first - SNIPPET), to = Math.min(text.length, Math.max(first, 0) + SNIPPET * 2);
+    return (from ? "…" : "") + text.slice(from, to) + (to < text.length ? "…" : "");
+  }
+
+  function sourceName(link) { return link.split("/").pop(); }
+
+  function runSearch(q) {
+    srch.q = q;
+    store("kb-search-lib", srch.lib);
+    $("search-note").textContent = "…";
+    $("search-summary").textContent = "";
+    $("search-list").textContent = "";
+    searchBox(true);
+    api("GET", "/api/search?lib=" + encodeURIComponent(srch.lib) + "&q=" + encodeURIComponent(q)).then(function (got) {
+      if (q !== srch.q) return;
+      srch.got = got;
+      drawResults();
+      if (got.results.length) summarise(false);
+    }).catch(function (e) { $("search-note").textContent = String(e.message); });
+  }
+
+  function drawResults() {
+    var got = srch.got, list = $("search-list");
+    list.textContent = "";
+    $("search-note").textContent = got.results.length ? t("search_count", { n: got.results.length }) : t("search_none");
+    got.results.forEach(function (r) {
+      var item = el("div", { "class": "search-item " + r.kind });
+      var head = el("button", { type: "button", "class": "search-hit" });
+      head.appendChild(el("span", { "class": "badge" }, t(r.kind === "card" ? "search_card" : "search_para")));
+      head.appendChild(el("span", { "class": "name" }, sourceName(r.link) + " §" + r.anchor.slice(1)));
+      if (r.date) head.appendChild(el("span", { "class": "hint" }, r.date));
+      if (!r.carded) head.appendChild(el("span", { "class": "hint" }, t("search_uncarded")));
+      item.appendChild(head);
+      if (r.kind === "card") item.appendChild(marked(r.conclusion, got.keywords, el("div", { "class": "concl" })));
+      item.appendChild(marked(snippet(r.text, got.keywords), got.keywords, el("div", { "class": "snip" })));
+      head.addEventListener("click", function () { openContext(r.link, r.anchor, true); });
+      list.appendChild(item);
+    });
+  }
+
+  // Sends the best results to the current conversation window; a busy window gets a button instead.
+  function summarise(clicked) {
+    var box = $("search-summary"), q = srch.q;
+    box.textContent = "";
+    api("POST", "/api/search/summary", { library: srch.lib, q: q, win: chat.win || "" }).then(function (r) {
+      if (q !== srch.q) return;
+      box.textContent = r.sent ? t("search_sent", { n: r.sent }) : "";
+    }).catch(function (e) {
+      if (q !== srch.q) return;
+      var reason = e.data && e.data.reason;
+      if (reason === "busy" || reason === "not_ready") {
+        box.appendChild(el("span", { "class": "hint" }, reason === "busy" ? t("search_busy") + " " : String(e.message) + " "));
+        var b = el("button", { type: "button", "class": "primary small" }, t("search_summarize"));
+        b.addEventListener("click", function () { summarise(true); });
+        box.appendChild(b);
+      } else box.textContent = String(e.message);
+      if (clicked && reason === "busy") box.firstChild.classList.add("warn");
+    });
+  }
+
+  // The paragraph link#anchor and the ones around it, in place of the result list until Back.
+  function openContext(link, anchor, fromList) {
+    var lib = srch.lib || (localLibs()[0] || {}).id;
+    if (!lib) return;
+    searchBox(true);
+    var list = $("search-list");
+    list.textContent = "";
+    var back = el("button", { type: "button", "class": "quiet small" }, t("search_back"));
+    back.addEventListener("click", function () { if (srch.got) drawResults(); else searchBox(false); });
+    if (fromList || srch.got) list.appendChild(back);
+    api("GET", "/api/context?lib=" + encodeURIComponent(lib) + "&link=" + encodeURIComponent(link) +
+        "&anchor=" + encodeURIComponent(anchor)).then(function (got) {
+      list.appendChild(el("p", { "class": "search-ctx-title" }, t("search_around", { name: sourceName(link), n: anchor.slice(1) })));
+      got.paragraphs.forEach(function (p) {
+        var d = el("div", { "class": "search-ctx" + (p.hit ? " hit" : "") });
+        d.appendChild(el("span", { "class": "hint" }, "§" + p.anchor.slice(1) + " "));
+        marked(p.text, srch.got && srch.got.keywords, d);
+        list.appendChild(d);
+      });
+      var hit = list.querySelector(".hit");
+      if (hit) hit.scrollIntoView({ block: "nearest" });
+    }).catch(function (e) {
+      list.appendChild(el("p", { "class": "warn" }, e.status === 404 ? t("search_missing") : String(e.message)));
+    });
+  }
+
+  $("search-bar").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var q = $("search-q").value.trim();
+    if (q) runSearch(q);
+  });
+  $("search-lib").addEventListener("change", function () { srch.lib = $("search-lib").value; store("kb-search-lib", srch.lib); });
+  $("search-fold").addEventListener("click", function () {
+    var list = $("search-list");
+    list.hidden = !list.hidden;
+    $("search-fold").textContent = t(list.hidden ? "search_show" : "search_hide");
+  });
+  $("search-close").addEventListener("click", function () { searchBox(false); });
 
   // ---------- client-run ingest ----------
   // The client runs kb-ingest's scripts itself; the assistant only writes cards, in windows of the client's own.
