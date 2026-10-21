@@ -591,3 +591,14 @@ body.kb-open .kb-toggle { background: var(--soft); color: var(--accent); }
 .source-para.hit { border-left-color: var(--accent); background: var(--log); }
 .msg .cite { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer;
   text-decoration: underline dotted; }
+.quick-switch { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--muted); }
+.quick .quick-head { margin: 0 0 6px; }
+.quick-summary p { margin: 0 0 6px; }
+.quick .cite { border: none; background: none; padding: 0 1px; color: var(--accent); font-size: 12px; vertical-align: super; cursor: pointer; }
+.quick .cite.bad { color: var(--warn); text-decoration: line-through; cursor: default; }
+.quick-items { max-height: 320px; overflow: auto; }
+.quick-item { border-top: 1px solid var(--line); padding: 6px 4px; font-size: 13px; }
+.quick-item.hit { background: var(--soft); }
+.quick-item .hint { margin: 0 0 2px; }
+.quick-conclusion { font-weight: 600; }
+.quick-buttons { display: flex; gap: 8px; margin-top: 8px; }
