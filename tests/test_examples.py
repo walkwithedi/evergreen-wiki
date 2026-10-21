@@ -40,7 +40,7 @@ def build(work):
         if os.path.isfile(os.path.join(SAMPLE, name)):
             shutil.copy(os.path.join(SAMPLE, name), lib)
     out = os.path.join(work, "batches")
-    run("doc2kb_core.py", "--batch", MATERIAL, "-o", out, "--kb-batch", "--library", lib)
+    run("kb_batch.py", "make", "--batch", MATERIAL, "-o", out, "--library", lib)
     batches = sorted(os.path.join(out, n) for n in os.listdir(out) if re.search(r"_b\d+\.md$", n))
     topics = os.path.join(work, "topics.txt")
     run("ingest.py", "topics", "--library", lib, "--out", topics)

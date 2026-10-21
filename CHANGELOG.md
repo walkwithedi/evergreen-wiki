@@ -2,6 +2,19 @@
 
 All three skills share one version number. To release, update this file and the "Version:" line of every SKILL.md together and merge to main; the release workflow then publishes v<version>.
 
+## 6.0.0
+
+The document converter is now its own project, [doc2kb](https://github.com/walkwithedi/doc2kb). This repository carries a copy of a doc2kb release and writes its batch files itself.
+
+Removed and incompatible
+- Batch files are made with `kb_batch.py make` instead of `doc2kb_core.py --kb-batch`. The options are the same (`--batch`, `--files`, `--only`, `--since`, `--fp-db`, `--library`, `--batch-chars`, `--tier`, `--lang`, ...) and so is the output: replace `python3 doc2kb_core.py ... --kb-batch` with `python3 kb_batch.py make ...` in scripts or prompts that call it. `doc2kb_core.py` no longer knows `--kb-batch`, `--tier`, `--batch-chars` or `--library`.
+- tools/doc2kb is removed, and releases no longer attach `doc2kb-v<version>.zip`; the stand-alone converter is released by doc2kb.
+
+Changed
+- shared/scripts/doc2kb_core.py is a copy of doc2kb 1.1.0, recorded in DOC2KB_VERSION. scripts/sync_doc2kb.py copies a release in (`--from`) and checks the copy (`--check`); CI checks it against the release named in DOC2KB_VERSION.
+- kb-ingest's step 1, the kb-client ingest run and the stage names on the page use `kb_batch.py make`.
+- The batch file format is described in docs/batch-files.md. Converter tests live in doc2kb; tests/test_kb_batch.py covers making and splitting batch files.
+
 ## 5.0.0
 
 5.0 makes an ingest run traceable from its own folder: each run works in <library>/.kb-work/, its cards are kept one file per source, a script says how far the run got, and a run counts as finished only once the filing script has written it into the library.

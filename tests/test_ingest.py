@@ -346,7 +346,7 @@ class EndToEndTest(Tmp):
 
     def intake(self, src, cards, tag):
         out = self.p("out-" + tag)
-        self.run_tool("doc2kb_core.py", "--batch", src, "-o", out, "--kb-batch", "--library", self.p("lib"))
+        self.run_tool("kb_batch.py", "make", "--batch", src, "-o", out, "--library", self.p("lib"))
         batches = sorted(os.path.join(out, n) for n in os.listdir(out) if re.search(r"_b\d+\.md$", n))
         table, _ = quote_check.load_batches(batches)
         sid = {v["name"]: s for s, v in table.items()}
@@ -411,7 +411,7 @@ class WorkFolderTest(Tmp):
         self.assertEqual(self.progress(work)["step"], 1)
 
         batches_dir = os.path.join(work, "batches")
-        self.run_tool("doc2kb_core.py", "--batch", self.p("src"), "-o", batches_dir, "--kb-batch", "--library", lib)
+        self.run_tool("kb_batch.py", "make", "--batch", self.p("src"), "-o", batches_dir, "--library", lib)
         batches = sorted(os.path.join(batches_dir, n) for n in os.listdir(batches_dir) if re.search(r"_b\d+\.md$", n))
         table, _ = quote_check.load_batches(batches)
         sid = {v["name"]: s for s, v in table.items()}

@@ -2715,7 +2715,7 @@
 
   var STAGES = ["convert", "check", "file", "pages"];
   var SCRIPT_STAGE = {
-    "pick_materials": "convert", "doc2kb_core": "convert", "kb_batch split": "convert",
+    "pick_materials": "convert", "kb_batch make": "convert", "kb_batch split": "convert",
     "ingest topics": "check", "quote_check verify": "check", "ingest retopic": "check", "ingest add": "check",
     "quote_check write": "file", "ingest file": "file", "ingest pages": "pages"
   };

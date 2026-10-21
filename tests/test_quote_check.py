@@ -11,7 +11,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TESTS = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS = os.path.join(ROOT, "shared", "scripts")
 QC = os.path.join(SCRIPTS, "quote_check.py")
-CORE = os.path.join(SCRIPTS, "doc2kb_core.py")
+KB_BATCH = os.path.join(SCRIPTS, "kb_batch.py")
 sys.path.insert(0, TESTS)
 sys.path.insert(0, SCRIPTS)
 import doc2kb_fixtures as fx  # noqa: E402
@@ -217,7 +217,7 @@ class CommandLineTest(unittest.TestCase):
     def test_from_doc2kb_batches(self):
         src, out = os.path.join(self.d, "src"), os.path.join(self.d, "out")
         fx.build_all(src, english=True)
-        run([sys.executable, CORE, "--batch", src, "-o", out, "--kb-batch", "--batch-chars", "1000"])
+        run([sys.executable, KB_BATCH, "make", "--batch", src, "-o", out, "--batch-chars", "1000"])
         batches = sorted(os.path.join(out, n) for n in os.listdir(out) if n.endswith(".md") and "_b0" in n)
         table, by_sid = qc.load_batches(batches)
         sid = next(s for s, v in table.items() if v["name"] == "report-en.docx")

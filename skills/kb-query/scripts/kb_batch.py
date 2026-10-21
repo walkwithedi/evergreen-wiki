@@ -40,9 +40,16 @@ A batch file holds several converted source documents for one ingest run:
 Splitting back joins the parts of each source, restores the heading levels and rewrites the
 anchors from ^s01-p3 to ^p3, so a link [[source file#^p3]] reaches the paragraph.
 
-Python 3 standard library only.
+Python 3 standard library only. Making batch files needs doc2kb_core.py (the converter, a copy of
+doc2kb's) next to this file; splitting them back does not.
 
 Usage:
+  kb_batch.py make (--batch FOLDER | FILE | --files LIST) -o OUTDIR [--library LIB | --batch-chars N]
+                   [any doc2kb_core.py option: --only, --since, --fp-db, --lang, ...]
+      converts the documents with doc2kb_core.py and writes the run's batch files,
+      <name>_YYYYMMDD_b01.md, _b02.md, ... (a second run that day adds the time). The limit is
+      --batch-chars, else --tier (kept for older command lines), else batch_chars in LIB/_kb.json,
+      else 20,000 characters. No picture files are exported.
   kb_batch.py split BATCH.md [BATCH.md ...] -o OUTDIR [--names NAMES.json]
       NAMES.json maps a source number or original file name to the output file name;
       the default is the original file name with .md in place of its extension.
@@ -386,9 +393,146 @@ def output_name(sid, name, names):
     return os.path.splitext(name)[0] + '.md'
 
 
+# ---------------------------------------------------------------- make: convert, then write batch files
+
+# Run messages and header labels in English and Chinese, chosen with the converter's --lang.
+MAKE_LABELS = {
+    'at': ('  batch file %d of %d: %s, sources: %d', '  批文件 %d/%d: %s，来源 %d 个'),
+    'oversize': ('  ⚠ %s %s: %d characters in one block, more than the limit of %d; '
+                 'it is a batch of its own',
+                 '  ⚠ %s %s：单个段落或表格 %d 字符，超过上限 %d，单独成批'),
+    'title': ('Batch file %s (%d of %d)', '批文件 %s（第 %d 批，共 %d 批）'),
+    'limit': ('Tier: %s  Character limit: %d', '档位：%s　字数上限：%d'),
+    'note': ('Each source is a section headed "# Snn"; a source cut into parts is marked "· k/n". '
+             'Paragraphs and list items end with an anchor such as ^s01-p2, a table has one on the '
+             'line below it. Quote sentences exactly as written and cite the anchor.',
+             '每个来源一节，标题为「# Snn」；切成几部分的来源在标题末尾标「· 1/3」这样的序号。'
+             '段落和列表项末尾带锚点（如 ^s01-p2），表格的锚点在表格下一行。'
+             '引用时一字不改地照抄原句，并注明锚点。'),
+    'table_head': ('| Source | File | Original path | Modified | Characters | Part |',
+                   '| 来源 | 文件 | 原始路径 | 修改时间 | 字符数 | 部分 |'),
+    'rep': ('Batch files: %d, tier %s, at most %d characters each\n',
+            '批文件：%d 个，档位 %s，每个至多 %d 字符\n'),
+    'rep_item': ('  %s  sources: %d\n', '  %s  来源 %d 个\n'),
+}
+
+
+def _label(core, key, *args):
+    text = MAKE_LABELS[key][core.LANGS.index(core.LANG)]
+    return text % args if args else text
+
+
+def batch_name(md_dir, out_name, now=None):
+    """<name>_YYYYMMDD, or <name>_YYYYMMDD-HHMM when that day already has batch files."""
+    import datetime
+    now = now or datetime.datetime.now()
+    stem = '%s_%s' % (out_name, now.strftime('%Y%m%d'))
+    try:
+        taken = any(n.startswith(stem + '_b') for n in os.listdir(md_dir))
+    except OSError:
+        taken = False
+    return '%s_%s' % (out_name, now.strftime('%Y%m%d-%H%M')) if taken else stem
+
+
+def batch_writer(core, limit, tier):
+    """A writer for doc2kb_core.run_batch() / run_files(): documents oldest first, cut and packed
+    into batch files of at most limit characters."""
+    def write(entries, md_dir, ts, src_root, out_name):
+        ok = [e for e in entries if e['stat']['status'] in (core.OK, core.SKIPPED)]
+        ok.sort(key=lambda e: (e['stat'].get('doc_mtime') or '9999', e['rel']))
+        sources = []
+        for e in ok:
+            st = e['stat']
+            body = re.sub(r'^(> [^\n]*\n)+\n', '', e.get('body', ''))
+            meta = (core.T('section_path', e['rel'])
+                    + core.T('section_modified', st.get('doc_mtime') or core.T('unknown'),
+                             core.src_label(st.get('mtime_src') or 'unknown'))
+                    + core.T('section_extracted', ts))
+            sources.append({'name': core.fs_text(os.path.basename(e['rel'])), 'path': core.fs_text(e['rel']),
+                            'modified': st.get('doc_mtime') or '', 'meta': meta, 'body': body,
+                            'rel': e['rel']})
+        units, oversized = build_units(sources, limit)
+        batches = pack(units, limit)
+        stem = batch_name(md_dir, out_name)
+        labels = {k: _label(core, k) for k in ('title', 'limit', 'note', 'table_head')}
+        written, file_of = [], {}
+        rel_of = {source_id(i): s['rel'] for i, s in enumerate(sources, 1)}
+        for n, batch in enumerate(batches, 1):
+            name = '%s_b%02d' % (stem, n)
+            path = os.path.join(md_dir, name + '.md')
+            with open(path, 'w', encoding='utf-8', errors='replace') as f:
+                f.write(render(batch, n, len(batches), name, tier, limit, labels))
+            written.append((path, len(batch)))
+            for u in batch:
+                file_of.setdefault(rel_of[u['sid']], os.path.basename(path))
+
+        def finish(rp):
+            """Print the batch files and add them to the converter's batch report."""
+            lines = [_label(core, 'rep', len(written), tier, limit)]
+            for i, (p, k) in enumerate(written, 1):
+                print(_label(core, 'at', i, len(written), os.path.basename(p), k))
+                lines.append(_label(core, 'rep_item', os.path.basename(p), k))
+            for u in oversized:
+                msg = _label(core, 'oversize', u['sid'], u['name'], u['chars'], limit)
+                print(msg)
+                lines.append(msg + '\n')
+            try:
+                with open(rp, encoding='utf-8') as f:
+                    old = f.read()
+                head, sep, rest = old.partition('\n\n')
+                with open(rp, 'w', encoding='utf-8', errors='replace') as f:
+                    f.write(head + sep + ''.join(lines) + '\n' + rest)
+            except OSError as e:
+                log.warning('batch report not updated: %s', e)
+
+        return (written[0][0] if written else None), file_of, finish
+    return write
+
+
+def make_main(argv):
+    """kb_batch.py make: the converter's options plus the batch limit; see the module docstring."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import doc2kb_core as core
+    ap = core.build_parser()
+    ap.prog = 'kb_batch.py make'
+    ap.description = 'Convert documents with doc2kb_core.py and write knowledge-base batch files.'
+    ap.add_argument('--tier', choices=sorted(TIER_CHARS), default=None,
+                    help='kept for older command lines: weak (%d characters per batch) or strong (%d); '
+                         '--batch-chars or the library\'s batch_chars is preferred'
+                         % (TIER_CHARS['weak'], TIER_CHARS['strong']))
+    ap.add_argument('--batch-chars', type=int, default=None, metavar='N',
+                    help='characters per batch (default: the library\'s batch_chars, else %d)' % TIER_CHARS['weak'])
+    ap.add_argument('--library', metavar='DIR', default=None,
+                    help='local library whose _kb.json sets batch_chars')
+    args = ap.parse_args(argv)
+    logging.basicConfig(level=args.log_level, format=LOG_FORMAT, stream=sys.stderr)
+    for s in (sys.stdout, sys.stderr):
+        try:
+            s.reconfigure(errors='replace')
+        except (AttributeError, ValueError):
+            pass  # a stream that cannot be reconfigured keeps its encoding
+    core.set_lang(args.lang)
+    try:
+        limit, tier = batch_limit(args.tier, args.batch_chars, args.library)
+    except ValueError as e:
+        ap.error(str(e))
+    args.merge = True
+    args.no_images = True
+    writer = batch_writer(core, limit, tier)
+    if args.batch:
+        return core.run_batch(args, writer=writer)
+    if not args.input and not args.files:
+        ap.error('give an input file, a list with --files, or a folder with --batch')
+    return core.run_files(args, writer=writer)
+
+
 def main(argv=None):
-    ap = argparse.ArgumentParser(description='Split knowledge-base batch files back into one file per source.')
+    argv = sys.argv[1:] if argv is None else list(argv)
+    if argv[:1] == ['make']:
+        return make_main(argv[1:])
+    ap = argparse.ArgumentParser(description='Make knowledge-base batch files, or split them back into one file per source.')
     sub = ap.add_subparsers(dest='cmd', required=True)
+    sub.add_parser('make', help='convert documents and write batch files (kb_batch.py make -h for options)')
     sp = sub.add_parser('split', help='write one Markdown file per source')
     sp.add_argument('batches', nargs='+', help='batch files of one run')
     sp.add_argument('-o', '--outdir', required=True, help='output folder')

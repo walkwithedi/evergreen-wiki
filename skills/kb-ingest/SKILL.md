@@ -5,7 +5,7 @@ description: Ingests documents into an evergreen knowledge base (a local or Obsi
 
 # Knowledge base ingest
 
-Version: 5.0.0
+Version: 6.0.0
 
 This skill files material into a library. Every conclusion it writes carries the source sentence it rests on, and a script checks that sentence before anything is written. The rules of a library (partitions, topics, folder names) live in the library's own spec and _kb.json; read them each time, never from memory or from this file.
 
@@ -43,8 +43,8 @@ Every library needs a code environment to run the scripts (hard rule 8). Without
 
 ## Step 1: batch files
 
-- Batch files (made by doc2kb --kb-batch, names ending _b01.md, _b02.md, ...) are used as they are. All batch files of one run go through the steps together.
-- Documents or folders: make the batch files with python3 scripts/doc2kb_core.py --batch <folder> -o <work>/batches --kb-batch --library <library root>. Batch files the user handed over are copied to <work>/batches as they are, so that the run can be followed from its folder. The folders below <folder> become the sources' folders in the library. For chosen files inside one folder, add --only <list file> with their paths relative to it; files from several places go in with --files <list file> instead of --batch and land at the top of the sources folder. The library's batch_chars (default 20000 characters) sets the batch size. Never move or change the user's documents.
+- Batch files (made by kb_batch.py make, names ending _b01.md, _b02.md, ...) are used as they are. All batch files of one run go through the steps together.
+- Documents or folders: make the batch files with python3 scripts/kb_batch.py make --batch <folder> -o <work>/batches --library <library root>. Batch files the user handed over are copied to <work>/batches as they are, so that the run can be followed from its folder. The folders below <folder> become the sources' folders in the library. For chosen files inside one folder, add --only <list file> with their paths relative to it; files from several places go in with --files <list file> instead of --batch and land at the top of the sources folder. The library's batch_chars (default 20000 characters) sets the batch size. Never move or change the user's documents.
 
 ## Step 2: cards
 

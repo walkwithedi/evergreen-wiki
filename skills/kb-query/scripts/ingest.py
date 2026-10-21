@@ -1348,7 +1348,7 @@ def work_progress(work):
         step, nxt = 10, 'ingest.py pages --library <library> %s --work %s' % (
             ' '.join('--topic "%s"' % t for t in unbuilt), work)
     elif not batches:
-        step, nxt = 1, 'make the batch files (doc2kb_core.py ... -o %s)' % os.path.join(work, 'batches')
+        step, nxt = 1, 'make the batch files (kb_batch.py make ... -o %s)' % os.path.join(work, 'batches')
     elif missing:
         step, nxt = 2, 'write the cards of %s to %s/<Snn>.jsonl, one file per source (an empty file for a ' \
             'source with nothing worth a card)' % (', '.join(missing), cards_dir)

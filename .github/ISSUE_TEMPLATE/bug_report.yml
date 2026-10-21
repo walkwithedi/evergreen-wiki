@@ -14,7 +14,7 @@ body:
       options:
         - OpenCode
         - kb-client (the browser page)
-        - doc2kb
+        - kb_batch.py make (batch files)
         - Other agent
     validations:
       required: true
