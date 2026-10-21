@@ -2,6 +2,14 @@
 
 All three skills share one version number. To release, update this file and the "Version:" line of every SKILL.md together and merge to main; the release workflow then publishes v<version>.
 
+## 6.0.1
+
+Client (tools/kb-client)
+- An unfinished ingest run of the client's own is shown in one line at the top of the conversation as soon as the page opens, with its progress and Stop, Continue, Discard and Details; a run stopped by a restart can be continued from there without opening the ingest panel. A finished run's line keeps its summary until Hide. The ingest panel reloads on every ingest event, also while it is closed.
+- Copy answer under every answer of the assistant copies the answer as plain text: source links become (Name §N), Markdown marks are removed, table rows become tab-separated lines.
+- The assistant's answers use the full width of the conversation; on a wide screen the conversation takes about a window's height also while the knowledge base is open.
+- The unused progress line under the ingest stages is removed from the page.
+
 ## 6.0.0
 
 The document converter is now its own project, [doc2kb](https://github.com/walkwithedi/doc2kb). This repository carries a copy of a doc2kb release and writes its batch files itself.

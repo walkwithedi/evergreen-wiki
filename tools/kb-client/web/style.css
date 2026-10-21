@@ -219,7 +219,9 @@ input[type=text] {
 .messages:empty { display: none; }
 .msg { border-radius: 12px; padding: 10px 14px; max-width: 88%; word-break: break-word; line-height: 1.65; font-size: 16px; }
 .msg.user { align-self: flex-end; background: var(--user); border: 1px solid transparent; border-bottom-right-radius: 4px; }
-.msg.assistant { align-self: flex-start; background: var(--panel); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+.msg.assistant { align-self: flex-start; max-width: 100%; background: var(--panel); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+.msg-foot { display: flex; justify-content: flex-end; margin-top: 6px; }
+.msg-foot[hidden] { display: none; }
 .msg .text { white-space: pre-wrap; }
 .msg .text + .text { margin-top: 6px; }
 .msg .tool { color: var(--muted); font: 13.5px/1.5 var(--mono); white-space: pre-wrap; background: var(--log);
@@ -399,6 +401,8 @@ body.kb-open:not(.simple) .skills-panel { display: none !important; }
   body:not(.kb-open) .chat { flex: 1; min-height: 0; }
   body:not(.kb-open) .messages { flex: 1; min-height: 120px; max-height: none; }
   body:not(.kb-open) .messages:empty { display: block; }
+  /* Unfolded, the page scrolls; the conversation still takes about a window's height */
+  body.kb-open .messages { max-height: none; height: max(320px, calc(100vh - 300px)); }
 }
 .chat-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 13px; }
 .chat-bar .hint { margin: 0; }
@@ -557,6 +561,11 @@ body.kb-open .kb-toggle { background: var(--soft); color: var(--accent); }
 .ingest-folders { max-height: 220px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
 .ingest-folders label { display: block; font-size: 13.5px; }
 .ingest-bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; margin: 6px 0; }
+.ingest-strip { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 14px; }
+.ingest-strip[hidden] { display: none; }
+.ingest-strip .row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.ingest-strip p { margin: 4px 0 0; }
+.ingest-strip .ingest-bar { margin: 6px 0 0; height: 4px; }
 .ingest-bar > span { display: block; height: 100%; background: var(--accent); transition: width .3s; }
 .ingest-items { list-style: none; margin: 0; padding: 0; max-height: 240px; overflow: auto; font-size: 13px; }
 .ingest-items li { display: flex; gap: 8px; padding: 1px 0; }
