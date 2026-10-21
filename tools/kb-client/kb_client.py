@@ -73,9 +73,6 @@ MAX_TEXT = 20000  # characters of one message from the page
 MAX_PATHS = 200  # material paths sent with one message
 MAX_ENTRIES = 2000  # entries listed per folder; the page says when a folder holds more
 PLAN_SHOWN = 300  # documents of a plan listed on the page
-SEARCH_SHOWN = 30  # results of the search bar
-SUMMARY_ITEMS = 10  # results sent to the conversation for a summary
-SUMMARY_CHARS = 15000  # characters of those results at most
 STATIC = {"index.html": "text/html; charset=utf-8", "app.js": "text/javascript; charset=utf-8",
           "style.css": "text/css; charset=utf-8"}
 
@@ -91,12 +88,6 @@ MSG = {
         "workdir_too_wide": "Choose a folder inside your home folder or elsewhere, not the home folder itself or a folder holding it.",
         "workdir_system": "A system folder cannot be the work folder.",
         "chat_busy": "The assistant is still working; try again when it is done.",
-        "summary_ask": "Following kb-query's rules, answer and summarise \"{q}\" from the numbered search results below "
-                       "only. Give the conclusions first, each followed by its source as [[source#^pN]]; quote a "
-                       "sentence on a line of its own as \"> sentence [[source#^pN]]\", and check the quotes with "
-                       "answer.py check when done (library: {root}). Add nothing the results do not hold; if they "
-                       "hold no answer, say so.",
-        "summary_card": "Card: {c}",
         "no_program": "OpenCode was not found on this computer.",
         "not_ready": "The conversation is not ready yet.",
         "locked": "Another task that writes the libraries is running; wait until it is done.",
@@ -128,10 +119,6 @@ MSG = {
         "workdir_too_wide": "请选择家目录里或其他位置的某个文件夹，不能是家目录本身或包含家目录的文件夹。",
         "workdir_system": "系统文件夹不能作为工作文件夹。",
         "chat_busy": "助手还在处理，等它处理完再试。",
-        "summary_ask": "请按 kb-query 的规则，只依据下面编号的检索结果，归纳回答「{q}」。先写结论，每条结论后用 "
-                       "[[来源#^pN]] 注明出处；引用原文时单独一行写「> 原句 [[来源#^pN]]」，写完运行 answer.py check "
-                       "核对引用（知识库：{root}）。检索结果里没有的内容不要补充，没有答案就直说。",
-        "summary_card": "卡片：{c}",
         "no_program": "本机没有找到 OpenCode。",
         "not_ready": "对话还没有准备好。",
         "locked": "另一个写知识库的任务正在运行，等它结束再试。",
@@ -770,33 +757,10 @@ def library_names(root):
         return il.kbconf.resolve_names()
 
 
-def library_lang(root):
-    try:
-        return kbindex_module().kbconf.load_library(root).get("language") or "en"
-    except Exception:  # an incomplete library: the page's language
-        return ""
-
-
 def kbindex_module():
     kb_manage.init_library()  # puts kb-ingest's scripts on the path
     import kbindex
     return kbindex
-
-
-def search(lib, query, limit=SEARCH_SHOWN):
-    """(status, body) of the search bar's query in a local library (kbindex search)."""
-    kx = kbindex_module()
-    try:
-        cfg = kx.kbconf.load_library(lib["root"])
-        ix = kx.open_index(lib["root"], cfg)
-        try:
-            got = ix.search(query, kx.library_entities(lib["root"], cfg), limit)
-        finally:
-            ix.close()
-    except (kx.kbconf.ConfigError, OSError, sqlite3.Error) as e:
-        log.warning("search in %s: %s", lib["id"], e)
-        return 409, {"error": str(e)}
-    return 200, got
 
 
 def search_context(lib, link, anchor):
@@ -820,25 +784,6 @@ def search_context(lib, link, anchor):
     if not paras:
         return 404, {"error": "paragraph"}
     return 200, {"source": source, "link": link, "paragraphs": paras}
-
-
-def summary_message(lib, query, results, lang):
-    """The message asking the assistant to summarise the best search results: at most SUMMARY_ITEMS of them
-    and SUMMARY_CHARS characters, each numbered with its source link."""
-    m = MSG[lang]
-    parts, used = [], 0
-    for r in results[:SUMMARY_ITEMS]:
-        head = "[%d] [[%s#^%s]]%s%s" % (len(parts) + 1, r["link"], r["anchor"], " " + r["date"] if r["date"] else "",
-                                         " \u00b7 " + m["summary_card"].format(c=r["conclusion"]) if r["kind"] == "card" else "")
-        text = " ".join(r["text"].split())
-        room = SUMMARY_CHARS - used - len(head) - 2
-        if room <= 0:
-            break
-        if len(text) > room:
-            text = text[:room] + "\u2026"
-        parts.append(head + "\n" + text)
-        used += len(parts[-1]) + 2
-    return m["summary_ask"].format(q=query, root=lib["root"]) + "\n\n" + "\n\n".join(parts)
 
 
 def graph(root, since=0.0):
@@ -1238,15 +1183,10 @@ class Handler(BaseHTTPRequestHandler):
             if lib is None:
                 return self.send(404, {"error": "library"})
             return self.send(*health(lib))
-        if path in ("/api/search", "/api/context"):
+        if path == "/api/context":
             lib = next((x for x in libraries() if x["id"] == (query.get("lib") or [""])[0] and x["root"] and x["exists"]), None)
             if lib is None:
                 return self.send(404, {"error": "library"})
-            if path == "/api/search":
-                q = (query.get("q") or [""])[0]
-                if not q.strip() or len(q) > 500:
-                    return self.send(400, {"error": "q"})
-                return self.send(*search(lib, q))
             return self.send(*search_context(lib, (query.get("link") or [""])[0], (query.get("anchor") or [""])[0]))
         if path == "/api/pending":
             return self.send(200, pending_runs())
@@ -1309,8 +1249,6 @@ class Handler(BaseHTTPRequestHandler):
             return self.pending_post(body)
         if path.startswith("/api/ingest/") or path in ("/api/backfill", "/api/auto"):
             return self.ingest_post(path, body)
-        if path == "/api/search/summary":
-            return self.summary_post(body)
         if path.startswith("/api/chat/"):
             return self.chat_post(path[len("/api/chat/"):], body)
         if path == "/api/quit":
@@ -1497,34 +1435,6 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(400, {"error": str(e)})
             return self.send(200, {"backfill": bf.snapshot()})
         return self.send(404, {"error": "not found"})
-
-    def summary_post(self, body):
-        """Sends the best results of {library, q} to the conversation window win for a summary; 409 with reason
-        busy while that window works, so that the page offers the summary as a button instead."""
-        m = MSG[self.app.lang]
-        lib = next((x for x in libraries() if x["id"] == body.get("library") and x["root"] and x["exists"]), None)
-        q = body.get("q")
-        if lib is None:
-            return self.send(404, {"error": "library"})
-        if not isinstance(q, str) or not q.strip() or len(q) > 500:
-            return self.send(400, {"error": "q"})
-        ag = self.app.agent
-        if ag is None or ag.state not in ("ready", "simple"):
-            return self.send(409, {"error": m["not_ready"], "reason": "not_ready"})
-        wid = body.get("win") or None
-        if wid is not None and (not isinstance(wid, str) or wid not in ag.windows):
-            return self.send(404, {"error": m["no_window"], "reason": "no_window"})
-        w = ag.window(wid)
-        if w.busy():
-            return self.send(409, {"error": m["chat_busy"], "reason": "busy"})
-        status, got = search(lib, q)
-        if status != 200:
-            return self.send(status, got)
-        if not got["results"]:
-            return self.send(200, {"sent": 0})
-        lang = "zh" if str(library_lang(lib["root"])).lower().startswith("zh") else self.app.lang
-        ag.send(summary_message(lib, q.strip(), got["results"], lang), [], "", win=w.id)
-        return self.send(200, {"sent": min(len(got["results"]), SUMMARY_ITEMS)})
 
     def chat_post(self, path_part, body):
         what = CHAT_ACTIONS.get(path_part)  # a fixed name from here on, never the request's own text

@@ -2,16 +2,17 @@
 # -*- coding: utf-8 -*-
 """answer.py - material for an answer from a library, and a check of the answer's quotes.
 
-select: the cards and status-card items a question's keywords point to; the assistant answers only
-  from what it is given. A keyword that names an entity of the spec's
-  Table E (its name or an alias) stands for all of that entity's names. A card scores one point
-  for each keyword in its conclusion or quote, two for each of its entities a keyword names and
-  two when a keyword names its topic; the best LIMIT cards are listed, newest first among equals,
-  with their quotes and source links. Status-card items score by their text and say when they are
-  marked for review. Paragraphs holding a keyword are listed too (at most PARAGRAPH_LIMIT), marked as
-  not on a card: those of sources without cards yet, and, when no card matches, those of any source.
-  Cards and paragraphs come from the library's index (kbindex.py), brought up to date first.
-  ASCII keywords match at the start of a word; others anywhere. Case does not matter.
+select: the status-card items, cards and source paragraphs a question's keywords point to; the
+  assistant answers only from what it is given. Cards and paragraphs come from the library's index
+  (kbindex.py search, brought up to date first): those holding every keyword first, ranked by BM25
+  with a small weight for newer documents; when fewer than RELAX hold every keyword, those holding
+  some of them follow, marked as holding only some keywords. A keyword that names an entity of the
+  spec's Table E (its name or an alias) stands for all of that entity's names; one that names a topic
+  brings that topic's cards. At most LIMIT cards and paragraphs together, cards listed first, each
+  with its quote and source link; a paragraph a listed card quotes is left out, the others are marked
+  as not on a card. Status-card items match when their text holds a keyword and say when they are
+  marked for review. Chinese, Japanese and Korean keywords match wherever the text holds them; a
+  keyword ending in a word matches at the start of a word. Case does not matter.
 
 check: every quote line of an answer, "> <sentence> [[<source>#^pN]]", must hold a sentence of
   that source's paragraph pN (compared as quote_check does: white space, full- and half-width
@@ -40,18 +41,17 @@ from ingest import ITEM_RE, MARK_RE, anchored  # noqa: E402
 
 log = logging.getLogger('answer')
 
-LIMIT = 12
-PARAGRAPH_LIMIT = 5
-PARAGRAPH_SCAN = 200  # paragraphs the index hands over for the keyword check
+LIMIT = 15  # cards and paragraphs together
+RELAX = 5  # fewer results holding every keyword than this: those holding some follow
 QUOTE_LINE_RE = re.compile(r'^\s*>\s*(.*?)\s*\[\[([^\]#|]+)#\^(p\d+)(?:\|[^\]]*)?\]\]\s*$')
 
 LABELS = {
     'en': {'status': '## Status card', 'cards': '## Cards', 'paragraphs': '## Source paragraphs (not on a card)',
-           'uncarded': ' (source without cards yet)',
+           'uncarded': ' (source without cards yet)', 'partial': ' (only some keywords)',
            'review': '(marked for review: check it against the cards and sources)', 'earlier': ' (earlier version)',
            'nothing': 'Nothing in the library matches these keywords.'},
     'zh': {'status': '## 状态卡', 'cards': '## 卡片', 'paragraphs': '## 来源段落（不在卡片上）',
-           'uncarded': '（该来源尚未抽卡）',
+           'uncarded': '（该来源尚未抽卡）', 'partial': '（只含部分关键词）',
            'review': '（待复核：须对照卡片和来源核实）', 'earlier': '（旧版本）',
            'nothing': '知识库里没有与这些关键词匹配的内容。'},
 }
@@ -74,52 +74,27 @@ def _spec(library, cfg):
         return f.read()
 
 
-def _expand(keywords, spec):
-    """(keyword terms, entity keys named, topic keys named) for the question's keywords."""
-    terms = [k for k in (' '.join(k.split()) for k in keywords) if k]
-    rows = kbconf.entities(spec)
-    named = set()
-    for row in rows:
-        names = [row['name']] + row['aliases']
-        if any(kbconf.topic_key(n) == kbconf.topic_key(k) for n in names for k in terms):
-            named.update(kbconf.topic_key(n) for n in names)
-            terms += [n for n in names if kbconf.topic_key(n) not in map(kbconf.topic_key, terms)]
-    return terms, named
-
-
 def select(library, cfg, keywords, limit=LIMIT):
-    """{"status": [{item, review}], "cards": [...], "paragraphs": [{link, anchor, text, carded}]}."""
-    spec = _spec(library, cfg)
-    terms, named = _expand(keywords, spec)
-    patterns = [_pattern(t) for t in terms]
-    topic_keys = {kbconf.topic_key(t) for t in terms}
-    sdir = cfg['names']['sources_dir']
+    """{"status": [{item, review}], "cards": [...], "paragraphs": [{link, anchor, text, carded, partial}]}."""
+    terms = [k for k in (' '.join(k.split()) for k in keywords) if k]
     ix = kbindex.open_index(library, cfg)
     try:
-        entity_names = [n for row in kbconf.entities(spec) for n in [row['name']] + row['aliases']
-                        if kbconf.topic_key(n) in named]
-        scored = []
-        for _, src, c in ix.find_cards(terms, entity_names, topic_keys):
-            score = _hits(patterns, c['conclusion'] + '\n' + c['quote'])
-            score += 2 * sum(1 for e in c['entities'] if kbconf.topic_key(e) in named)
-            score += 2 if kbconf.topic_key(c['topic']) in topic_keys else 0
-            if score:
-                day = c.get('event_date') or c['date'][:10]
-                scored.append((score, day, dict(c, link=c.get('link') or src, earlier=bool(c.get('link')))))
-        scored.sort(key=lambda s: (s[0], s[1], s[2]['date']), reverse=True)  # newer source first on the same day
-        cards = [s[2] for s in scored[:limit]]
-        # paragraphs: of sources without cards yet, and of every source when no card matched
-        paragraphs = []
-        carded = {p for p, in ix.db.execute('SELECT path FROM sources WHERE carded')}
-        for p in ix.find_paragraphs(terms, PARAGRAPH_SCAN, uncarded_first=True):
-            if len(paragraphs) >= PARAGRAPH_LIMIT or (cards and p['source'] in carded):
-                break
-            if _hits(patterns, p['text']):
-                paragraphs.append({'link': '%s/%s' % (sdir, p['source'][:-3]), 'anchor': p['anchor'],
-                                   'text': p['text'], 'carded': p['source'] in carded})
+        got = ix.search(keywords=terms, entities=kbconf.entities(_spec(library, cfg)), limit=limit, relax=RELAX)
     finally:
         ix.close()
-
+    cards, paragraphs = [], []
+    for r in got['results']:
+        if r['kind'] == 'card':
+            card = {'conclusion': r['conclusion'], 'quote': r['text'], 'topic': r['topic'], 'date': r['card_date'],
+                    'entities': r['entities'], 'link': r['link'], 'anchor': r['anchor'], 'earlier': r['earlier'],
+                    'partial': r['partial']}
+            if r['event_date']:
+                card['event_date'] = r['event_date']
+            cards.append(card)
+        else:
+            paragraphs.append({'link': r['link'], 'anchor': r['anchor'], 'text': r['text'], 'carded': r['carded'],
+                               'partial': r['partial']})
+    patterns = [_pattern(n) for g in got['keywords'] for n in g]
     status = []
     path = os.path.join(library, cfg['names']['status_card'])
     if os.path.isfile(path):
@@ -143,14 +118,16 @@ def render(got, lang):
         w += [lb['cards'], '']
         for c in got['cards']:
             day = c['date'] + (' / %s' % c['event_date'] if c.get('event_date') else '')
-            w.append('- %s (%s; %s)%s' % (c['conclusion'], c['topic'], day, lb['earlier'] if c['earlier'] else ''))
+            w.append('- %s (%s; %s)%s%s' % (c['conclusion'], c['topic'], day, lb['earlier'] if c['earlier'] else '',
+                                            lb['partial'] if c.get('partial') else ''))
             w.append('  > %s [[%s#^%s]]' % (c['quote'], c['link'], c['anchor']))
         w.append('')
     if got['paragraphs']:
         w += [lb['paragraphs'], '']
         for p in got['paragraphs']:
             w.append('> %s [[%s#^%s]]%s' % (' '.join(p['text'].split()), p['link'], p['anchor'],
-                                            '' if p.get('carded', True) else lb['uncarded']))
+                                            ('' if p.get('carded', True) else lb['uncarded']) +
+                                            (lb['partial'] if p.get('partial') else '')))
         w.append('')
     return '\n'.join(w)
 

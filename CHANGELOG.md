@@ -2,6 +2,18 @@
 
 All three skills share one version number. To release, update this file and the "Version:" line of every SKILL.md together and merge to main; the release workflow then publishes v<version>.
 
+## 6.2.0
+
+kb-query
+- answer.py select gets its cards and paragraphs from the index's search: those holding every keyword first, ranked by BM25 with a small weight for newer documents; when fewer than five hold every keyword, those holding only some follow, marked "only some keywords". At most 15 cards and paragraphs together (was 12 cards and 5 paragraphs); paragraphs of sources with cards can be listed too. Entity names and aliases of Table E, and topic names, match as before; the output format is unchanged, the JSON gains partial, and entities on cards.
+- SKILL.md step 3 describes the new list; step 4 adds a rule: a card or paragraph holding only some keywords is quoted only when it answers the question itself.
+
+Index (shared/scripts/kbindex.py)
+- search() takes keywords as a list and relax (results holding only some keywords fill up a short list, marked partial); each keyword is matched on its own and the relevances add up. A keyword naming a topic brings its cards, one naming an entity the cards that name it.
+
+Client (tools/kb-client)
+- The search bar, its result list and the automatic summary are removed (GET /api/search, POST /api/search/summary): questions are asked in the conversation, where kb-query uses the same search. Source links in answers still open the paragraph and its neighbours (GET /api/context), now trying each local library.
+
 ## 6.1.0
 
 Index (shared/scripts/kbindex.py)
