@@ -1360,7 +1360,7 @@ class DecideTest(unittest.TestCase):
                 self.assertFalse(self.ok("bash", bad))
 
     def test_stage_script(self):
-        for command, script in (("python3 /s/kb-ingest/scripts/doc2kb_core.py --batch m -o w --kb-batch", "doc2kb_core"),
+        for command, script in (("python3 /s/kb-ingest/scripts/kb_batch.py make --batch m -o w", "kb_batch make"),
                                 ('cd /s && python3 scripts/quote_check.py verify c.jsonl "b 01.md"', "quote_check verify"),
                                 ("python3 -I '/a b/scripts/pick_materials.py' --out x", "pick_materials"),
                                 ("python3 scripts/ingest.py file b01.md --cards a.jsonl --library l", "ingest file"),

@@ -5,7 +5,7 @@ A run takes one material folder. plan() lists its documents and marks the import
 the user chose (folders below the material folder, documents changed on or after a date); the user
 confirms the list, then Run.main() goes through the steps:
 
-  convert   doc2kb_core.py --batch <material> --kb-batch: the run's batch files (the folders below the
+  convert   kb_batch.py make --batch <material>: the run's batch files (the folders below the
             material folder become the sources' folders in the library)
   versions  ingest.py versions: sources already in the library (same content), groups of same-named
             sources, possible older versions under another name. Groups and candidates wait for the
@@ -399,7 +399,7 @@ class Run:
 
     def step_convert(self):
         shutil.rmtree(self.path("batches"), ignore_errors=True)
-        self.script("doc2kb_core.py", "--batch", self.material, "-o", self.path("batches"), "--kb-batch",
+        self.script("kb_batch.py", "make", "--batch", self.material, "-o", self.path("batches"),
                     "--library", self.lib["root"])
         batches = self.batches()
         sys.path.insert(0, self.scripts)

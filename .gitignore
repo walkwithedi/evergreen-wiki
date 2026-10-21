@@ -8,3 +8,4 @@ sensitive_terms.txt
 
 # the index the scripts keep inside a library
 _index/
+.doc2kb/

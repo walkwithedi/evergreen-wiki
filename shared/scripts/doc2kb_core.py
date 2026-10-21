@@ -22,12 +22,8 @@ docx, xlsx and pptx are zip packages of OOXML parts; this module reads the XML d
 Heading levels come from the styles.xml mapping plus heuristics, so documents with
 irregular styles lose some structure but never their text.
 
-Knowledge-base batch files (--kb-batch): the documents go into batch files of at most a set
-number of characters, with source numbers and paragraph anchors; kb_batch.py (next to this
-file) holds the format and splits them back.
-
-Used by tools/doc2kb/doc2kb.sh (desktop and cron use) and by the kb-ingest skill
-(scripts/convert.py), which imports process_one().
+Used by doc2kb.sh (desktop and cron use); other tools can import it as a library
+(process_one(), convert()).
 """
 
 import argparse
@@ -48,7 +44,6 @@ import tempfile
 import zipfile
 from xml.etree import ElementTree as ET
 
-import kb_batch
 
 log = logging.getLogger('doc2kb')
 LOG_FORMAT = '%(asctime)s [%(levelname)s] %(name)s.%(funcName)s:%(lineno)d - %(message)s'
@@ -371,23 +366,6 @@ LABELS.update({
     'totals': ('  %d characters, %d images in total', '  合计 %d 字符，%d 张图片'),
     'report_at': ('  report: %s', '  汇总报告: %s'),
     'merged_at': ('  merged knowledge base: %s', '  合并知识库: %s'),
-    'kbb_at': ('  batch file %d of %d: %s, sources: %d', '  批文件 %d/%d: %s，来源 %d 个'),
-    'kbb_oversize': ('  ⚠ %s %s: %d characters in one block, more than the limit of %d; '
-                     'it is a batch of its own',
-                     '  ⚠ %s %s：单个段落或表格 %d 字符，超过上限 %d，单独成批'),
-    'kbb_title': ('Batch file %s (%d of %d)', '批文件 %s（第 %d 批，共 %d 批）'),
-    'kbb_limit': ('Tier: %s  Character limit: %d', '档位：%s　字数上限：%d'),
-    'kbb_note': ('Each source is a section headed "# Snn"; a source cut into parts is marked "· k/n". '
-                 'Paragraphs and list items end with an anchor such as ^s01-p2, a table has one on the '
-                 'line below it. Quote sentences exactly as written and cite the anchor.',
-                 '每个来源一节，标题为「# Snn」；切成几部分的来源在标题末尾标「· 1/3」这样的序号。'
-                 '段落和列表项末尾带锚点（如 ^s01-p2），表格的锚点在表格下一行。'
-                 '引用时一字不改地照抄原句，并注明锚点。'),
-    'kbb_table_head': ('| Source | File | Original path | Modified | Characters | Part |',
-                       '| 来源 | 文件 | 原始路径 | 修改时间 | 字符数 | 部分 |'),
-    'kbb_rep': ('Batch files: %d, tier %s, at most %d characters each\n',
-                '批文件：%d 个，档位 %s，每个至多 %d 字符\n'),
-    'kbb_rep_item': ('  %s  sources: %d\n', '  %s  来源 %d 个\n'),
     'index_at': ('  knowledge base index: %s', '  知识库索引: %s'),
     'file_missing': ('file not found: %s', '文件不存在: %s'),
     'skip_legacy': ('skipped legacy format (save it in a new format first): %s', '跳过旧版格式（请先另存为新格式）: %s'),
@@ -3045,83 +3023,29 @@ def _kept_entry(src, rel, rel_dir, base, md_path, img_root):
     }
 
 
-def kb_batch_name(md_dir, out_name):
-    """<name>_YYYYMMDD, or <name>_YYYYMMDD-HHMM when that day already has batch files."""
-    now = datetime.datetime.now()
-    stem = '%s_%s' % (out_name, now.strftime('%Y%m%d'))
-    try:
-        taken = any(n.startswith(stem + '_b') for n in os.listdir(md_dir))
-    except OSError:
-        taken = False
-    return '%s_%s' % (out_name, now.strftime('%Y%m%d-%H%M')) if taken else stem
-
-
-def write_kb_batches(entries, md_dir, ts, out_name, args):
-    """Knowledge-base batch files: documents oldest first, cut and packed by kb_batch.
-    Returns ([(path, units in it)], {rel: name of the batch file holding its first part},
-    oversized units)."""
-    ok = [e for e in entries if e['stat']['status'] in (OK, SKIPPED)]
-    ok.sort(key=lambda e: (e['stat'].get('doc_mtime') or '9999', e['rel']))
-    sources = []
-    for e in ok:
-        st = e['stat']
-        body = re.sub(r'^(> [^\n]*\n)+\n', '', e.get('body', ''))
-        meta = (T('section_path', e['rel'])
-                + T('section_modified', st.get('doc_mtime') or T('unknown'),
-                    src_label(st.get('mtime_src') or 'unknown'))
-                + T('section_extracted', ts))
-        sources.append({'name': fs_text(os.path.basename(e['rel'])), 'path': fs_text(e['rel']),
-                        'modified': st.get('doc_mtime') or '', 'meta': meta, 'body': body,
-                        'rel': e['rel']})
-    limit, tier = args.kb_limit
-    units, oversized = kb_batch.build_units(sources, limit)
-    batches = kb_batch.pack(units, limit)
-    stem = kb_batch_name(md_dir, out_name)
-    labels = {'title': T('kbb_title'), 'limit': T('kbb_limit'), 'note': T('kbb_note'),
-              'table_head': T('kbb_table_head')}
-    written, file_of = [], {}
-    rel_of = {kb_batch.source_id(i): s['rel'] for i, s in enumerate(sources, 1)}
-    for n, batch in enumerate(batches, 1):
-        name = '%s_b%02d' % (stem, n)
-        path = os.path.join(md_dir, name + '.md')
-        with open(path, 'w', encoding='utf-8', errors='replace') as f:
-            f.write(kb_batch.render(batch, n, len(batches), name, tier, limit, labels))
-        written.append((path, len(batch)))
-        for u in batch:
-            file_of.setdefault(rel_of[u['sid']], os.path.basename(path))
-    return written, file_of, oversized
-
-
-def report_kb_batches(rp, written, oversized, args):
-    """Print the batch files and add them to the batch report."""
-    limit, tier = args.kb_limit
-    lines = [T('kbb_rep', len(written), tier, limit)]
-    for i, (p, n) in enumerate(written, 1):
-        print(T('kbb_at', i, len(written), os.path.basename(p), n))
-        lines.append(T('kbb_rep_item', os.path.basename(p), n))
-    for u in oversized:
-        msg = T('kbb_oversize', u['sid'], u['name'], u['chars'], limit)
-        print(msg)
-        lines.append(msg + '\n')
-    try:
-        with open(rp, encoding='utf-8') as f:
-            old = f.read()
-        head, sep, rest = old.partition('\n\n')
-        with open(rp, 'w', encoding='utf-8', errors='replace') as f:
-            f.write(head + sep + ''.join(lines) + '\n' + rest)
-    except OSError as e:
-        log.warning('batch report not updated: %s', e)
-
-
-def run_batch(args):
+def run_batch(args, writer=None):
+    """Convert every document in the folder args.batch. writer, when given, replaces the merged
+    or per-document output: see call_writer()."""
     cache = ArchiveCache()
     try:
-        return _run_batch(args, cache)
+        return _run_batch(args, cache, writer)
     finally:
         cache.cleanup()
 
 
-def _run_batch(args, cache):
+def call_writer(writer, entries, md_dir, ts, src_root, out_name):
+    """Library use: writer(entries, md_dir, ts, src_root, out_name) writes the output files instead
+    of write_merged() / write_index(). entries are the converted documents after the date filter,
+    duplicate removal and the fingerprint file: dicts with 'rel' (path below src_root), 'body'
+    (the Markdown text) and 'stat' (status, md, chars, imgs, doc_mtime, mtime_src). It returns
+    (path, file_of, finish): path of the main output file or None; file_of maps rel to the output
+    file name holding that document (used for fingerprint lines); finish(report_path), or None,
+    prints the writer's own summary lines and may add to the report."""
+    path, file_of, finish = writer(entries, md_dir, ts, src_root, out_name)
+    return path, file_of or {}, finish
+
+
+def _run_batch(args, cache, writer=None):
     src_root = os.path.abspath(args.batch)
     if not os.path.isdir(src_root):
         log.error('%s', T('no_folder', src_root))
@@ -3294,11 +3218,10 @@ def _run_batch(args, cache):
                             filtered=filtered, since=since,
                             dup_groups=dup_groups, moved=moved)
     written = sum(1 for e in entries if e['stat']['status'] in (OK, SKIPPED))
-    kb_files, kb_written, oversized = {}, [], []
-    if getattr(args, 'kb_batch', False):
+    file_of, finish = {}, None
+    if writer:
         out_name = args.merge_name or safe_name(os.path.basename(src_root))
-        kb_written, kb_files, oversized = write_kb_batches(entries, md_dir, ts_end, out_name, args)
-        ip = kb_written[0][0] if kb_written else None
+        ip, file_of, finish = call_writer(writer, entries, md_dir, ts_end, src_root, out_name)
         print(T('written_n', written))
     elif merge:
         out_name = args.merge_name or safe_name(os.path.basename(src_root))
@@ -3307,8 +3230,8 @@ def _run_batch(args, cache):
     else:
         ip = write_index(entries, md_dir, ts_end, src_root)
     if fp_db:
-        kb_name = os.path.basename(ip) if merge and ip else None
-        rows = [(e['text_fp'], e['rel'], kb_files.get(e['rel']) or kb_name or e['stat']['md'])
+        kb_name = os.path.basename(ip) if (merge or writer) and ip else None
+        rows = [(e['text_fp'], e['rel'], file_of.get(e['rel']) or kb_name or e['stat']['md'])
                 for e in entries
                 if e['stat']['status'] == OK and e.get('text_fp')]
         # moved documents get a line too: the path points to the newest location
@@ -3337,8 +3260,9 @@ def _run_batch(args, cache):
     print(T('kb_total', written))
     print(T('totals', tot_c, tot_i))
     print(T('report_at', os.path.basename(rp)))
-    if getattr(args, 'kb_batch', False):
-        report_kb_batches(rp, kb_written, oversized, args)
+    if writer:
+        if finish:
+            finish(rp)
     else:
         print(T('merged_at' if merge else 'index_at', os.path.basename(ip)))
     print_stats(new=ok_n, kept=len(skipped), failed=fail_n, legacy=len(legacy),
@@ -3352,18 +3276,18 @@ def _run_batch(args, cache):
 
 # ================================================================ named files
 
-def run_files(args):
+def run_files(args, writer=None):
     """Process one or more named files; a zip or tar archive stands for the documents in it.
     Merged mode: one md named after the folder of the first file.
-    Otherwise one md per document."""
+    Otherwise one md per document. writer, when given, replaces both: see call_writer()."""
     cache = ArchiveCache()
     try:
-        return _run_files(args, cache)
+        return _run_files(args, cache, writer)
     finally:
         cache.cleanup()
 
 
-def _run_files(args, cache):
+def _run_files(args, cache, writer=None):
     paths = []
     if args.files:
         with open(args.files, encoding='utf-8') as f:
@@ -3495,11 +3419,10 @@ def _run_files(args, cache):
     rp = write_batch_report(entries, md_dir, ts_end, src_root, [], [],
                             filtered=filtered, since=since,
                             dup_groups=dup_groups)
-    kb_written, oversized = None, []
-    if getattr(args, 'kb_batch', False):
+    finish = None
+    if writer:
         out_name = args.merge_name or safe_name(os.path.basename(src_root))
-        kb_written, _, oversized = write_kb_batches(entries, md_dir, ts_end, out_name, args)
-        ip = None
+        ip, _, finish = call_writer(writer, entries, md_dir, ts_end, src_root, out_name)
     elif merge:
         out_name = args.merge_name or safe_name(os.path.basename(src_root))
         ip = write_merged(entries, md_dir, ts_end, src_root, out_name)
@@ -3522,9 +3445,10 @@ def _run_files(args, cache):
         print(T('dups_n', n_dup, len(dup_groups)))
     print(T('totals', tot_c, tot_i))
     print(T('report_at', os.path.basename(rp)))
-    if kb_written is not None:
-        report_kb_batches(rp, kb_written, oversized, args)
-    if ip:
+    if writer:
+        if finish:
+            finish(rp)
+    elif ip:
         print(T('merged_at' if merge else 'index_at', os.path.basename(ip)))
     print_stats(new=ok_n, failed=fail_n, dup=n_dup, chars=tot_c, images=tot_i)
     return 0 if ok_n else 4
@@ -3537,15 +3461,9 @@ def default_lang():
     return lang if lang in LANGS else 'en'
 
 
-def main(argv=None):
-    # file names may hold bytes that are not UTF-8 (GBK names from Windows); printing them
-    # would raise UnicodeEncodeError, so the streams replace what they cannot encode
-    for _stream in (sys.stdout, sys.stderr):
-        try:
-            _stream.reconfigure(errors='replace')
-        except (AttributeError, ValueError):
-            pass  # a stream that cannot be reconfigured keeps its encoding
-
+def build_parser():
+    """Every command-line option; other tools add theirs and pass the result to run_batch() or
+    run_files()."""
     ap = argparse.ArgumentParser(description='Convert Office, PDF and mail files to Markdown for a knowledge base.')
     ap.add_argument('input', nargs='?',
                     help='input file (.docx/.xlsx/.pptx/.pdf/.eml, or a .zip/.tar[.gz|.bz2|.xz] '
@@ -3561,17 +3479,6 @@ def main(argv=None):
                     help='write the index and every text into one md')
     ap.add_argument('--merge-name', default=None,
                     help='output file name in merged mode (without extension)')
-    ap.add_argument('--kb-batch', action='store_true',
-                    help='write knowledge-base batch files: source numbers, paragraph anchors, '
-                         'at most a set number of characters each; implies --no-images')
-    ap.add_argument('--tier', choices=sorted(kb_batch.TIER_CHARS), default=None,
-                    help='--kb-batch, kept for older command lines: weak (%d characters per batch) or '
-                         'strong (%d); --batch-chars or the library\'s batch_chars is preferred'
-                         % (kb_batch.TIER_CHARS['weak'], kb_batch.TIER_CHARS['strong']))
-    ap.add_argument('--batch-chars', type=int, default=None, metavar='N',
-                    help='--kb-batch: characters per batch (default: the library\'s batch_chars, else %d)' % kb_batch.TIER_CHARS['weak'])
-    ap.add_argument('--library', metavar='DIR', default=None,
-                    help='--kb-batch: local library whose _kb.json sets tier and batch_chars')
     ap.add_argument('--no-images', action='store_true',
                     help='do not export picture files; the anchors stay in the text')
     ap.add_argument('--sheets', action='store_true',
@@ -3603,19 +3510,22 @@ def main(argv=None):
     ap.add_argument('--log-level', default=os.environ.get('LOG_LEVEL', 'WARNING').upper(),
                     type=str.upper, choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'],
                     help='default: environment variable LOG_LEVEL, else WARNING')
+    return ap
+
+
+def main(argv=None):
+    # file names may hold bytes that are not UTF-8 (GBK names from Windows); printing them
+    # would raise UnicodeEncodeError, so the streams replace what they cannot encode
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(errors='replace')
+        except (AttributeError, ValueError):
+            pass  # a stream that cannot be reconfigured keeps its encoding
+
+    ap = build_parser()
     args = ap.parse_args(argv)
     logging.basicConfig(level=args.log_level, format=LOG_FORMAT, stream=sys.stderr)
     set_lang(args.lang)
-
-    if args.kb_batch:
-        try:
-            args.kb_limit = kb_batch.batch_limit(args.tier, args.batch_chars, args.library)
-        except ValueError as e:
-            ap.error(str(e))
-        args.merge = True
-        args.no_images = True
-    elif args.tier or args.batch_chars or args.library:
-        ap.error('--tier, --batch-chars and --library need --kb-batch')
 
     if args.batch:
         return run_batch(args)

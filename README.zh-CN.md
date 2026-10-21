@@ -42,13 +42,12 @@
 
 入库时选的资料来源留在原处不动；知识库在 Sources/ 里保存转换后的文本。
 
-每次发版，[Releases](../../releases) 页面附三个文件：
+每次发版，[Releases](../../releases) 页面附两个文件：
 
 | 文件 | 用途 |
 | --- | --- |
 | `workbench-bundle-v<版本>.zip` | 工作站用：解压后双击最上层的入口，配置 OpenCode 的个人 AK，并打开知识库客户端 |
-| `evergreen-wiki-v<版本>.zip` | 完整仓库：skill、`install.py`、tools/workbench、tools/opencode-setup、tools/kb-client、tools/doc2kb、示例知识库和文档（工作台发行包内容相同，只是最上层多一个入口） |
-| `doc2kb-v<版本>.zip` | 只要文档转换器时用 |
+| `evergreen-wiki-v<版本>.zip` | 完整仓库：skill、`install.py`、tools/workbench、tools/opencode-setup、tools/kb-client、示例知识库和文档（工作台发行包内容相同，只是最上层多一个入口） |
 
 ## 快速开始
 
@@ -113,7 +112,7 @@ work-kb/
 - [tools/workbench](tools/workbench/README.zh-CN.md)：工作站上的三步向导（环境检查、填 AK 并自检、打开工作台），发行包的入口启动的就是它。
 - [tools/opencode-setup](tools/opencode-setup/README.zh-CN.md)：只输入个人 AK 就配好 OpenCode，关闭它启动时的联网下载并做首次启动自检，有网页和终端菜单两种用法。
 - [tools/kb-client](tools/kb-client/README.zh-CN.md)：在浏览器里用的知识库客户端，由本机提供页面：在选定的工作文件夹里和 OpenCode 对话，查看知识库和技能，安装与建库、备份、回滚、移动、卸载，等待确认。
-- [tools/doc2kb](tools/doc2kb/README.zh-CN.md)：独立的文档转换器，可在桌面对话框或定时任务里增量转换。每次发版另附 `doc2kb-v<版本>.zip`。
+- 文档转换器是独立项目 [doc2kb](https://github.com/walkwithedi/doc2kb)：kb-ingest 带着它的副本；只要转换器、想在桌面对话框或定时任务里用的，从 doc2kb 的发行版下载。
 
 ## 开发
 

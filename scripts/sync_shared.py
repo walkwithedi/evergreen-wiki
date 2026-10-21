@@ -29,12 +29,12 @@ PLAN = [(f"references/{r}", [f"skills/{s}/references" for s in ("kb-note", "kb-q
 PLAN.append(("references/extract.md", ["skills/kb-ingest/references", "skills/kb-note/references"]))
 ALL = ["skills/kb-note/scripts", "skills/kb-query/scripts", "skills/kb-ingest/scripts"]
 PLAN.append(("scripts/kbconf.py", ALL))
-# the converter: used by kb-ingest (batch files) and by the stand-alone tool
-PLAN.append(("scripts/doc2kb_core.py", ["skills/kb-ingest/scripts", "tools/doc2kb"]))
-# knowledge-base batch files: written by doc2kb_core, split back by the skills
-PLAN.append(("scripts/kb_batch.py", ALL + ["tools/doc2kb"]))
+# the converter, a copy of doc2kb's (scripts/sync_doc2kb.py): used by kb-ingest to make batch files
+PLAN.append(("scripts/doc2kb_core.py", ["skills/kb-ingest/scripts"]))
+# knowledge-base batch files: made with doc2kb_core (kb_batch.py make), split back by the skills
+PLAN.append(("scripts/kb_batch.py", ALL))
 # checking cards against their batch file and writing them
-PLAN.append(("scripts/quote_check.py", ALL + ["tools/doc2kb"]))
+PLAN.append(("scripts/quote_check.py", ALL))
 # filing an intake run or a note into a library, rebuilding its topic pages, checking the status card
 PLAN.append(("scripts/ingest.py", ALL))
 # the search index of a library: used by filing, topic pages and answers

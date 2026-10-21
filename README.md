@@ -44,13 +44,12 @@ The material you choose for an ingest run stays where it is; the library keeps i
 
 ## Downloads
 
-Every release on the [Releases](../../releases) page carries three files:
+Every release on the [Releases](../../releases) page carries two files:
 
 | File | Use it for |
 | --- | --- |
 | `workbench-bundle-v<version>.zip` | the workstation: unpack it and double-click the entry at the top. It sets OpenCode up with your personal key and opens the knowledge base client |
-| `evergreen-wiki-v<version>.zip` | the whole repository: skills, `install.py`, tools/workbench, tools/opencode-setup, tools/kb-client, tools/doc2kb, the sample library and the docs (the bundle holds the same, with the entry at the top) |
-| `doc2kb-v<version>.zip` | the document converter alone |
+| `evergreen-wiki-v<version>.zip` | the whole repository: skills, `install.py`, tools/workbench, tools/opencode-setup, tools/kb-client, the sample library and the docs (the bundle holds the same, with the entry at the top) |
 
 ## Quick start
 
@@ -115,7 +114,7 @@ Scripts need Python 3.8+ and nothing outside the standard library. Without Pytho
 - [tools/workbench](tools/workbench/README.md): the three-step wizard on the workstation (check, key and self-check, open the workbench); the bundle's entry starts it.
 - [tools/opencode-setup](tools/opencode-setup/README.md): sets OpenCode up from one personal key, switches off its start-up downloads and checks a first start, as a page or a terminal menu.
 - [tools/kb-client](tools/kb-client/README.md): the knowledge base client in the browser, served from your own computer: a conversation with OpenCode in a chosen work folder, the libraries and skills, set up, back up, roll back, move, uninstall and Waiting for confirmation.
-- [tools/doc2kb](tools/doc2kb/README.md): the converter as a stand-alone tool, from a desktop dialog or a cron job, incrementally. Each release also attaches it as `doc2kb-v<version>.zip`.
+- The document converter is [doc2kb](https://github.com/walkwithedi/doc2kb), a project of its own: kb-ingest carries a copy, and doc2kb's releases have it as a stand-alone tool for a desktop dialog or a cron job.
 
 ## Development
 
