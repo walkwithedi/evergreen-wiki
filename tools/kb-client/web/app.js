@@ -259,7 +259,8 @@
       kb_open: "Knowledge base", kb_close: "Fold the knowledge base",
       skills_panel_intro: "What the assistant can do. Say one of the phrases, or ask in your own words.",
       skills_filter: "Filter skills", skills_no_match: "No skill matches.",
-      copy_code: "Copy",
+      copy_code: "Copy", copy_answer: "Copy answer", copy_cite: "({name})",
+      ingest_details: "Details", ingest_close: "Hide",
       workdir_label: "Work folder:", workdir_none: "none chosen (your home folder; edits ask first)",
       workdir_change: "Change\u2026", workdir_recent: "Recent folders", workdir_title: "Choose the work folder",
       workdir_hint: "The assistant reads and edits files in this folder without asking; commands and anything outside it still ask.",
@@ -524,7 +525,8 @@
       kb_open: "知识库", kb_close: "收起知识库",
       skills_panel_intro: "助手能做的事。说出其中的话，或者用自己的话提出要求。",
       skills_filter: "筛选技能", skills_no_match: "没有匹配的技能。",
-      copy_code: "复制",
+      copy_code: "复制", copy_answer: "复制回答", copy_cite: "（{name}）",
+      ingest_details: "详情", ingest_close: "收起",
       workdir_label: "工作文件夹：", workdir_none: "未选择（家目录；改文件前会先问）",
       workdir_change: "更换\u2026", workdir_recent: "最近的文件夹", workdir_title: "选择工作文件夹",
       workdir_hint: "助手在这个文件夹里读、改文件不再询问；运行命令和文件夹以外的操作仍会询问。",
@@ -1505,10 +1507,33 @@
     if (!b) {
       b = el("div", { "class": "msg " + (role === "user" ? "user" : "assistant") + (child ? " child" : "") });
       if (child) b.appendChild(el("div", { "class": "who" }, t("child")));
+      if (role !== "user") {
+        // The answer's own text (not the folded notes or the tool steps) is copied as plain text.
+        var foot = el("div", { "class": "msg-foot" });
+        foot.hidden = true;
+        var copy = el("button", { type: "button", "class": "quiet small" }, t("copy_answer"));
+        copy.addEventListener("click", function () {
+          var raw = Array.prototype.slice.call(b.children).filter(function (c) { return c.className === "text"; })
+            .map(function (c) { return c.dataset.raw || ""; }).join("\n\n");
+          if (raw.trim()) copyText(plainText(raw), copy);
+        });
+        foot.appendChild(copy);
+        b.appendChild(foot);
+        b.foot = foot;
+      }
       chat.msgs[id] = b;
       $("messages").appendChild(b);
     }
     return b;
+  }
+
+  // Parts go before the copy row, which stays last; the row shows once the answer has text of its own.
+  function putPart(b, node) {
+    b.insertBefore(node, b.foot || null);
+  }
+
+  function footNow(b) {
+    if (b.foot) b.foot.hidden = !Array.prototype.some.call(b.children, function (c) { return c.className === "text"; });
   }
 
   function fold(label, body) {
@@ -1526,7 +1551,7 @@
       var b = bubble(ev.messageID, ev.role, ev.child);
       if (ev.kind === "reasoning") {
         p = el("div", { "class": "text" });
-        b.appendChild(fold(t("thinking"), p));
+        putPart(b, fold(t("thinking"), p));
       } else {
         p = el("div", { "class": ev.kind === "tool" ? "tool" : "text" });
         if (ev.kind === "tool" && ev.role !== "user") {
@@ -1537,8 +1562,9 @@
             d.replaceChild(c, d.lastChild);  // the same element moves, so later text still lands in it
           });
         }
-        b.appendChild(p);
+        putPart(b, p);
       }
+      footNow(b);
       chat.parts[ev.partID] = p;
     }
     return p;
@@ -1771,6 +1797,37 @@
     box.select();
     try { if (document.execCommand("copy")) done(); } catch (e) { /* the text stays selectable */ }
     box.remove();
+  }
+
+  // An answer as plain text for pasting elsewhere: [[Sources/…/Name#^p12]] becomes (Name §12), Markdown
+  // marks are dropped, table rows become tab-separated lines; the text inside code fences stays as it is.
+  function plainText(md) {
+    var out = [], code = false;
+    md.replace(/\r\n?/g, "\n").split("\n").forEach(function (line) {
+      if (MD_FENCE.test(line)) { code = !code; return; }
+      if (code) { out.push(line); return; }
+      if (MD_RULE.test(line) || MD_TABLE_SEP.test(line) && line.indexOf("-") >= 0 && line.indexOf("|") >= 0) return;
+      var m;
+      while (MD_QUOTE.test(line)) line = line.replace(MD_QUOTE, "");
+      if ((m = MD_HEAD.exec(line))) line = m[2];
+      else if ((m = MD_ITEM.exec(line))) line = m[1] + (/\d/.test(m[2]) ? m[2] : "•") + " " + m[3];
+      else if (line.indexOf("|") >= 0 && /^\s*\|/.test(line)) line = cells(line).join("\t");
+      out.push(plainInline(line));
+    });
+    return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  }
+
+  function plainInline(s) {
+    return s
+      .replace(/\[\[([^\]|#]+)(?:#\^?([^\]|]*))?(?:\|([^\]]+))?\]\]/g, function (_, path, anchor, alias) {
+        var name = alias || path.split("/").pop().replace(/\.md$/i, "");
+        var p = /^p(\d+)$/.exec(anchor || "");
+        return t("copy_cite", { name: name + (p ? " §" + p[1] : anchor ? " " + anchor : "") });
+      })
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, "$1 ($2)")
+      .replace(/(`+)([\s\S]*?[^`])\1(?!`)/g, "$2")
+      .replace(/\*\*(?=\S)([\s\S]*?\S)\*\*|__(?=\S)([\s\S]*?\S)__/g, function (_, a, b) { return a !== undefined ? a : b; })
+      .replace(/\*(?=[^\s*])([^*]*?[^\s*])\*/g, "$1");
   }
 
   function codeBlock(code, lang) {
@@ -2430,7 +2487,6 @@
   }
 
   function ingestSoon() {
-    if ($("ingest").hidden) return;
     clearTimeout(ing.timer);
     ing.timer = setTimeout(loadIngest, 300);
   }
@@ -2438,6 +2494,7 @@
   function loadIngest() {
     return api("GET", "/api/ingest").then(function (st) {
       ing.state = st;
+      drawIngestStrip();
       drawIngestRun();
       drawBackfill();
       drawAuto();
@@ -2533,34 +2590,34 @@
     }).catch(function (e) { $("ingest-form").appendChild(el("p", { "class": "warn" }, String(e.message))); });
   }
 
-  function drawIngestRun() {
-    var box = $("ingest-run");
-    box.textContent = "";
-    var r = ing.state && ing.state.run;
-    if (!r) return;
-    var counts = r.counts || {};
-    var done = 0;
+  function runDone(r) {
+    var counts = r.counts || {}, done = 0;
     ["carded", "filed", "duplicate", "older", "failed", "empty"].forEach(function (k) { done += counts[k] || 0; });
-    box.appendChild(el("h3", {}, t("ingest_progress", { label: r.label, done: done, total: r.total }) + " \u00b7 " +
-      t("ingest_state_" + r.state) + (r.step && r.state !== "done" ? " \u00b7 " + t("ingest_step_" + r.step) : "")));
+    return done;
+  }
+
+  function runLine(r) {
+    return t("ingest_progress", { label: r.label, done: runDone(r), total: r.total }) + " \u00b7 " +
+      t("ingest_state_" + r.state) + (r.step && r.state !== "done" ? " \u00b7 " + t("ingest_step_" + r.step) : "");
+  }
+
+  function runBar(r) {
     var bar = el("div", { "class": "ingest-bar" });
     var fill = el("span");
-    fill.style.width = (r.total ? Math.round(100 * done / r.total) : 0) + "%";
+    fill.style.width = (r.total ? Math.round(100 * runDone(r) / r.total) : 0) + "%";
     bar.appendChild(fill);
-    box.appendChild(bar);
-    box.appendChild(el("p", { "class": "hint" }, Object.keys(counts).map(function (k) { return t("ist_" + k) + " " + counts[k]; }).join(" \u00b7 ")));
-    if (r.reason) box.appendChild(el("p", { "class": r.state === "failed" ? "warn" : "hint" }, r.reason));
-    if (r.state === "waiting") {
-      var w = el("p", { "class": "warn" }, t("ingest_waiting") + " ");
-      var sh = el("button", { type: "button", "class": "quiet small" }, t("ingest_show_pending"));
-      sh.addEventListener("click", function () { loadPending(); $("pending").scrollIntoView({ behavior: "smooth", block: "start" }); });
-      w.appendChild(sh);
-      box.appendChild(w);
-    }
-    if (r.state === "done" && r.summary) {
-      box.appendChild(el("p", {}, t("ingest_summary", { filed: r.summary.filed || 0, carded: r.summary.carded || 0, topics: r.summary.topics || 0 })));
-    }
-    var row = el("div", { "class": "row" });
+    return bar;
+  }
+
+  function pendingButton() {
+    var sh = el("button", { type: "button", "class": "quiet small" }, t("ingest_show_pending"));
+    sh.addEventListener("click", function () { loadPending(); $("pending").scrollIntoView({ behavior: "smooth", block: "start" }); });
+    return sh;
+  }
+
+  // Stop while the run works; Continue and Discard once it stopped or failed. Errors are shown in errBox.
+  function runButtons(r, row, errBox) {
+    function warn(e) { errBox.appendChild(el("p", { "class": "warn" }, String(e.message))); }
     if (["running", "waiting"].indexOf(r.state) >= 0) {
       var stop = el("button", { type: "button", "class": "quiet small" }, t("ingest_stop"));
       stop.addEventListener("click", function () { api("POST", "/api/ingest/stop", {}).then(loadIngest).catch(function () {}); });
@@ -2568,17 +2625,67 @@
     }
     if (r.state === "stopped" || r.state === "failed") {
       var cont = el("button", { type: "button", "class": "primary small" }, t("ingest_continue"));
-      cont.addEventListener("click", function () {
-        api("POST", "/api/ingest/continue", {}).then(loadIngest).catch(function (e) { box.appendChild(el("p", { "class": "warn" }, String(e.message))); });
-      });
+      cont.addEventListener("click", function () { api("POST", "/api/ingest/continue", {}).then(loadIngest).catch(warn); });
       row.appendChild(cont);
       var drop = el("button", { type: "button", "class": "quiet small" }, t("ingest_discard"));
       drop.addEventListener("click", function () {
         if (!window.confirm(t("ingest_discard_ask"))) return;
-        api("POST", "/api/ingest/discard", {}).then(loadIngest).catch(function (e) { box.appendChild(el("p", { "class": "warn" }, String(e.message))); });
+        api("POST", "/api/ingest/discard", {}).then(loadIngest).catch(warn);
       });
       row.appendChild(drop);
     }
+  }
+
+  // The run in one line above the conversation, from the page's start on: a run left stopped when the client
+  // quit can be continued without opening the ingest panel. A finished run's line stays until it is hidden.
+  function drawIngestStrip() {
+    var box = $("ingest-strip");
+    box.textContent = "";
+    var r = ing.state && ing.state.run;
+    if (!r || r.state === "done" && ing.hidden === r.id) { show(box, false); return; }
+    var head = el("div", { "class": "row" });
+    head.appendChild(el("strong", {}, runLine(r)));
+    if (r.state === "waiting") head.appendChild(pendingButton());
+    runButtons(r, head, box);
+    var lib = ((state && state.libraries) || []).filter(function (l) { return l.id === r.library && l.root && l.exists; })[0];
+    if (lib) {
+      var more = el("button", { type: "button", "class": "quiet small" }, t("ingest_details"));
+      more.addEventListener("click", function () { openIngest(lib); });
+      head.appendChild(more);
+    }
+    if (r.state === "done") {
+      var hide = el("button", { type: "button", "class": "quiet small" }, t("ingest_close"));
+      hide.addEventListener("click", function () { ing.hidden = r.id; drawIngestStrip(); });
+      head.appendChild(hide);
+    }
+    box.appendChild(head);
+    box.appendChild(runBar(r));
+    if (r.state === "done" && r.summary) {
+      box.appendChild(el("p", { "class": "hint" }, t("ingest_summary", { filed: r.summary.filed || 0, carded: r.summary.carded || 0, topics: r.summary.topics || 0 })));
+    } else if (r.state === "failed" && r.reason) box.appendChild(el("p", { "class": "warn" }, r.reason));
+    show(box, true);
+  }
+
+  function drawIngestRun() {
+    var box = $("ingest-run");
+    box.textContent = "";
+    var r = ing.state && ing.state.run;
+    if (!r) return;
+    var counts = r.counts || {};
+    box.appendChild(el("h3", {}, runLine(r)));
+    box.appendChild(runBar(r));
+    box.appendChild(el("p", { "class": "hint" }, Object.keys(counts).map(function (k) { return t("ist_" + k) + " " + counts[k]; }).join(" \u00b7 ")));
+    if (r.reason) box.appendChild(el("p", { "class": r.state === "failed" ? "warn" : "hint" }, r.reason));
+    if (r.state === "waiting") {
+      var w = el("p", { "class": "warn" }, t("ingest_waiting") + " ");
+      w.appendChild(pendingButton());
+      box.appendChild(w);
+    }
+    if (r.state === "done" && r.summary) {
+      box.appendChild(el("p", {}, t("ingest_summary", { filed: r.summary.filed || 0, carded: r.summary.carded || 0, topics: r.summary.topics || 0 })));
+    }
+    var row = el("div", { "class": "row" });
+    runButtons(r, row, box);
     box.appendChild(row);
     if (["running", "waiting"].indexOf(r.state) >= 0) box.appendChild(el("p", { "class": "hint" }, t("ingest_long")));
     var d = el("details");
@@ -3215,6 +3322,6 @@
   });
   chatEnable();
   if (!token) { result("error", t("no_token")); return; }
-  refresh().then(function () { if (state) { chatStart(); loadSkills(); } });
+  refresh().then(function () { if (state) { chatStart(); loadSkills(); loadIngest(); } });
   setInterval(function () { if (!job) refresh(); else api("GET", "/api/state").catch(function () {}); }, 20000);
 })();

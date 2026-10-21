@@ -179,6 +179,10 @@ class KbClientTest(unittest.TestCase):
         side = page[page.index('<aside class="side"'):page.index("</aside>")]
         for part in ('id="skills-panel"', 'id="skills-filter"', 'id="skill-rows"'):
             self.assertIn(part, side)
+        # the ingest run's line sits at the top of the conversation, above the messages
+        chat = page[page.index('id="chat"'):]
+        self.assertLess(chat.index('id="ingest-strip"'), chat.index('id="messages"'))
+        self.assertLess(chat.index('class="panel-head"'), chat.index('id="ingest-strip"'))
         # answers are built as DOM nodes: the page never writes HTML from text
         script = self.server.get("/app.js", token=False)[1]
         self.assertNotIn("innerHTML", script)

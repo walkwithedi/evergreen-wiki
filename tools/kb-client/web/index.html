@@ -114,6 +114,7 @@
         <button type="button" class="quiet small" id="chat-terminal" data-t="chat_terminal">Open in a terminal</button>
         <button type="button" class="quiet small" id="chat-new" data-t="chat_new">New conversation</button>
       </div>
+      <div class="ingest-strip" id="ingest-strip" hidden></div>
       <div class="chat-bar" id="chat-bar" hidden>
         <span class="hint" data-t="workdir_label">Work folder:</span>
         <code id="workdir"></code>
@@ -136,7 +137,6 @@
       <div class="stages" id="stages" hidden>
         <ol class="stage-list" id="stage-list"></ol>
         <p class="stage-why" id="stage-why"></p>
-        <p class="progress" id="progress" hidden></p>
         <div class="hint ingest-long" id="ingest-long">
           <p data-t="ingest_long">An ingest run takes a long time.</p>
           <details><summary data-t="ingest_cli">How to open OpenCode from a terminal</summary>
