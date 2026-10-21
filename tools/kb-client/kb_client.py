@@ -18,8 +18,10 @@ server this client starts on 127.0.0.1 (agent.py); the page never talks to OpenC
 browser only lists folders. The Skills section lists the skills OpenCode reads and manages them
 (skills_admin.py: backup before an edit, restore, import, a new skill from a template); the
 knowledge-base skills are upgraded by their own step (install.upgrade). Material is ingested in the
-conversation, with the kb-ingest skill. Otherwise this file writes nothing but the current
-conversation's id. Python 3 standard library only.
+conversation, with the kb-ingest skill. A quick search (quick_search.py) lists what the libraries' indexes
+hold for a question and has it summarised by one call to the model of OpenCode's settings, outside the
+conversation. Otherwise this file writes nothing but the current conversation's id. Python 3 standard
+library only.
 """
 import argparse
 import getpass
@@ -50,6 +52,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import agent as agent_mod  # noqa: E402
 import auto  # noqa: E402
 import ingest_run  # noqa: E402
+import quick_search  # noqa: E402
 import skills_admin  # noqa: E402
 
 log = logging.getLogger("kb_client")
@@ -70,6 +73,7 @@ CHAT_FIRST_ACTIONS = ("workdir", "sessions")  # only with --chat-first
 WRITE_STEPS = ("setup", "rollback", "move", "uninstall", "skill_upgrade")
 RESTART_STEPS = ("setup", "skill_upgrade")  # OpenCode is restarted after these, to read the skills again
 MAX_TEXT = 20000  # characters of one message from the page
+MAX_QUERY = 2000  # characters of a quick search
 MAX_PATHS = 200  # material paths sent with one message
 MAX_ENTRIES = 2000  # entries listed per folder; the page says when a folder holds more
 PLAN_SHOWN = 300  # documents of a plan listed on the page
@@ -88,6 +92,7 @@ MSG = {
         "workdir_too_wide": "Choose a folder inside your home folder or elsewhere, not the home folder itself or a folder holding it.",
         "workdir_system": "A system folder cannot be the work folder.",
         "chat_busy": "The assistant is still working; try again when it is done.",
+        "no_library": "No local library is set up yet.",
         "no_program": "OpenCode was not found on this computer.",
         "not_ready": "The conversation is not ready yet.",
         "locked": "Another task that writes the libraries is running; wait until it is done.",
@@ -119,6 +124,7 @@ MSG = {
         "workdir_too_wide": "请选择家目录里或其他位置的某个文件夹，不能是家目录本身或包含家目录的文件夹。",
         "workdir_system": "系统文件夹不能作为工作文件夹。",
         "chat_busy": "助手还在处理，等它处理完再试。",
+        "no_library": "还没有建好的本地知识库。",
         "no_program": "本机没有找到 OpenCode。",
         "not_ready": "对话还没有准备好。",
         "locked": "另一个写知识库的任务正在运行，等它结束再试。",
@@ -990,6 +996,22 @@ def agent_status():
     return status
 
 
+def opencode_config():
+    """OpenCode's settings (opencode.jsonc or opencode.json in its folder) as a dict; {} when there are none or
+    they cannot be read."""
+    for name in ("opencode.jsonc", "opencode.json"):
+        path = os.path.join(install.AGENT_HOMES["opencode"], name)
+        if os.path.isfile(path):
+            try:
+                with open(path, encoding="utf-8") as f:
+                    data = json.loads(strip_jsonc(f.read()) or "{}")
+            except (OSError, ValueError) as e:
+                log.warning("cannot read %s: %s", path, e)
+                return {}
+            return data if isinstance(data, dict) else {}
+    return {}
+
+
 def places():
     """Starting points of the folder browser: the home folder and mounted removable media."""
     home = os.path.expanduser("~")
@@ -1251,6 +1273,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.ingest_post(path, body)
         if path.startswith("/api/chat/"):
             return self.chat_post(path[len("/api/chat/"):], body)
+        if path == "/api/quick":
+            return self.quick_post(body)
         if path == "/api/quit":
             log.info("stopping: Quit on the page")
             self.send(200, {"ok": True})
@@ -1337,6 +1361,51 @@ class Handler(BaseHTTPRequestHandler):
                 self.app.last_seen = time.time()
         except (BrokenPipeError, ConnectionResetError):
             log.debug("chat stream closed by the page")
+        return None
+
+    def quick_post(self, body):
+        """A quick search: one JSON object per line, {"type": "hits", keywords, items}, then {"type": "text"}
+        pieces of the summary and {"type": "done", bad} (numbers not among the items), or {"type": "error",
+        reason, detail, status} when there is no summary. Nothing found: done with empty, and no summary."""
+        text, model = body.get("text"), body.get("model") or ""
+        if not isinstance(text, str) or not text.strip() or len(text) > MAX_QUERY or not isinstance(model, str):
+            return self.send(400, {"error": "text"})
+        libs = [x for x in libraries() if x["root"] and x["exists"]]
+        if not libs:
+            return self.send(409, {"error": MSG[self.app.lang]["no_library"], "reason": "no_library"})
+        kx = kbindex_module()
+        import ingest  # on the path once kbindex_module() ran
+        got = quick_search.search(kx, ingest.ITEM_RE, ingest.MARK_RE, libs, text)
+        log.info("quick search: %d keywords, %d items", len(got["keywords"]), len(got["items"]))
+        self.send_response(200)
+        self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.close_connection = True
+
+        def line(obj):
+            self.wfile.write((json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8"))
+            self.wfile.flush()
+            self.app.last_seen = time.time()
+
+        try:
+            line(dict(got, type="hits"))
+            if not got["items"]:
+                return line({"type": "done", "empty": True, "bad": []})
+            reply = []
+            try:
+                tg = quick_search.target(opencode_config(), model)
+                for piece in quick_search.stream(tg, quick_search.messages(text, got["items"], self.app.lang)):
+                    reply.append(piece)
+                    line({"type": "text", "text": piece})
+            except quick_search.QuickError as e:
+                log.warning("quick summary: %s %s", e.reason, e.status or "")
+                return line({"type": "error", "reason": e.reason, "detail": e.detail[:300], "status": e.status})
+            line({"type": "done", "bad": quick_search.bad_refs("".join(reply), len(got["items"]))})
+        except (BrokenPipeError, ConnectionResetError):
+            log.debug("quick search closed by the page")
         return None
 
     def pending_post(self, body):

@@ -269,7 +269,27 @@
       sessions_btn: "Earlier conversations", sessions_title: "Earlier conversations in this folder",
       sessions_none: "No earlier conversation in this folder.", session_untitled: "(untitled)",
       diff_show: "Show the change", diff_more: "\u2026 {n} more lines; open the file to see them all.",
-      chat_restarting_workdir: "Starting OpenCode in the chosen folder..."
+      chat_restarting_workdir: "Starting OpenCode in the chosen folder...",
+      input_hint: "Start with search, look up, tell me about \u2026 to search the knowledge base at once.",
+      quick_switch: "Search the knowledge base", quick_switch_hint: "Every message of this window searches the knowledge base first",
+      quick_head: "Knowledge base \u00b7 keywords: {k}", quick_searching: "Searching the knowledge base\u2026",
+      quick_summarising: "Summarising\u2026",
+      quick_note: "A quick summary of the passages below. For an answer whose every quote is checked, use Deep search.",
+      quick_passages: "Passages ({n})", quick_none: "Nothing in the knowledge base matches these keywords.",
+      quick_deep: "Deep search", quick_assistant: "Give to the assistant",
+      quick_deep_text: "Use kb-query to look this up in the knowledge base: {q}",
+      quick_status: "Status card", quick_card: "Card", quick_paragraph: "Source", quick_review: "marked for review",
+      quick_some: "{h} of {k} keywords", quick_open: "Open",
+      quick_bad: "Not among the passages: {n}", quick_failed: "No summary: {why}",
+      quick_no_config: "OpenCode's settings were not found",
+      quick_no_model: "the settings name no model",
+      quick_no_base: "the model's provider has no interface address (baseURL) in the settings",
+      quick_no_key: "the model's provider has no API key in the settings",
+      quick_http: "the interface answered HTTP {status}", quick_http_401: "the API key is not valid or has expired (HTTP 401)",
+      quick_http_403: "the API key may not use this model (HTTP 403)", quick_http_404: "the address or the model name is wrong (HTTP 404)",
+      quick_connect: "the interface cannot be reached ({detail})", quick_timeout: "the interface did not answer in time",
+      quick_bad_reply: "the interface's reply could not be read", quick_not_ready: "The conversation is not ready yet.",
+      quick_lost: "the search stopped ({detail})"
     },
     zh: {
       title: "知识库",
@@ -536,7 +556,26 @@
       sessions_btn: "历史会话", sessions_title: "这个文件夹里的历史会话",
       sessions_none: "这个文件夹里还没有历史会话。", session_untitled: "（无标题）",
       diff_show: "查看改动", diff_more: "\u2026 另有 {n} 行，打开文件查看全部。",
-      chat_restarting_workdir: "正在在所选文件夹里启动 OpenCode…"
+      chat_restarting_workdir: "正在在所选文件夹里启动 OpenCode…",
+      input_hint: "以「搜索」「查找」「介绍」等开头，先在知识库里快速查找并归纳。",
+      quick_switch: "知识库搜索", quick_switch_hint: "打开后，这个窗口的每条消息都先在知识库里搜索",
+      quick_head: "知识库 · 关键字：{k}", quick_searching: "正在搜索知识库…", quick_summarising: "正在归纳…",
+      quick_note: "根据下面的片段快速归纳。需要逐句核对引文时，用「深度搜索」。",
+      quick_passages: "依据片段（{n} 条）", quick_none: "知识库里没有与这些关键字匹配的内容。",
+      quick_deep: "深度搜索", quick_assistant: "交给助手",
+      quick_deep_text: "用 kb-query 在知识库里查：{q}",
+      quick_status: "状态卡", quick_card: "卡片", quick_paragraph: "来源", quick_review: "待复核",
+      quick_some: "含 {h}/{k} 个关键字", quick_open: "原文",
+      quick_bad: "不在片段里的编号：{n}", quick_failed: "没能归纳：{why}",
+      quick_no_config: "没有找到 OpenCode 配置",
+      quick_no_model: "配置里没有指定模型",
+      quick_no_base: "配置里这个模型的服务商没有接口地址（baseURL）",
+      quick_no_key: "配置里这个模型的服务商没有 AK",
+      quick_http: "接口返回 HTTP {status}", quick_http_401: "AK 无效或已过期（HTTP 401）",
+      quick_http_403: "AK 没有该模型的权限（HTTP 403）", quick_http_404: "接口地址或模型名不对（HTTP 404）",
+      quick_connect: "连不上接口（{detail}）", quick_timeout: "接口没有及时回复",
+      quick_bad_reply: "读不懂接口的回复", quick_not_ready: "对话还没有准备好。",
+      quick_lost: "搜索中断了（{detail}）"
     }
   };
 
@@ -693,6 +732,8 @@
     Array.prototype.forEach.call(document.querySelectorAll("[data-t]"), function (e) {
       e.textContent = t(e.getAttribute("data-t"));
     });
+    $("input").placeholder = t("input_hint");
+    $("quick-switch-box").title = t("quick_switch_hint");
   }
 
   // ---------- state ----------
@@ -1371,7 +1412,7 @@
 
   // ---------- conversation ----------
 
-  var chat = { source: null, phase: "", ready: false, busy: false, restarting: false, simple: false, allowAll: false, msgs: {}, parts: {}, cards: {},
+  var chat = { quick: {}, source: null, phase: "", ready: false, busy: false, restarting: false, simple: false, allowAll: false, msgs: {}, parts: {}, cards: {},
                model: "", workdir: "", recent: [], models: [],
                win: "", windows: [], lock: null, unread: {} };  // the window shown, all windows, the write lock
 
@@ -2513,6 +2554,172 @@
 
   $("source-close").addEventListener("click", function () { show($("source-view"), false); });
 
+  // ---------- quick search ----------
+  // A message that starts with one of QUICK_WORDS, or any message of a window whose Search the knowledge base
+  // switch is on, is not sent to the assistant: POST /api/quick lists what the libraries' indexes hold for it
+  // at once and streams a short summary from one call to the model, numbered [n] after the passages. The
+  // result stays on this page (not in the conversation); Deep search and Give to the assistant send it on.
+
+  var QUICK_WORDS = ["搜索一下", "搜一下", "搜索", "搜", "查找", "查询", "查一下", "查查", "帮我查", "找一下",
+    "介绍一下", "介绍", "讲讲", "讲解", "讲一下", "说说", "说一下", "解释一下", "解释", "什么是", "了解一下",
+    "问一下", "有没有", "知识库里", "search for", "search", "look up", "tell me about", "what is"
+  ].sort(function (a, b) { return b.length - a.length; });
+  var QUICK_KEY = "kb-client-quick";
+
+  function quickOn() {
+    try { return !!JSON.parse(localStorage.getItem(QUICK_KEY) || "{}")[chat.win]; } catch (e) { return false; }
+  }
+
+  function setQuickOn(on) {
+    try {
+      var all = JSON.parse(localStorage.getItem(QUICK_KEY) || "{}");
+      if (on) all[chat.win] = 1; else delete all[chat.win];
+      localStorage.setItem(QUICK_KEY, JSON.stringify(all));
+    } catch (e) { /* this view only */ }
+  }
+
+  // The words to search for when the message is a quick search, else null.
+  function quickQuery(text) {
+    if (!localLibs().length) return null;
+    var s = text.trim(), low = s.toLowerCase();
+    for (var i = 0; i < QUICK_WORDS.length; i++) {
+      var w = QUICK_WORDS[i];
+      if (low.indexOf(w) === 0 && (!/^[a-z]/.test(w) || !/[a-z0-9]/.test(low.charAt(w.length)))) {
+        var rest = s.slice(w.length).replace(/^[\s:：,，、]+/, "");
+        if (rest) return rest;
+        break;
+      }
+    }
+    return $("quick-switch").checked ? s : null;
+  }
+
+  function quickWhy(ev) {
+    var key = "quick_" + ev.reason;
+    if (ev.reason === "http" && (T.en["quick_http_" + ev.status])) key = "quick_http_" + ev.status;
+    return t(key, { status: ev.status, detail: ev.detail || "" }) + (key === "quick_http" && ev.detail ? " " + ev.detail : "");
+  }
+
+  function quick(text, query) {
+    var win = chat.win;
+    var mine = el("div", { "class": "msg user" });
+    mine.appendChild(el("div", { "class": "text" }, text));
+    var box = el("div", { "class": "msg assistant quick" });
+    var head = el("p", { "class": "hint quick-head" }, t("quick_searching"));
+    var summary = el("div", { "class": "text quick-summary" });
+    var status = el("p", { "class": "hint" });
+    var list = el("div", { "class": "quick-items" });
+    var passages = fold("", list);
+    passages.hidden = true;
+    var buttons = el("div", { "class": "quick-buttons" });
+    var deep = el("button", { type: "button", "class": "quiet small" }, t("quick_deep"));
+    var hand = el("button", { type: "button", "class": "quiet small" }, t("quick_assistant"));
+    deep.addEventListener("click", function () { quickSend(t("quick_deep_text", { q: text.trim() })); });
+    hand.addEventListener("click", function () { quickSend(text); });
+    buttons.appendChild(deep);
+    buttons.appendChild(hand);
+    [head, summary, status, passages, buttons].forEach(function (x) { box.appendChild(x); });
+    (chat.quick[win] = chat.quick[win] || []).push(mine, box);
+    if (chat.win === win) { $("messages").appendChild(mine); $("messages").appendChild(box); scrollChat(); }
+
+    var items = [], raw = "", bad = [];
+    function showItem(n) {
+      passages.open = true;
+      var row = list.querySelector("[data-n='" + n + "']");
+      if (!row) return;
+      Array.prototype.forEach.call(list.querySelectorAll(".quick-item.hit"), function (r) { r.classList.remove("hit"); });
+      row.classList.add("hit");
+      row.scrollIntoView({ block: "nearest" });
+    }
+    function drawSummary() {
+      summary.textContent = "";
+      raw.split(/\n+/).forEach(function (line) {
+        if (!line.trim()) return;
+        var p = el("p");
+        line.split(/(\[\d+(?:\s*[,，、]\s*\d+)*\])/).forEach(function (part, i) {
+          if (i % 2 === 0) { if (part) p.appendChild(document.createTextNode(part)); return; }
+          part.slice(1, -1).split(/\s*[,，、]\s*/).forEach(function (n) {
+            var k = Number(n), ok = k >= 1 && k <= items.length;
+            var c = el("button", { type: "button", "class": "cite" + (ok ? "" : " bad") }, "[" + n + "]");
+            if (ok) c.addEventListener("click", function () { showItem(k); });
+            p.appendChild(c);
+          });
+        });
+        summary.appendChild(p);
+      });
+    }
+    function drawItems(got) {
+      items = got.items;
+      head.textContent = t("quick_head", { k: got.keywords.join(lang === "zh" ? "、" : ", ") });
+      passages.firstChild.textContent = t("quick_passages", { n: items.length });
+      passages.hidden = !items.length;
+      items.forEach(function (x) {
+        var row = el("div", { "class": "quick-item", "data-n": String(x.n) });
+        var meta = el("div", { "class": "hint" }, "[" + x.n + "] " + t("quick_" + x.kind) +
+          (x.kind === "status" ? "" : " · " + sourceName(x.link) + (x.anchor ? " §" + x.anchor.slice(1) : "")) +
+          (x.date ? " · " + x.date : "") + " · " + x.label +
+          (x.review ? " · " + t("quick_review") : "") +
+          (x.hits < x.of ? " · " + t("quick_some", { h: x.hits, k: x.of }) : ""));
+        if (x.link) {
+          var open = el("button", { type: "button", "class": "quiet small" }, t("quick_open"));
+          open.addEventListener("click", function () { openContext(x.link, x.anchor); });
+          meta.appendChild(document.createTextNode(" "));
+          meta.appendChild(open);
+        }
+        row.appendChild(meta);
+        if (x.conclusion) row.appendChild(el("div", { "class": "quick-conclusion" }, x.conclusion));
+        row.appendChild(el("div", {}, x.text));
+        list.appendChild(row);
+      });
+      if (!items.length) {
+        status.textContent = t("quick_none");
+        deep.className = "primary small";
+      } else {
+        status.textContent = t("quick_summarising");
+      }
+    }
+    function handle(ev) {
+      if (ev.type === "hits") drawItems(ev);
+      else if (ev.type === "text") { raw += ev.text; drawSummary(); }
+      else if (ev.type === "done") {
+        bad = ev.bad || [];
+        if (items.length) status.textContent = t("quick_note") + (bad.length ? " " + t("quick_bad", { n: bad.join(", ") }) : "");
+        if (!ev.empty && !raw.trim()) status.textContent = t("quick_failed", { why: t("quick_bad_reply") });
+      } else if (ev.type === "error") {
+        status.textContent = t("quick_failed", { why: quickWhy(ev) });
+        status.className = "warn";
+        passages.open = true;
+        deep.className = "primary small";
+      }
+      if (chat.win === win) scrollChat();
+    }
+    fetch("/api/quick", {
+      method: "POST", headers: { "X-Token": token, "Content-Type": "application/json" },
+      body: JSON.stringify({ text: query, model: chat.model || "" })
+    }).then(function (r) {
+      if (!r.ok) return r.json().then(function (d) { throw new Error(d.error || r.status); });
+      var reader = r.body.getReader(), dec = new TextDecoder(), buf = "";
+      function pump() {
+        return reader.read().then(function (x) {
+          buf += dec.decode(x.value || new Uint8Array(0), { stream: !x.done });
+          var lines = buf.split("\n");
+          buf = x.done ? "" : lines.pop();
+          lines.forEach(function (l) { if (l.trim()) handle(JSON.parse(l)); });
+          if (!x.done) return pump();
+        });
+      }
+      return pump();
+    }).catch(function (e) {
+      handle({ type: "error", reason: "lost", detail: String(e.message) });
+    });
+  }
+
+  function quickSend(text) {
+    if (!chat.ready) { note(t("quick_not_ready"), "error"); return; }
+    say(text);
+  }
+
+  $("quick-switch").addEventListener("change", function () { setQuickOn($("quick-switch").checked); });
+
   // ---------- client-run ingest ----------
   // The client runs kb-ingest's scripts itself; the assistant only writes cards, in windows of the client's own.
 
@@ -2957,6 +3164,8 @@
       lockUpgrade();
       delete chat.unread[chat.win];
       st.history.forEach(showPart);
+      (chat.quick[chat.win] || []).forEach(function (b) { $("messages").appendChild(b); });
+      $("quick-switch").checked = quickOn();
       chatAgent(st.agent);
       chatBar(st.agent);
       chat.allowAll = !!st.agent.allow_all;
@@ -3337,7 +3546,10 @@
   $("composer").addEventListener("submit", function (e) {
     e.preventDefault();
     var text = $("input").value;
-    if (!chat.ready || !text.trim()) return;
+    if (!text.trim()) return;
+    var q = quickQuery(text);
+    if (q !== null) { $("input").value = ""; quick(text, q); return; }
+    if (!chat.ready) return;
     $("input").value = "";
     say(text);
   });
