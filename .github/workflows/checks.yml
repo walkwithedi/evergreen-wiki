@@ -27,17 +27,15 @@ jobs:
         run: python scripts/check_repo.py
       - name: Shared copies are current
         run: python scripts/sync_shared.py --check
-      - name: Converter release named in DOC2KB_VERSION
-        id: doc2kb
-        run: echo "ref=v$(tr -d '[:space:]' < DOC2KB_VERSION)" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@v7
-        with:
-          repository: walkwithedi/doc2kb
-          ref: ${{ steps.doc2kb.outputs.ref }}
-          path: .doc2kb
-          persist-credentials: false
-      - name: Converter is a copy of that release
-        run: python scripts/sync_doc2kb.py --check .doc2kb
+      - name: Converter is a copy of the doc2kb release named in DOC2KB_VERSION
+        # The release's files are only read and compared, never run.
+        run: |
+          v=$(tr -d '[:space:]' < DOC2KB_VERSION)
+          if ! printf '%s' "$v" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "DOC2KB_VERSION does not hold a version X.Y.Z"; exit 1
+          fi
+          git clone --quiet --depth 1 --branch "v$v" https://github.com/walkwithedi/doc2kb .doc2kb
+          python scripts/sync_doc2kb.py --check .doc2kb
       - name: Build zips
         run: python scripts/build_skill.py && python scripts/build_skill.py --locale zh
   scan:
