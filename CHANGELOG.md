@@ -8,6 +8,7 @@ Client (tools/kb-client)
 - Quick search: a message starting with search, look up, tell me about, what is or a Chinese word such as 搜索, 查找, 介绍, 讲解 or 什么是, or any message of a window whose Search the knowledge base switch is on, is not sent to the assistant. POST /api/quick splits it into keywords (punctuation, spaces and function words separate them; CJK runs longer than four characters give their pairs of characters), searches the index of every local library, and returns status-card items, cards and paragraphs ranked by the keywords they hold, 15 at most, at once. The client then calls the model of OpenCode's settings once (the window's model or the default; baseURL, apiKey, headers) and streams a summary from those passages only, each sentence numbered after them; numbers that are no passage are marked. Nothing found calls no model; a failed call keeps the passages and says why.
 - Under each result, Deep search sends the message to the current window for kb-query, and Give to the assistant sends it unchanged. Results stay on the page, outside the conversation; the switch is kept per window in the browser.
 - The API key is used in the client's server only, never sent to the page or logged.
+- Opening the conversation no longer sends one request for a window that does not exist.
 
 ## 6.2.0
 
