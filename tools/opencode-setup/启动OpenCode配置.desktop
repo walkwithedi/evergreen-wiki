@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=启动OpenCode配置
-Comment=在浏览器中打开 OpenCode 配置页面：环境检查、输入个人 AK 一键配置、更换 AK、自检、恢复备份
+Comment=在浏览器中打开 OpenCode 配置页面：环境检查、输入个人 AK 一键配置、更换 AK、自检
 Exec=bash -c "cd \\"\\$(dirname \\"\\$1\\")\\" && exec python3 ca_web.py" ca-web %k
 Terminal=true
 Icon=preferences-system

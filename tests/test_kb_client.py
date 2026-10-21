@@ -1484,6 +1484,25 @@ class DesktopEntryTest(unittest.TestCase):
             args = shlex.split(line[len("Exec="):].replace("exec python3 kb_client.py", "test -f kb_client.py && pwd -P"))
             out = subprocess.run([entry if a == "%k" else a for a in args], capture_output=True, text=True, check=True)
             self.assertEqual(out.stdout.strip(), os.path.realpath(os.path.dirname(TOOL)), entry)
+            # A link to the entry, such as one put on the desktop, starts the same client.
+            with tempfile.TemporaryDirectory() as tmp:
+                link = os.path.join(tmp, "knowledge-base.desktop")
+                os.symlink(entry, link)
+                out = subprocess.run([link if a == "%k" else a for a in args], capture_output=True, text=True, check=True)
+                self.assertEqual(out.stdout.strip(), os.path.realpath(os.path.dirname(TOOL)), link)
+
+
+class QuickWordsTest(unittest.TestCase):
+    """Only words that ask for a search start a quick search; other openings go to the assistant."""
+
+    def test_words(self):
+        with open(os.path.join(os.path.dirname(TOOL), "web", "app.js"), encoding="utf-8") as f:
+            m = re.search(r"var QUICK_WORDS = \[(.*?)\]", f.read(), re.S)
+        words = re.findall(r'"([^"]+)"', m.group(1))
+        for w in ("搜索", "查找", "知识库里", "search", "look up"):
+            self.assertIn(w, words)
+        for w in ("解释", "介绍", "有没有", "什么是", "说说", "what is", "tell me about"):
+            self.assertNotIn(w, words)
 
 
 def skill_md(name, desc, version=""):

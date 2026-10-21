@@ -71,11 +71,23 @@
     }
     editionNote();
     show($("kb-missing"), !w.kb_ready);
+    kbStatus();
     $("step-env").className = "step" + (w.env ? " done" : " current");
     $("step-ak").className = "step" + (w.ak ? " done" : w.env ? " current" : " locked");
     $("step-kb").className = "step" + (w.env && w.ak ? " current" : " locked");
     setButtons();
     maybeAuto();
+  }
+
+  // 知识库是否就绪（GET /api/state 的 kb）：没就绪时工作台打开后会展开知识库，指向「安装与建库」
+  function kbStatus() {
+    var k = state.kb;
+    var el = $("kb-status");
+    show(el, !!k);
+    if (!k) return;
+    el.textContent = "知识库技能 " + k.skills + "/" + k.skills_total + " · 已登记 " + k.libraries + " 个库" +
+      (k.ok ? "。" : "。打开后先点「安装与建库」：装好技能、建一个知识库。");
+    el.className = "hint" + (k.ok ? "" : " warn");
   }
 
   function badge(name, done, label) {

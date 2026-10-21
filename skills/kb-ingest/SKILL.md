@@ -1,11 +1,11 @@
 ---
 name: kb-ingest
-description: Ingests documents into an evergreen knowledge base (a local or Obsidian folder) and sets new libraries up. Use when the user says "ingest", "file these", "add to the knowledge base" or hands over batch files or documents for the library, for "set up a knowledge base", "new library" or "get started with the knowledge base", and for "health check" or "check the knowledge base". Turns each batch into cards (a conclusion with its exact source sentence), checks every quote against the source with a script, files the sources, cards and topic pages, archives older versions, and asks the user about new topics, new entities and possible new versions of documents. Scripts build the topic pages from the cards, so the model only extracts cards and words the replies. Material is searchable only once its run is finished. Init mode creates a library from the work preset, registers it and tells the assistant it exists. Not for questions (kb-query) or saving one note (kb-note).
+description: Ingests documents into an evergreen knowledge base (a local or Obsidian folder) and sets new libraries up. Use when the user says "ingest", "file these", "add to the knowledge base" or hands over batch files or documents for the library, for "set up a knowledge base", "new library" or "get started with the knowledge base", for "continue the ingest", "write the missing cards", "health check" and "check the knowledge base". Turns each batch into cards (a conclusion with its exact source sentence), checks every quote against the source with a script, files the sources, cards and topic pages, archives older versions, and asks the user about new topics, new entities and possible new versions of documents. Scripts build the topic pages from the cards, so the model only extracts cards and words the replies. Material is searchable only once its run is finished. Init mode creates a library from the work preset, registers it and tells the assistant it exists. Not for questions (kb-query) or saving one note (kb-note).
 ---
 
 # Knowledge base ingest
 
-Version: 6.3.0
+Version: 6.4.0
 
 This skill files material into a library. Every conclusion it writes carries the source sentence it rests on, and a script checks that sentence before anything is written. The rules of a library (partitions, topics, folder names) live in the library's own spec and _kb.json; read them each time, never from memory or from this file.
 
