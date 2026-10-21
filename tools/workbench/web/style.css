@@ -60,3 +60,4 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .edition label { display: block; font-size: 14px; margin: 4px 0; cursor: pointer; }
 .edition .hint { color: var(--warn); margin: 4px 0 0; }
 @media (max-width: 600px) { .step { flex-direction: column; } }
+.hint.warn { color: var(--warn); }

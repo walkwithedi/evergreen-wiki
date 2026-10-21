@@ -23,7 +23,7 @@ An assistant that answers from a pile of documents returns whatever matches best
 
 Documents are converted locally into batch files before they are ingested (Word, Excel, PowerPoint, PDF, mail): plain text with a source number per document and an anchor on every paragraph, at most 20,000 characters per batch. Material becomes searchable once its run is filed.
 
-The reasoning is in [docs/methodology.md](docs/methodology.md) ([中文](docs/methodology.zh-CN.md)); the design of this release, for libraries of about ten thousand documents, in [docs/design-4.0.md](docs/design-4.0.md) (it builds on [docs/design-3.0.md](docs/design-3.0.md)).
+The reasoning is in [docs/methodology.md](docs/methodology.md) ([中文](docs/methodology.zh-CN.md)); the design of the library layout used since 4.0 (schema 3), for libraries of about ten thousand documents, in [docs/design-4.0.md](docs/design-4.0.md) (it builds on [docs/design-3.0.md](docs/design-3.0.md)).
 
 ## How it fits together
 
@@ -53,12 +53,23 @@ Every release on the [Releases](../../releases) page carries two files:
 
 ## Quick start
 
+Three entries can be double-clicked; each opens a page in the browser:
+
+| Entry | Use it for |
+| --- | --- |
+| `启动OpenCode工作台.desktop` (workbench, at the top of the bundle) | every day on the workstation: checks OpenCode, then opens the conversation, with the knowledge base one button away |
+| `kb-client.desktop` (Knowledge base, at the top of evergreen-wiki) | the same client with the knowledge base unfolded and every management step (roll back, move, uninstall, skills) |
+| `启动OpenCode配置.desktop` (in tools/opencode-setup) | only to change the personal key or check OpenCode again |
+
 ### On the workstation (recommended)
 
 1. Copy `workbench-bundle-v<version>.zip` to the workstation and unpack it.
 2. Double-click `启动OpenCode工作台.desktop` at the top (trust it the first time). A page in the browser walks through three steps: check Node, opencode and the OpenCode configuration; paste your personal key, which is tested before it is written; open the workbench.
-3. In the workbench, open Knowledge base and choose Set up (安装与建库; the workbench page is in Chinese): it installs the three skills into OpenCode, asks two questions (the library folder and what belongs in it), shows a preview and writes nothing until you confirm.
-4. Ingest by asking in the conversation ("ingest these" with a file or folder path); answer the decisions under Waiting for confirmation; ask questions in the conversation.
+3. Choose Set up (安装与建库; the workbench page is in Chinese). Until the skills and a library are there, step 3 of the wizard says so and the workbench opens with the knowledge base unfolded. Set up installs the three skills into OpenCode, asks two questions (the library folder and what belongs in it), shows a preview and writes nothing until you confirm.
+4. Ingest in one of two ways; answer the decisions under Waiting for confirmation either way:
+   - many documents, searchable at once: Ingest under the library. The documents are filed first and can be searched and quoted right away; cards are written next, a run can be stopped and continued, and cards left over are written while the assistant is idle.
+   - a few files, settled step by step in the conversation: say "ingest: <file or folder path>". The material is searchable once the run is filed.
+5. Ask questions in the conversation.
 
 Details: [tools/workbench](tools/workbench/README.md), [tools/opencode-setup](tools/opencode-setup/README.md), [tools/kb-client](tools/kb-client/README.md).
 
@@ -73,7 +84,7 @@ The installer asks for your language, installs the three skills into OpenCode's 
 
 Later, from the same folder: `python3 install.py backup`, `rollback`, `move <library id> --to <folder>` and `uninstall`. Replacing skills, a registry or an instructions file is backed up first; library folders are never part of a backup, a move changes the registry only after every copied file matches, and uninstall keeps them unless you pick each one. See [docs/manual-setup.md](docs/manual-setup.md#6-back-up-roll-back-move-uninstall).
 
-Try everything first on the fictional [sample library](examples/). Prefer to do each step by hand, or need the registry format? See [docs/manual-setup.md](docs/manual-setup.md).
+Try everything first on the fictional [sample library](examples/README.md). Prefer to do each step by hand, or need the registry format? See [docs/manual-setup.md](docs/manual-setup.md).
 
 ## How a library looks
 
@@ -95,6 +106,7 @@ Every name is configurable in `_kb.json`. A quick note is a source like any othe
 
 ## Coming from earlier releases
 
+- 5.x: libraries are read and written by 6.x as they are. Batch files are made with `kb_batch.py make` instead of `doc2kb_core.py --kb-batch` (same options, same output), so scripts or prompts of your own that call it need the new command; the stand-alone converter comes from [doc2kb](https://github.com/walkwithedi/doc2kb).
 - 4.0.x: 4.0 libraries are read and written by 5.0 as they are. quote_check.py check is now quote_check.py verify, so scripts or prompts of your own that call it need the new name. Each ingest run works in `.kb-work/` inside the library; the folder is removed when the run is finished.
 - 3.0.x and 2.0.x: 4.0 libraries keep each source in the folder it came from (schema 3). A library made by 2.0 or 3.0 (schema 2, one flat sources folder) is not read and not migrated; keep using [v3.0.0](../../releases/tag/v3.0.0) for it, or set up a new library and ingest the material again.
 - 2.0.x in 3.0.0: a local library made by 2.0 works in 3.0 as it is; its `tier` setting is read and ignored, and topic pages are always built by the script. Libraries in Google Drive and the ChatGPT versions of the skills stay with [v2.0.0](../../releases/tag/v2.0.0), which is not developed further.

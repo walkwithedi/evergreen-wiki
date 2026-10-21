@@ -2,6 +2,25 @@
 
 All three skills share one version number. To release, update this file and the "Version:" line of every SKILL.md together and merge to main; the release workflow then publishes v<version>.
 
+## 6.4.0
+
+Client (tools/kb-client)
+- Quick search starts only for a message beginning with search, search for, look up, 搜索, 搜索一下, 搜一下, 查找 or 知识库里; messages beginning with explain, tell me about, what is, 解释, 介绍, 有没有 and the like go to the assistant. The Search the knowledge base switch works as before.
+- While the knowledge-base skills are not all installed or no library is there, the page opens with the knowledge base unfolded and Set up standing out, whatever the browser remembers, until it is folded on the page.
+- The note to quit OpenCode in a terminal shows only while material is being ingested (the stages of an ingest in the conversation, or a running ingest of the client's own).
+- The fallback that runs opencode run once per message is called one-shot mode (单次运行模式) on the page and in the README, apart from the simple version of --simple.
+- Both kb-client.desktop entries find the client through readlink -f, so a link to them, on the desktop for example, works.
+
+Workbench (tools/workbench)
+- GET /api/state gives kb: the knowledge-base skills installed (of three) and the libraries registered whose folder is there; step 3 shows them and, until both are there, says to choose Set up first.
+
+kb-ingest
+- The description names "continue the ingest" and "write the missing cards" (继续入库, 补抽卡片), the modes Continue and Missing cards.
+
+Installer and documents
+- install.py suggests "ingest: <file or folder path>" instead of attaching documents, and says that this release reads libraries made by 4.0 or later (schema 3).
+- README: a table of the three double-click entries, the two ways to ingest (Ingest under a library for many documents, searchable at once; "ingest: <path>" in the conversation for a few files), a note for 5.x, and 技能 for skill in Chinese. tools/opencode-setup: its entry no longer mentions restoring a backup, which is in the terminal menu. examples/: copy the sample before registering it; a Chinese README.
+
 ## 6.3.0
 
 Client (tools/kb-client)

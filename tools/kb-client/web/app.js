@@ -113,8 +113,8 @@
       modify_go: "Back up and prepare the request",
       modify_req: "Change the skill {name} (its folder: {folder}). Change: {how}. Details: {detail}\nEdit only the files in that folder, keep the SKILL.md front matter (name, description) valid, and tell me what you changed. A backup was made before this request.",
       new_req: "Fill in the new skill {name} (its folder: {folder}): complete the steps and the output section of its SKILL.md so that it does what its description says, keep the description to one clear sentence with two or three example phrases, and tell me how to use it.",
-      welcome_simple: "Set up installs the skills, makes a library and tells your agent about it; choose it again to add another library. Back up keeps a copy of what Set up wrote. Every step shows a preview before it changes anything.",
-      welcome: "Set up installs the skills, makes a library and tells your agent about it; choose it again to add another library. Back up, Roll back, Move and Uninstall manage what Set up wrote. Every step shows a preview before it changes anything.",
+      welcome_simple: "Set up installs the skills, makes a library and tells your agent about it; choose it again to add another library. Back up keeps a copy of what Set up wrote. Every step shows a preview before it changes anything. To ingest many documents and search them at once, use Ingest under a library; for a few files, say \"ingest: <file or folder path>\" in the conversation.",
+      welcome: "Set up installs the skills, makes a library and tells your agent about it; choose it again to add another library. Back up, Roll back, Move and Uninstall manage what Set up wrote. Every step shows a preview before it changes anything. To ingest many documents and search them at once, use Ingest under a library; for a few files, say \"ingest: <file or folder path>\" in the conversation.",
       cancel_step: "Cancel this step",
       chat_title: "Conversation",
       chat_later: "Talking to your agent from this page comes in a later version. Until then, open your agent as usual; it finds the libraries listed here.",
@@ -181,7 +181,7 @@
       chat_restarting: "Restarting OpenCode so that it uses the skills and the library just set up...",
       chat_ready: "Ready",
       chat_busy: "Working...",
-      chat_simple: "Simple mode: OpenCode's server could not be used ({reason}). Each message runs once with opencode run; the assistant cannot ask for permission or ask questions on this page. For full use, open OpenCode in a terminal.",
+      chat_simple: "One-shot mode: OpenCode's server could not be used ({reason}). Each message runs once with opencode run; the assistant cannot ask for permission or ask questions on this page. For full use, open OpenCode in a terminal.",
       chat_failed: "OpenCode stopped ({reason}). Choose Check again in Getting started to start it anew.",
       chat_no_program: "OpenCode was not found on this computer, so the conversation is off. Install OpenCode, or start the client with --opencode <path to opencode>, then choose Check again in Getting started.",
       chat_terminal: "Open in a terminal",
@@ -233,7 +233,7 @@
       check_found_no: "Not found. Install OpenCode, or start the client with --opencode <path to opencode>, then choose Check again.",
       check_started: "OpenCode started",
       check_starting: "Starting...",
-      check_started_simple: "Only simple mode: its server could not be used. Fix what the conversation panel shows, then choose Check again.",
+      check_started_simple: "Only one-shot mode: its server could not be used. Fix what the conversation panel shows, then choose Check again.",
       check_started_failed: "It stopped. Choose Check again to start it anew.",
       check_no_model: "No model found in its settings. If it does not start or answer, set up the model first.",
       check_skills: "Skills installed where OpenCode reads them",
@@ -400,8 +400,8 @@
       modify_go: "备份并准备请求",
       modify_req: "修改技能 {name}（文件夹：{folder}）。要改的方面：{how}。具体说明：{detail}\n只改这个文件夹里的文件，保持 SKILL.md 开头的 name 和 description 完整有效，改完告诉我改了什么。提出这个请求前已经做了备份。",
       new_req: "补全新技能 {name}（文件夹：{folder}）：把 SKILL.md 的步骤和输出两节写完整，让它做到描述里说的事；描述保持一句清楚的话，带两三个示例口令；最后告诉我怎么用。",
-      welcome_simple: "「安装与建库」会装好技能、建一个知识库并告诉助手；要再加一个库时再选一次。「备份」保存一份安装写下的内容。每一步改动前都会先给预览。",
-      welcome: "「安装与建库」会装好技能、建一个知识库并告诉助手；要再加一个库时再选一次。备份、回滚、移动和卸载用来管理安装写下的内容。每一步改动前都会先给预览。",
+      welcome_simple: "「安装与建库」会装好技能、建一个知识库并告诉助手；要再加一个库时再选一次。「备份」保存一份安装写下的内容。每一步改动前都会先给预览。入库：文档多、想马上能查时，用库下面的「入库」；少量文件可以在对话里说「入库：<文件或文件夹路径>」。",
+      welcome: "「安装与建库」会装好技能、建一个知识库并告诉助手；要再加一个库时再选一次。备份、回滚、移动和卸载用来管理安装写下的内容。每一步改动前都会先给预览。入库：文档多、想马上能查时，用库下面的「入库」；少量文件可以在对话里说「入库：<文件或文件夹路径>」。",
       cancel_step: "取消这一步",
       chat_title: "对话",
       chat_later: "在本页面直接和助手对话将在后续版本提供。在此之前请照常打开助手，它能找到这里列出的知识库。",
@@ -468,7 +468,7 @@
       chat_restarting: "正在重新启动 OpenCode，以便使用刚装好的技能和知识库…",
       chat_ready: "已就绪",
       chat_busy: "助手正在处理…",
-      chat_simple: "简易模式：OpenCode 的服务用不了（{reason}）。每条消息用 opencode run 单独运行一次，助手不能在本页面请求授权或提问。需要完整功能时，请在终端里打开 OpenCode。",
+      chat_simple: "单次运行模式：OpenCode 的服务用不了（{reason}）。每条消息用 opencode run 单独运行一次，助手不能在本页面请求授权或提问。需要完整功能时，请在终端里打开 OpenCode。",
       chat_failed: "OpenCode 已停止（{reason}）。在「首次使用清单」里点「重新检测」即可重新启动。",
       chat_no_program: "本机没有找到 OpenCode，对话不可用。请先安装 OpenCode，或启动客户端时用 --opencode <opencode 的路径> 指定，然后在「首次使用清单」里点「重新检测」。",
       chat_terminal: "在终端里打开",
@@ -520,7 +520,7 @@
       check_found_no: "没有找到。请安装 OpenCode，或启动客户端时用 --opencode <opencode 的路径> 指定，然后点「重新检测」。",
       check_started: "OpenCode 已启动",
       check_starting: "正在启动…",
-      check_started_simple: "只能用简易模式：它的服务用不了。按对话区显示的原因处理后，点「重新检测」。",
+      check_started_simple: "只能用单次运行模式：它的服务用不了。按对话区显示的原因处理后，点「重新检测」。",
       check_started_failed: "它已停止。点「重新检测」重新启动。",
       check_no_model: "它的配置里没有找到模型。如果启动不了或不回答，请先配好模型。",
       check_skills: "技能已装到 OpenCode 能读到的位置",
@@ -2189,7 +2189,16 @@
   // folded with --chat-first and unfolded otherwise.
   function kbKey() { return state && state.chat_first ? "kb-client-kb-open" : "kb-client-kb-open-full"; }
 
+  // Until the knowledge-base skills are installed and a library is there, Set up is what to do first: the
+  // knowledge base is unfolded whatever the browser remembers (unless folded on this page) and Set up stands out.
+  var kbFoldedHere = false;
+
+  function kbNotReady() {
+    return !!state && (!(state.kb_skills && state.kb_skills.ok) || !localLibs().length);
+  }
+
   function kbOpen() {
+    if (kbNotReady() && !kbFoldedHere) return true;
     var v = null;
     try { v = localStorage.getItem(kbKey()); } catch (e) { v = null; }
     return v === null ? !(state && state.chat_first) : v === "open";
@@ -2201,6 +2210,8 @@
     var cf = !!(state && state.chat_first);
     document.body.classList.toggle("chat-first", cf);
     document.body.classList.toggle("kb-open", kbOpen() || !!job || refused);
+    var setup = document.querySelector(".actions [data-action=setup]");
+    if (setup) setup.classList.toggle("primary", kbNotReady());
     show($("kb-toggle"), !!state);
     show($("chat-bar"), cf);
     $("kb-toggle-text").textContent = t(kbOpen() ? "kb_close" : "kb_open");
@@ -2212,7 +2223,9 @@
   }
 
   function toggleKb() {
-    try { localStorage.setItem(kbKey(), kbOpen() ? "folded" : "open"); } catch (e) { /* this view only */ }
+    var was = kbOpen();
+    if (was) kbFoldedHere = true;
+    try { localStorage.setItem(kbKey(), was ? "folded" : "open"); } catch (e) { /* this view only */ }
     refused = false;
     if (kbOpen()) setSide(false);  // unfolding the knowledge base is asking to see it
     applyKb();
@@ -2560,9 +2573,8 @@
   // at once and streams a short summary from one call to the model, numbered [n] after the passages. The
   // result stays on this page (not in the conversation); Deep search and Give to the assistant send it on.
 
-  var QUICK_WORDS = ["搜索一下", "搜一下", "搜索", "搜", "查找", "查询", "查一下", "查查", "帮我查", "找一下",
-    "介绍一下", "介绍", "讲讲", "讲解", "讲一下", "说说", "说一下", "解释一下", "解释", "什么是", "了解一下",
-    "问一下", "有没有", "知识库里", "search for", "search", "look up", "tell me about", "what is"
+  // Only words that ask for a search: a message starting with "explain" or "is there" goes to the assistant.
+  var QUICK_WORDS = ["搜索一下", "搜一下", "搜索", "查找", "知识库里", "search for", "search", "look up"
   ].sort(function (a, b) { return b.length - a.length; });
   var QUICK_KEY = "kb-client-quick";
 
@@ -2892,7 +2904,7 @@
     var box = $("ingest-strip");
     box.textContent = "";
     var r = ing.state && ing.state.run;
-    if (!r || r.state === "done" && ing.hidden === r.id) { show(box, false); return; }
+    if (!r || r.state === "done" && ing.hidden === r.id) { show(box, false); oneAgentNote(); return; }
     var head = el("div", { "class": "row" });
     head.appendChild(el("strong", {}, runLine(r)));
     if (r.state === "waiting") head.appendChild(pendingButton());
@@ -2914,6 +2926,7 @@
       box.appendChild(el("p", { "class": "hint" }, t("ingest_summary", { filed: r.summary.filed || 0, carded: r.summary.carded || 0, topics: r.summary.topics || 0 })));
     } else if (r.state === "failed" && r.reason) box.appendChild(el("p", { "class": "warn" }, r.reason));
     show(box, true);
+    oneAgentNote();
   }
 
   function drawIngestRun() {
@@ -3102,6 +3115,15 @@
     show($("stages"), true);
     $("ingest-cli").textContent = cliCommand();
     drawStages();
+    oneAgentNote();
+  }
+
+  // "Quit OpenCode in a terminal before filing" matters only while material is being filed: the stages of an
+  // ingest in the conversation, or the client's own run, are showing.
+  function oneAgentNote() {
+    var r = ing.state && ing.state.run;
+    var running = !!r && /^(running|stopping|waiting)$/.test(r.state);
+    show($("chat-one-agent"), !$("stages").hidden || running);
   }
 
   // The command that opens OpenCode in the work folder, for a terminal of the user's own.
@@ -3125,6 +3147,7 @@
     stages.hideTimer = setTimeout(function () {
       show($("stages"), false);
       stages.current = ""; stages.shown = "";
+      oneAgentNote();
     }, 120000);
   }
 

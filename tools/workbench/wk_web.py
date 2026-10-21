@@ -111,6 +111,30 @@ def wizard(st, wiki, prefs=None):
             "simple": prefs.get("simple", True) is not False}
 
 
+_kb_mods = {}  # 知识库客户端的模块，按 kb_client.py 的路径各载入一次
+
+
+def kb_status(wiki):
+    """知识库是否就绪，供第 3 步显示：OpenCode 读得到的知识库技能有几个、登记了几个本机还在的库。
+    复用知识库客户端自己的检查（kb_skills、libraries）；载入或检查失败时为 None，页面不显示这一行。"""
+    path = kb_client_path(wiki)
+    try:
+        mod = _kb_mods.get(path)
+        if mod is None:
+            spec = importlib.util.spec_from_file_location("wk_kb_client", path)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            _kb_mods[path] = mod
+        skills = mod.kb_skills()
+        libs = [lib for lib in mod.libraries() if lib.get("type") == "local" and lib.get("exists")]
+    except Exception as e:  # 客户端缺文件或出错时只是不显示，不影响向导
+        LOG.warning("读不出知识库状态：%s", e)
+        return None
+    total = len(skills["found"]) + len(skills["missing"])
+    return {"skills": len(skills["found"]), "skills_total": total, "libraries": len(libs),
+            "ok": bool(skills["ok"]) and bool(libs)}
+
+
 LOG_KEEP_DAYS = 7
 
 
@@ -282,6 +306,7 @@ def make_handler_class():
                 data["job"] = None if job is None else {"id": job.id, "action": job.action, "done": job.done}
                 data["wizard"] = wizard(data, self.app.wiki)
                 data["wizard"]["kb_running"] = self.app.kb_running()
+                data["kb"] = kb_status(self.app.wiki) if data["wizard"]["kb_ready"] else None
                 return self.send(200, data)
             name = "index.html" if path == "/" else path[1:]
             if name in FILES:

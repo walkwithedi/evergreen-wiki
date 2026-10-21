@@ -164,10 +164,9 @@ class BundleTest(unittest.TestCase):
 
 
 class WizardServerTest(unittest.TestCase):
-    def test_wizard_finds_the_tools_of_this_repository(self):
-        tmp = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, tmp, True)
+    def state(self, tmp):
         env = dict(os.environ, HOME=tmp, XDG_CONFIG_HOME=os.path.join(tmp, ".config"), PYTHONIOENCODING="utf-8")
+        env.pop("KB_LIBRARIES", None)
         p = subprocess.Popen([sys.executable, os.path.join(WORKBENCH, "wk_web.py"), "--no-browser", "--idle", "0"],
                              env=env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, encoding="utf-8")
         self.addCleanup(p.stdout.close)
@@ -180,9 +179,30 @@ class WizardServerTest(unittest.TestCase):
             url = m and m.groups()
         self.assertTrue(url, "the wizard printed no address")
         with urllib.request.urlopen(url[0] + "api/state?t=" + url[1], timeout=60) as r:
-            data = json.loads(r.read())
+            return json.loads(r.read())
+
+    def test_wizard_finds_the_tools_of_this_repository(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        data = self.state(tmp)
         self.assertTrue(data["wizard"]["kb_ready"])
         self.assertTrue(os.path.isfile(os.path.join(tmp, ".config", "work-kb", "location")))
+        # Nothing installed yet: step 3 says so.
+        self.assertEqual(data["kb"], {"skills": 0, "skills_total": 3, "libraries": 0, "ok": False})
+
+    def test_knowledge_base_ready(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        for name in ("kb-note", "kb-query", "kb-ingest"):
+            write(os.path.join(tmp, ".config", "opencode", "skills", name, "SKILL.md"), "---\nname: %s\n---\n" % name)
+        lib = os.path.join(tmp, "kb", "atlas")
+        os.makedirs(lib)
+        write(os.path.join(tmp, ".config", "kb", "kb-libraries.json"), json.dumps(
+            {"schema": 1, "libraries": [{"id": "atlas", "label": "Atlas", "scope": "Project Atlas",
+                                         "backend": {"type": "local", "root": lib}},
+                                        {"id": "gone", "label": "Gone", "scope": "x",
+                                         "backend": {"type": "local", "root": os.path.join(tmp, "gone")}}]}))
+        self.assertEqual(self.state(tmp)["kb"], {"skills": 3, "skills_total": 3, "libraries": 1, "ok": True})
 
 
 def load(name, path):
