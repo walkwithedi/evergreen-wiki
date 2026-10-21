@@ -2,6 +2,18 @@
 
 All three skills share one version number. To release, update this file and the "Version:" line of every SKILL.md together and merge to main; the release workflow then publishes v<version>.
 
+## 6.1.0
+
+Index (shared/scripts/kbindex.py)
+- The full-text index splits Chinese, Japanese and Korean text into pairs of characters and other text into words, for paragraphs and, new, for cards (conclusion and quote). A keyword of two CJK characters now uses the index instead of LIKE; a keyword ending in a word matches at the start of a word; results are ranked with BM25. Keywords that leave a single CJK character, and SQLites without FTS5, use LIKE as before. An index made by an earlier version is made again on first use.
+- search() and `kbindex.py query LIBRARY "QUERY"`: words and "quoted phrases" that must all match, entity names and aliases of Table E standing for each other, paragraphs and cards ranked together (BM25, a small weight for newer documents, a card before its own paragraph). context() gives a paragraph with its neighbours.
+- answer.py select scores cards and paragraphs as before; it gets them from the new index.
+
+Client (tools/kb-client)
+- A search bar above the conversation searches a library's index (GET /api/search) and lists paragraphs and cards at once, the words marked; a click shows the paragraph with two before and after it (GET /api/context).
+- The best ten results (up to 15,000 characters) go to the current conversation window with a request to answer from them by kb-query's rules and check the quotes (POST /api/search/summary). While that window works nothing is sent, and Summarise with AI sends them later.
+- Source links in answers show as Name §N and open the same paragraph view.
+
 ## 6.0.1
 
 Client (tools/kb-client)

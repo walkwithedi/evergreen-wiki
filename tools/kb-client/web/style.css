@@ -580,3 +580,30 @@ body.kb-open .kb-toggle { background: var(--soft); color: var(--accent); }
 /* health check: one foldable list per kind of finding */
 .health-group { margin: 4px 0; }
 .health-group summary { cursor: pointer; font-size: 13.5px; }
+
+/* search bar: results and a paragraph's neighbours under it, above the conversation */
+.search-bar { display: flex; gap: 6px; align-items: center; }
+.search-bar[hidden], .search-box[hidden] { display: none; }
+.search-bar input { flex: 1; min-width: 0; font: inherit; color: var(--ink); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+.search-bar select { font: inherit; font-size: 13px; color: var(--ink); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; max-width: 40%; }
+.search-box { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 14px; }
+.search-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.search-head .hint { margin: 0; }
+#search-summary { flex: 1; }
+.search-list { max-height: 40vh; overflow: auto; margin-top: 6px; }
+.search-item { padding: 6px 0; border-top: 1px solid var(--line); }
+.search-hit { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; background: none; border: 0;
+  padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-align: left; }
+.search-hit .hint { margin: 0; font-size: 12px; }
+.search-hit .badge { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+.search-item.card .badge { color: var(--accent); border-color: var(--accent); }
+.search-item .concl { font-weight: 600; }
+.search-item .snip, .search-ctx { overflow-wrap: anywhere; }
+.search-ctx { padding: 4px 6px; border-left: 3px solid transparent; white-space: pre-wrap; }
+.search-ctx.hit { border-left-color: var(--accent); background: var(--log); }
+.search-ctx-title { margin: 6px 0; font-weight: 600; }
+.search-box mark { background: rgba(255, 213, 79, .45); color: inherit; border-radius: 2px; }
+.msg .cite { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer;
+  text-decoration: underline dotted; }
