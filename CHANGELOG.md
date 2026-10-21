@@ -2,6 +2,11 @@
 
 All three skills share one version number. To release, update this file and the "Version:" line of every SKILL.md together and merge to main; the release workflow then publishes v<version>.
 
+## 6.4.1
+
+Client (tools/kb-client)
+- Opening the conversation no longer sends one request for a window that does not exist (answered 404) before loading the current window.
+
 ## 6.4.0
 
 Client (tools/kb-client)

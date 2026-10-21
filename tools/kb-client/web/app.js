@@ -3209,7 +3209,7 @@
   function chatStart() {
     var a = state.agent;
     if (!a.program) { chatInfo(t("chat_no_program")); chatEnable(); return; }
-    api("POST", "/api/chat/start", {}).then(chatLoad).catch(function (e) { chatInfo(String(e.message)); });
+    api("POST", "/api/chat/start", {}).then(function () { return chatLoad(); }).catch(function (e) { chatInfo(String(e.message)); });
   }
 
   function say(text, material) {
