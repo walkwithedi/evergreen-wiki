@@ -5,7 +5,7 @@ description: Answers questions from the user's own knowledge base (an evergreen 
 
 # Knowledge base questions
 
-Version: 6.1.0
+Version: 6.2.0
 
 Search, read and answer. The only file this skill ever changes is the status card, and only after the user confirmed the change (step 5). Partitions, topics, terms and entities are read from the library, never from this file.
 
@@ -41,7 +41,7 @@ Pick the question's keywords: names, terms (the standard form from Table B and t
 
   python3 scripts/answer.py select <library root> <keyword> [<keyword> ...]
 
-It lists the status-card items and the cards the keywords point to (a keyword that names an entity of Table E counts for all its aliases; a keyword that names a topic brings that topic's cards), best first, each with its quote and source link; items marked for review say so; it also lists the source paragraphs holding a keyword, marked as not on a card: those of sources without cards yet ("source without cards yet": filed, their cards still to be written) and, when no card matches, those of any source. Answer only from what it lists. When it finds nothing, try once more with other forms of the keywords, then answer as not found.
+It lists the status-card items holding a keyword (items marked for review say so), then the cards and the source paragraphs the keywords point to, at most 15 together, each with its quote and source link. Those holding every keyword come first, ranked by relevance with newer documents slightly ahead; when fewer than five hold every keyword, those holding only some follow, marked "only some keywords". A keyword that names an entity of Table E counts for all its aliases; a keyword that names a topic brings that topic's cards. Paragraphs are marked as not on a card; those of sources without cards yet also say so ("source without cards yet": filed, their cards still to be written). Answer only from what it lists. When it finds nothing, try once more with other forms of the keywords, then answer as not found.
 
 Without Python: search yourself, inside the library root only. Status card first (read it whole when it is under 8000 characters), then the cards and topic pages with find_by_text; read a source file only at the paragraph a card cites, or whole when the question needs the whole document.
 
@@ -61,10 +61,11 @@ Every statement of fact is followed by a quote line with the exact sentence it r
 3. A status-card item marked for review (⏳) is not relied on: answer from the cards and sources instead, and go on to step 5.
 4. A card from an earlier version (restored by the owner) says so; say so in the answer too.
 5. A source paragraph that is not on a card is quoted the same way, with "(not on a card)" after the link.
-6. Numbers and dates exactly as written, with units and the time they refer to; no conversion or estimate. No inference: what the library does not record is "not recorded in the knowledge base". If general knowledge is really needed, put it in a separate paragraph headed "not from the knowledge base", without quotes.
-7. Use the standard terms (Table B, Table E); if the user used another form, give the standard one with theirs in brackets once.
-8. Nothing found: say which libraries and keywords were searched and conclude "nothing found in the knowledge base".
-9. Answer only what was asked; mention the search only when nothing was found or sources conflict. Replies follow the library language and preferences.output.
+6. A card or paragraph marked "only some keywords" may be about something else: quote it only when it answers the question itself.
+7. Numbers and dates exactly as written, with units and the time they refer to; no conversion or estimate. No inference: what the library does not record is "not recorded in the knowledge base". If general knowledge is really needed, put it in a separate paragraph headed "not from the knowledge base", without quotes.
+8. Use the standard terms (Table B, Table E); if the user used another form, give the standard one with theirs in brackets once.
+9. Nothing found: say which libraries and keywords were searched and conclude "nothing found in the knowledge base".
+10. Answer only what was asked; mention the search only when nothing was found or sources conflict. Replies follow the library language and preferences.output.
 
 Write the answer to <work>/answer.md first and run python3 scripts/answer.py check <library root> <work>/answer.md. Exit 3 lists the quotes not found in their linked paragraph: copy each again from the card or paragraph, exactly, and check once more; a quote that still fails is removed together with its statement. Then reply with the answer.
 

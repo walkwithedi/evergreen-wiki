@@ -115,19 +115,12 @@
         <button type="button" class="quiet small" id="chat-new" data-t="chat_new">New conversation</button>
       </div>
       <div class="ingest-strip" id="ingest-strip" hidden></div>
-      <form class="search-bar" id="search-bar" role="search" hidden>
-        <select id="search-lib" aria-label="library" hidden></select>
-        <input type="search" id="search-q" spellcheck="false" autocomplete="off" maxlength="500">
-        <button type="submit" class="small" data-t="search_go">Search</button>
-      </form>
-      <div class="search-box" id="search-box" hidden>
-        <div class="search-head">
-          <span class="hint" id="search-note"></span>
-          <span id="search-summary"></span>
-          <button type="button" class="quiet small" id="search-fold" data-t="search_hide">Hide</button>
-          <button type="button" class="quiet small" id="search-close" data-t="close">Close</button>
+      <div class="source-view" id="source-view" hidden>
+        <div class="source-head">
+          <span id="source-title"></span>
+          <button type="button" class="quiet small" id="source-close" data-t="close">Close</button>
         </div>
-        <div class="search-list" id="search-list"></div>
+        <div class="source-list" id="source-list"></div>
       </div>
       <div class="chat-bar" id="chat-bar" hidden>
         <span class="hint" data-t="workdir_label">Work folder:</span>

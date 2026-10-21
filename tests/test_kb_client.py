@@ -1636,9 +1636,9 @@ No entries yet.
 """
 
 
-class SearchTest(unittest.TestCase):
-    """The search bar: results from the library's index, a paragraph's neighbours, and a summary in the conversation."""
-    setUp, p, start, ready, calls = ChatTest.setUp, ChatTest.p, ChatTest.start, ChatTest.ready, ChatTest.calls
+class SourceViewTest(unittest.TestCase):
+    """A source link in an answer opens its paragraph and the ones around it; there is no search bar."""
+    setUp, p = ChatTest.setUp, ChatTest.p
 
     def library(self):
         root = self.p("home", "kb", "work")
@@ -1648,43 +1648,21 @@ class SearchTest(unittest.TestCase):
                                          "backend": {"type": "local", "root": root}}]}))
         return root
 
-    def test_search_and_context(self):
+    def test_context_of_a_source_link(self):
         root = self.library()
         s = Server(self.env, "--idle", "0")
         self.addCleanup(s.stop)
-        status, got = s.get("/api/search?lib=work&q=" + quote('"steering group" pilot'))
-        self.assertEqual(status, 200, got)
-        self.assertEqual(got["keywords"], [["steering group"], ["pilot"]])
-        first = got["results"][0]
-        self.assertEqual((first["kind"], first["link"], first["anchor"]),
-                         ("card", "Sources/Meetings/Atlas steering minutes 2026-03-13", "p2"))
-        status, ctx = s.get("/api/context?lib=work&link=" + quote(first["link"]) + "&anchor=p2")
+        link = quote("Sources/Meetings/Atlas steering minutes 2026-03-13")
+        status, ctx = s.get("/api/context?lib=work&link=" + link + "&anchor=p2")
         self.assertEqual(status, 200, ctx)
-        self.assertEqual([p["hit"] for p in ctx["paragraphs"]].count(True), 1)
+        self.assertEqual([p["anchor"] for p in ctx["paragraphs"] if p["hit"]], ["p2"])
         self.assertEqual(s.get("/api/context?lib=work&link=Sources/x&anchor=p1")[0], 404)
         self.assertEqual(s.get("/api/context?lib=work&link=" + quote("Cards/Plans/Atlas pilot plan") + "&anchor=p2")[0], 404)
-        self.assertEqual(s.get("/api/search?lib=nope&q=x")[0], 404)
-        self.assertEqual(s.get("/api/search?lib=work&q=")[0], 400)
+        self.assertEqual(s.get("/api/context?lib=nope&link=" + link + "&anchor=p2")[0], 404)
         self.assertTrue(os.path.isfile(os.path.join(root, "_index", "kb.sqlite")))
-
-    def test_summary_goes_to_the_conversation_unless_it_is_busy(self):
-        root = self.library()
-        ev = self.ready()
-        s = self.server
-        status, r = s.post("/api/search/summary", {"library": "work", "q": "steering"})
-        self.assertEqual((status, r), (200, {"sent": 2}))
-        prompt = [c for c in self.calls() if c.get("path", "").endswith("/prompt_async")][-1]
-        text = prompt["body"]["parts"][0]["text"]
-        self.assertIn("answer.py check", text)
-        self.assertIn(root, text)
-        self.assertIn("[1] [[Sources/Meetings/Atlas steering minutes 2026-03-13#^p2]]", text)
-        self.assertIn("[2] [[Sources/Status reports/Atlas weekly status 2026-03-09#^p5]]", text)
-        self.assertEqual(s.post("/api/search/summary", {"library": "work", "q": "nothing-like-this"})[1], {"sent": 0})
-        ev.until(lambda e: e["type"] == "status" and e["status"] == "idle")
-        s.post("/api/chat/send", {"text": "SLOW"})
-        ev.until(lambda e: e["type"] == "status" and e["status"] == "busy")
-        status, r = s.post("/api/search/summary", {"library": "work", "q": "steering"})
-        self.assertEqual((status, r["reason"]), (409, "busy"))
+        self.assertNotIn('id="search-bar"', s.get("/", token=False)[1])
+        self.assertEqual(s.get("/api/search?lib=work&q=pilot")[0], 404)
+        self.assertEqual(s.post("/api/search/summary", {"library": "work", "q": "pilot"})[0], 404)
 
 
 class IngestRunTest(unittest.TestCase):

@@ -76,7 +76,7 @@ class IndexTest(unittest.TestCase):
         write(os.path.join(self.lib, "Sources", "Notes", "试点纪要.md"),
               "> Original path: Notes/试点纪要.docx\n> Document last modified: 2026-03-20 10:00\n\n"
               "领导小组同意试点延期两周。 ^p1\n\n预算由示例科技承担。 ^p2\n\n下次会议在周五。 ^p3\n\n"
-              "A区的进度正常。 ^p4\n")
+              "试点在A区进度正常。 ^p4\n")
         write(os.path.join(self.lib, "Sources", "Notes", "旧纪要.md"),
               "> Original path: Notes/旧纪要.docx\n> Document last modified: 2020-01-10 10:00\n\n"
               "试点延期的建议被搁置。 ^p1\n")
@@ -118,6 +118,20 @@ class IndexTest(unittest.TestCase):
         self.assertEqual((got[0]["kind"], got[0]["source"], got[0]["anchor"]),
                          ("card", "Meetings/Atlas steering minutes 2026-03-13.md", "p2"))
         self.assertNotIn(("paragraph", got[0]["link"], "p2"), [(r["kind"], r["link"], r["anchor"]) for r in got])
+
+    def test_search_relaxes_to_some_keywords_and_finds_topic_cards(self):
+        ix = self.zh_library()
+        got = ix.search(keywords=["试点", "A区"])                       # a full-text group with a LIKE group
+        self.assertEqual([(r["anchor"], r["partial"]) for r in got["results"]], [("p4", False)])
+        got = ix.search(keywords=["延期", "不存在的词"], relax=5)
+        self.assertEqual({r["source"] for r in got["results"]}, {"Notes/试点纪要.md", "Notes/旧纪要.md"})
+        self.assertTrue(all(r["partial"] for r in got["results"]))
+        self.assertEqual(ix.search(keywords=["延期", "不存在的词"])["results"], [])   # without relax: every keyword
+        got = ix.search(keywords=["试点", "两周"], relax=5)                # one holds both, the rest follow
+        self.assertEqual((got["results"][0]["anchor"], got["results"][0]["partial"]), ("p1", False))
+        self.assertTrue(all(r["partial"] for r in got["results"][1:]))
+        topic = [r for r in ix.search(keywords=["milestones"])["results"] if r["kind"] == "card"]
+        self.assertEqual({r["topic"] for r in topic}, {"milestones"})
 
     def test_search_without_full_text(self):
         old = kbindex.USE_FULL_TEXT

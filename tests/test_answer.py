@@ -56,16 +56,16 @@ class SampleCase(unittest.TestCase):
 
 
 class SelectTest(SampleCase):
-    def test_keyword_matches_newest_first(self):
+    def test_keyword_matches(self):
         got = answer.select(self.lib, self.cfg, ["export"])
-        self.assertEqual([c["conclusion"] for c in got["cards"]],     # event date 2026-03-20, then source date 2026-03-13
+        self.assertEqual(sorted(c["conclusion"] for c in got["cards"]),
                          ["The data export moves to 2026-03-20 while the test server is replaced.",
                           "The integration lead owns the data export."])
-        c = got["cards"][0]
+        c = next(c for c in got["cards"] if c["conclusion"].startswith("The data export moves"))
         self.assertEqual((c["link"], c["anchor"], c["topic"]), ("Sources/Status reports/Atlas weekly status 2026-03-09", "p4", "milestones"))
         self.assertEqual(got["paragraphs"], [])
 
-    def test_same_event_date_newer_source_first(self):
+    def test_newer_source_first(self):
         self.write(os.path.join("Cards", "Atlas weekly status 2026-03-16.md"),
                    "# Cards: [[Sources/Atlas weekly status 2026-03-16]]\n\n"
                    "Source: [[Sources/Atlas weekly status 2026-03-16]] · Document last modified: 2026-03-16 17:00\n\n"
@@ -73,7 +73,7 @@ class SelectTest(SampleCase):
                    "> the data export is on track for 2026-03-20. [[Sources/Atlas weekly status 2026-03-16#^p4]]\n\n"
                    "- Topic: [[Topics/milestones|milestones]]\n- Date: 2026-03-16 17:00 (event: 2026-03-20)\n")
         got = answer.select(self.lib, self.cfg, ["data export"])
-        self.assertEqual([c["date"][:10] for c in got["cards"][:2]], ["2026-03-16", "2026-03-09"])
+        self.assertEqual(got["cards"][0]["date"][:10], "2026-03-16")
 
     def test_aliases_of_table_e_and_topic_names(self):
         self.add_entity("Riverside Clinic | organisation | RC; the clinic |  |")
@@ -86,7 +86,8 @@ class SelectTest(SampleCase):
     def test_score_order_and_limit(self):
         got = answer.select(self.lib, self.cfg, ["pilot", "two weeks"])
         self.assertEqual(got["cards"][0]["conclusion"], "The pilot is extended by two weeks, to 2026-04-27.")
-        self.assertEqual(len(answer.select(self.lib, self.cfg, ["pilot"], limit=2)["cards"]), 2)
+        got = answer.select(self.lib, self.cfg, ["pilot"], limit=2)
+        self.assertEqual(len(got["cards"]) + len(got["paragraphs"]), 2)     # cards and paragraphs together
 
     def test_status_card_items_with_review_marks(self):
         self.write("00_Status-Card.md", STATUS)
@@ -100,7 +101,8 @@ class SelectTest(SampleCase):
         got = answer.select(self.lib, self.cfg, ["steering meeting"])
         self.assertEqual(got["cards"], [])
         self.assertEqual(got["paragraphs"], [{"link": "Sources/Status reports/Atlas weekly status 2026-03-09", "anchor": "p5",
-                                              "text": "The next steering meeting is on 2026-03-13.", "carded": True}])
+                                              "text": "The next steering meeting is on 2026-03-13.", "carded": True,
+                                              "partial": False}])
 
     def test_sources_without_cards_answer_from_paragraphs(self):
         self.write(os.path.join("Sources", "Status reports", "Atlas weekly status 2026-03-16.md"),
@@ -110,8 +112,21 @@ class SelectTest(SampleCase):
         self.assertTrue(got["cards"])
         self.assertEqual(got["paragraphs"], [{"link": "Sources/Status reports/Atlas weekly status 2026-03-16",
                                               "anchor": "p1", "text": "The data export is on track for 2026-03-20.",
-                                              "carded": False}])
+                                              "carded": False, "partial": False}])
         self.assertIn("(source without cards yet)", answer.render(got, "en"))
+
+    def test_every_keyword_first_then_some(self):
+        got = answer.select(self.lib, self.cfg, ["steering", "two weeks"])
+        self.assertEqual((got["cards"][0]["anchor"], got["cards"][0]["partial"]), ("p2", False))
+        got = answer.select(self.lib, self.cfg, ["steering", "nothing-like-this"])     # none holds both
+        self.assertTrue(got["cards"] or got["paragraphs"])
+        self.assertTrue(all(x["partial"] for x in got["cards"] + got["paragraphs"]))
+        self.assertIn("(only some keywords)", answer.render(got, "en"))
+
+    def test_paragraphs_of_carded_sources_and_the_limit(self):
+        got = answer.select(self.lib, self.cfg, ["pilot"])
+        self.assertTrue(any(p["carded"] for p in got["paragraphs"]))   # a carded source's paragraph no card quotes
+        self.assertLessEqual(len(got["cards"]) + len(got["paragraphs"]), answer.LIMIT)
 
     def test_command_line_text(self):
         self.write("00_Status-Card.md", STATUS)

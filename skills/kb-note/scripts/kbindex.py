@@ -25,9 +25,11 @@ ending in a word matches at the start of a word. Results are ranked with BM25. K
 a single CJK character, and SQLites without FTS5, use LIKE. An index made by an earlier version is
 made again. A folder the index cannot be written to gets an index in memory for that run.
 
-search() is the search of the client's search bar: a query of words and "quoted phrases" that must
-all match, a word naming an entity of the spec's Table E standing for any of its names; paragraphs
-and cards ranked together by BM25 with a small weight for newer documents.
+search() finds paragraphs and cards for a list of keywords (answer.py select) or a query of words
+and "quoted phrases": what holds every keyword first, a keyword naming an entity of the spec's
+Table E standing for any of its names and one naming a topic bringing its cards; paragraphs and
+cards ranked together by BM25 with a small weight for newer documents. With relax, results holding
+only some keywords fill up a short list, marked partial.
 
 fingerprint() is the content fingerprint of a source's text: the text without its notes (lines
 starting with ">"), anchors and white space, compared as quote_check compares quotes. Two files with
@@ -70,6 +72,7 @@ QUERY_RE = re.compile(r'"([^"]+)"|\u201c([^\u201d]+)\u201d|(\S+)')
 FRESH_DAYS = 1825     # a document this many days older than the newest result gets no freshness weight
 FRESH_WEIGHT = 0.2    # the newest result's score is raised by this share
 CARD_WEIGHT = 0.1     # added to a card's score, so that a card comes before its own paragraph's equals
+GROUP_CAP = 2000      # rows one keyword group brings at most
 MODIFIED_RE = re.compile(r'^>\s*(?:Document last modified|文档最后修改)\s*[:：]\s*(\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2})?)', re.M)
 
 TABLES = '''
@@ -437,69 +440,85 @@ class Index:
             rows = self.db.execute(q, [_like(t) for t in terms] + [limit])
         return [{'source': s, 'anchor': a, 'text': t} for s, a, t in rows]
 
-    def _matches(self, kind, groups, cap):
-        """[(row id, relevance)] of the paragraphs or cards (kind) matching every group of keywords; the
-        groups the full-text index can answer are matched there and give BM25, the others use LIKE."""
-        table, text = ('paragraphs', 'x.text') if kind == 'paragraphs' else ('cards', "x.conclusion || ' ' || x.quote")
-        fts, where, args = [], [], []
-        for g in groups:
-            phrases = [phrase(t) for t in g] if self.fts else []
-            if phrases and all(phrases):
-                fts.append('(%s)' % ' OR '.join(phrases))
-            else:
-                where.append('(%s)' % ' OR '.join(["%s LIKE ? ESCAPE '\\'" % text] * len(g)))
-                args += [_like(t) for t in g]
-        if fts:
-            q = ('SELECT x.id, -bm25({t}_fts) FROM {t}_fts JOIN {t} x ON x.id = {t}_fts.rowid WHERE {t}_fts MATCH ?{w} '
-                 'ORDER BY bm25({t}_fts) LIMIT ?').format(t=table, w=''.join(' AND ' + w for w in where))
-            return list(self.db.execute(q, [' AND '.join(fts)] + args + [cap]))
-        q = 'SELECT x.id, 1.0 FROM %s x WHERE %s LIMIT ?' % (table, ' AND '.join(where))
-        return list(self.db.execute(q, args + [cap]))
+    def _group(self, kind, group, cap):
+        """{row id: relevance} of the paragraphs or cards (kind) holding any name of one keyword group, at most
+        cap: BM25 where the full-text index can answer, else LIKE with relevance 1. Cards of a topic a name
+        of the group names, or naming one of its names as an entity, count too, with the group's best
+        relevance."""
+        table, text = ('paragraphs', 'text') if kind == 'paragraphs' else ('cards', "conclusion || ' ' || quote")
+        phrases = [phrase(t) for t in group] if self.fts else []
+        if phrases and all(phrases):
+            q = ('SELECT {t}.id, -bm25({t}_fts) FROM {t}_fts JOIN {t} ON {t}.id = {t}_fts.rowid WHERE {t}_fts MATCH ? '
+                 'ORDER BY bm25({t}_fts) LIMIT ?').format(t=table)
+            out = dict(self.db.execute(q, (' OR '.join(phrases), cap)))
+        else:
+            q = "SELECT id, 1.0 FROM %s WHERE %s LIMIT ?" % (table, ' OR '.join(["%s LIKE ? ESCAPE '\\'" % text] * len(group)))
+            out = dict(self.db.execute(q, [_like(t) for t in group] + [cap]))
+        if kind == 'cards':
+            keys = list({kbconf.topic_key(t) for t in group})
+            best = max(out.values() or [1.0])
+            q = ('SELECT id FROM cards WHERE tkey IN (%s) OR %s LIMIT ?'
+                 % (','.join('?' * len(keys)), ' OR '.join(["entities LIKE ? ESCAPE '\\'"] * len(group))))
+            args = keys + [_like(json.dumps(t, ensure_ascii=False)) for t in group] + [cap]
+            for i, in self.db.execute(q, args):
+                out[i] = max(out.get(i, 0), best)
+        return out
 
-    def search(self, query, entities=(), limit=30):
-        """{"keywords": [[keyword, other names...]], "results": [...]} for a search-bar query: paragraphs and
-        cards holding every keyword (a group: any of its names), best first. Relevance is BM25 (1 for
-        all when only LIKE could answer), divided by the best of its kind; a result gains up to
+    def search(self, query=None, entities=(), limit=30, keywords=None, relax=0):
+        """{"keywords": [[keyword, other names...]], "results": [...]}: paragraphs and cards holding every
+        keyword (a group: any of its names; a card also when a name names its topic), best first. The query
+        is a search-bar query (parse_query), or keywords a list of them. When fewer than relax hold every
+        keyword, those holding some of them follow, marked partial. Relevance is the sum of each group's
+        BM25 (1 for a group only LIKE could answer), divided by the best of its kind; a result gains up to
         FRESH_WEIGHT of it for a newer document (none for one FRESH_DAYS older than the newest result),
         and a card CARD_WEIGHT. A paragraph a listed card quotes is left out. Each result:
         {kind: "card" or "paragraph", source (path below the sources folder), link, anchor, text (the
-        paragraph, or the card's quote), date, carded; a card also conclusion and topic, score}."""
-        groups = expand(parse_query(query), entities)
+        paragraph, or the card's quote), date, carded, partial; a card also conclusion and topic, score}."""
+        words = [k for k in (' '.join(str(x).split()) for x in keywords) if k] if keywords is not None else parse_query(query)
+        groups = expand(list(dict.fromkeys(words)), entities)
         if not groups:
             return {'keywords': [], 'results': []}
         sdir = self.names['sources_dir']
-        cap = max(limit * 4, 100)
+        cap = max(limit * 4, GROUP_CAP)
         found = []
         for kind in ('cards', 'paragraphs'):
-            hits = self._matches(kind, groups, cap)
-            best = max([r for _, r in hits] or [1]) or 1
-            rel = {i: r / best for i, r in hits}
-            if not rel:
-                continue
-            ids = ','.join(str(i) for i in rel)
-            if kind == 'cards':
-                q = ('SELECT id, cards, source, anchor, quote, conclusion, topic, entities, date, event_date, link '
-                     'FROM cards WHERE id IN (%s)' % ids)
-                for r in self.db.execute(q):
-                    _, src, c = _card_row(r[1:])
-                    link = c.get('link') or src
-                    found.append({'kind': 'card', 'source': link.split('/', 1)[-1] + '.md', 'link': link,
-                                  'anchor': c['anchor'], 'text': c['quote'], 'conclusion': c['conclusion'],
-                                  'topic': c['topic'], 'date': _day(c['date']), 'carded': True, 'rel': rel[r[0]]})
-            else:
-                q = ('SELECT p.id, p.source, p.anchor, p.text, s.modified, s.carded FROM paragraphs p '
-                     'JOIN sources s ON s.path = p.source WHERE p.id IN (%s)' % ids)
-                for pid, src, anchor, text, modified, carded in self.db.execute(q):
-                    found.append({'kind': 'paragraph', 'source': src, 'link': '%s/%s' % (sdir, src[:-3]),
-                                  'anchor': anchor, 'text': text, 'date': _day(modified), 'carded': bool(carded),
-                                  'rel': rel[pid]})
+            per = [self._group(kind, g, cap) for g in groups]
+            every = set.intersection(*(set(m) for m in per))
+            some = set().union(*(set(m) for m in per)) - every
+            rel = {i: sum(m.get(i, 0) for m in per) for i in every | some}
+            best = max(rel.values() or [1]) or 1
+            for part, ids in ((False, every), (True, some)):
+                if not ids:
+                    continue
+                inlist = ','.join(str(i) for i in ids)
+                if kind == 'cards':
+                    q = ('SELECT id, cards, source, anchor, quote, conclusion, topic, entities, date, event_date, link '
+                         'FROM cards WHERE id IN (%s)' % inlist)
+                    for r in self.db.execute(q):
+                        _, src, c = _card_row(r[1:])
+                        link = c.get('link') or src
+                        found.append({'kind': 'card', 'source': link.split('/', 1)[-1] + '.md', 'link': link,
+                                      'anchor': c['anchor'], 'text': c['quote'], 'conclusion': c['conclusion'],
+                                      'topic': c['topic'], 'date': _day(c['date']), 'card_date': c['date'],
+                                      'event_date': c.get('event_date', ''), 'entities': c['entities'], 'carded': True, 'partial': part,
+                                      'earlier': bool(c.get('link')), 'rel': rel[r[0]] / best})
+                else:
+                    q = ('SELECT p.id, p.source, p.anchor, p.text, s.modified, s.carded FROM paragraphs p '
+                         'JOIN sources s ON s.path = p.source WHERE p.id IN (%s)' % inlist)
+                    for pid, src, anchor, text, modified, carded in self.db.execute(q):
+                        found.append({'kind': 'paragraph', 'source': src, 'link': '%s/%s' % (sdir, src[:-3]),
+                                      'anchor': anchor, 'text': text, 'date': _day(modified), 'carded': bool(carded),
+                                      'partial': part, 'rel': rel[pid] / best})
         quoted = {(f['link'], f['anchor']) for f in found if f['kind'] == 'card'}
         found = [f for f in found if f['kind'] == 'card' or (f['link'], f['anchor']) not in quoted]
         newest = max([f['date'] for f in found if f['date']] or [''])
         for f in found:
             fresh = max(0.0, 1 - _days(f['date'], newest) / FRESH_DAYS) if f['date'] else 0.0
             f['score'] = round(f.pop('rel') * (1 + FRESH_WEIGHT * fresh) + (CARD_WEIGHT if f['kind'] == 'card' else 0), 4)
-        found.sort(key=lambda f: (-f['score'], -int(f['date'].replace('-', '') or 0), f['source'], f['anchor']))
+        found.sort(key=lambda f: (f['partial'], -f['score'], -int(f['date'].replace('-', '') or 0), f['source'], f['anchor']))
+        full = sum(1 for f in found if not f['partial'])
+        if full >= relax:
+            found = found[:full]
         return {'keywords': groups, 'results': found[:limit]}
 
     def context(self, source, anchor, around=2):
