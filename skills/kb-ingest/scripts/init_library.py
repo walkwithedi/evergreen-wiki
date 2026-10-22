@@ -49,10 +49,12 @@ PRESET_DEFAULTS = {
 # line is found again, so a second run updates it instead of adding another.
 LINE_PREFIX = {"en": "I keep knowledge bases: ", "zh": "我有知识库："}
 LINE_TAIL = {
-    "en": ". For questions about these, use kb-query before searching code or answering from memory; "
-          "to save something, use kb-note; to add documents, use kb-ingest.",
-    "zh": "。相关问题先用 kb-query 查知识库，再查代码或凭记忆回答；要记录用 kb-note；要入库用 kb-ingest。",
+    "en": ". Use kb-query only when I ask to search the knowledge base; the folders are named here, so there is "
+          "no registry to look for. To save something, use kb-note; to add documents, use kb-ingest.",
+    "zh": "。只在我要求查知识库时用 kb-query，各库的文件夹已写在这里，不用再找注册表；要记录用 kb-note；要入库用 kb-ingest。",
 }
+LINE_AT = {"en": " at ", "zh": "，位于 "}
+LINE_PLAIN = {"en": " Replies use plain text without Markdown.", "zh": "回答用纯文本，不用 Markdown。"}
 REGISTRY_HEADING = {"en": "Knowledge base registry (kb-libraries.json):", "zh": "知识库注册表（kb-libraries.json）："}
 
 
@@ -274,11 +276,18 @@ def add_to_registry(path, entry, language=None, dry_run=False):
     return reg
 
 
+def lib_at(lib, language):
+    """Where a library's folder is, for the instructions line: " at <root>", or "" without a root."""
+    root = (lib.get("backend") or {}).get("root")
+    return LINE_AT[language] + root if root else ""
+
+
 def instructions_line(reg, language=None):
     language = lang_key(language or reg.get("preferences", {}).get("language"))
     sep, lp, rp = ("；", "（", "）") if language == "zh" else ("; ", " (", ")")
-    libs = sep.join(f"{lib['label']}{lp}{lib['scope']}{rp}" for lib in reg.get("libraries", []))
-    return LINE_PREFIX[language] + libs + LINE_TAIL[language]
+    libs = sep.join(f"{lib['label']}{lp}{lib['scope']}{rp}{lib_at(lib, language)}" for lib in reg.get("libraries", []))
+    plain = LINE_PLAIN[language] if reg.get("preferences", {}).get("output") == "plain" else ""
+    return LINE_PREFIX[language] + libs + LINE_TAIL[language] + plain
 
 
 def is_our_line(line):

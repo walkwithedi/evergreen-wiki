@@ -228,7 +228,8 @@ class InitLibraryTest(Tmp):
         run("init_library.py", "instructions", "--registry", reg, "--file", md, "--apply")
         text = read(md)
         self.assertIn("Be brief.", text)
-        self.assertIn("I keep knowledge bases: Atlas (Project Atlas); Work (team projects).", text)
+        self.assertIn("I keep knowledge bases: Atlas (Project Atlas) at %s; Work (team projects) at %s. "
+                      "Use kb-query only when I ask" % (self.p("atlas"), self.p("work")), text)
         self.assertIn("to add documents, use kb-ingest.", text)
         self.assertNotIn("batch intake", text)
         out = run("init_library.py", "instructions", "--registry", reg, "--file", md, "--apply").stdout
@@ -252,6 +253,19 @@ class InitLibraryTest(Tmp):
         self.assertEqual(what, "updated")
         self.assertEqual(text, "a\nI keep knowledge bases: New (y).\nb\n")
         self.assertEqual(il.upsert_line("", "L")[0], "L\n")
+
+    def test_instructions_line(self):
+        sys.path.insert(0, SCRIPTS)
+        import init_library as il
+        reg = {"preferences": {"language": "zh", "output": "plain"}, "libraries": [
+            {"label": "工作", "scope": "团队项目", "backend": {"type": "local", "root": "~/kb/work"}}]}
+        line = il.instructions_line(reg)
+        self.assertEqual(line, "我有知识库：工作（团队项目），位于 ~/kb/work。只在我要求查知识库时用 kb-query，各库的文件夹已写在这里，"
+                               "不用再找注册表；要记录用 kb-note；要入库用 kb-ingest。回答用纯文本，不用 Markdown。")
+        old = "我有知识库：工作（团队项目）。相关问题先用 kb-query 查知识库，再查代码或凭记忆回答；要记录用 kb-note；要入库用 kb-ingest。"
+        self.assertEqual(il.upsert_line("# 我的\n\n" + old + "\n", line), ("# 我的\n\n" + line + "\n", "updated"))
+        reg["preferences"]["output"] = "markdown"
+        self.assertNotIn("Markdown", il.instructions_line(reg, "en"))
 
 
 class WizardTest(Tmp):
@@ -284,7 +298,7 @@ class WizardTest(Tmp):
         for s in ("kb-note", "kb-query", "kb-ingest"):
             self.assertTrue(os.path.isfile(self.p("home", ".config", "opencode", "skills", s, "SKILL.md")))
         self.assertTrue(os.path.isfile(os.path.join(lib1, "_kb.json")))
-        self.assertIn("I keep knowledge bases: Work (team projects).", read(agents_md))
+        self.assertIn("I keep knowledge bases: Work (team projects) at ~/kb/work.", read(agents_md))
         # second run: keep the installed skills, a second work library gets a free id
         p = self.wizard(["2", "", "", "n", "", lib2, "", "3", "acme", "", ""])
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
@@ -294,7 +308,8 @@ class WizardTest(Tmp):
         text = read(agents_md)
         self.assertTrue(text.startswith("# Mine\n"))
         self.assertEqual(text.count("I keep knowledge bases:"), 1)
-        self.assertIn("Work (team projects); Work (work goals and plans, projects and tasks, meetings and decisions, policies and procedures, reports).", text)
+        self.assertIn("Work (team projects) at ~/kb/work; Work (work goals and plans, projects and tasks, meetings and decisions, "
+                      "policies and procedures, reports) at ~/kb/work2.", text)
 
     def test_cancel_writes_nothing(self):
         p = self.wizard(["2", "4", self.p("skills"), "n", "", self.p("lib"), "", "n"])

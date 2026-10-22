@@ -34,10 +34,10 @@ python3 skills/kb-ingest/scripts/init_library.py write --root ~/kb/atlas --prese
 在 `~/.config/opencode/AGENTS.md`（或某个项目的 AGENTS.md）里加一行：
 
 ```text
-我有知识库：Atlas 项目（Atlas 项目的计划、会议纪要和报告）；工作（工作目标与计划、项目与事务、会议与决策、制度流程、报表等工作资料）。相关问题先用 kb-query 查知识库，再查代码或凭记忆回答；要记录用 kb-note；要入库用 kb-ingest。
+我有知识库：Atlas 项目（Atlas 项目的计划、会议纪要和报告），位于 ~/kb/atlas；工作（工作目标与计划、项目与事务、会议与决策、制度流程、报表等工作资料），位于 ~/kb/work。只在我要求查知识库时用 kb-query，各库的文件夹已写在这里，不用再找注册表；要记录用 kb-note；要入库用 kb-ingest。
 ```
 
-不加的话，听起来不像私人事务的问题（如「支付接口限流是多少」）可能会被当作代码或常识问题直接回答。`init_library.py instructions --registry <注册表> --file <文件> --apply` 会按注册表写入或更新这一行，文件其余内容不动。OpenCode 没有 AGENTS.md 时会读 `~/.claude/CLAUDE.md`；知识库客户端会把这一行写到 OpenCode 实际会读的那个文件里。
+这一行写明了各库的文件夹，kb-query 可以直接检索，不用先找注册表；只有你要求查知识库时（如「查一下知识库：……」）才用 kb-query，其他问题照常回答。preferences.output 设为 plain 时，这一行还会要求用纯文本回答。`init_library.py instructions --registry <注册表> --file <文件> --apply` 会按注册表写入或更新这一行，文件其余内容不动。OpenCode 没有 AGENTS.md 时会读 `~/.claude/CLAUDE.md`；知识库客户端会把这一行写到 OpenCode 实际会读的那个文件里。
 
 ## 5. 使用
 

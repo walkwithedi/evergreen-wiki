@@ -6,7 +6,7 @@ An offline, privately deployed knowledge base for intranet workstations (Kylin +
 | --- | --- | --- |
 | kb-note | "note this" | saves a piece of the conversation as a source with checked cards, searchable at once |
 | kb-ingest | "ingest these", "add to the knowledge base", "set up a knowledge base" | turns documents into cards, each a conclusion with the exact source sentence it rests on, checks every quote with a script, files sources and cards, archives older versions and rebuilds the topic pages; sets up new libraries |
-| kb-query | any question the library may answer | searches the library first and follows every fact with the exact source sentence and its link, never from memory |
+| kb-query | asking to check the knowledge base | searches the library and follows every fact with the exact source sentence and its link, never from memory |
 
 [中文说明](README.zh-CN.md)
 

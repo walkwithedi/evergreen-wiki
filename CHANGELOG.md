@@ -2,6 +2,16 @@
 
 All three skills share one version number. To release, update this file and the "Version:" line of every SKILL.md together and merge to main; the release workflow then publishes v<version>.
 
+## 6.5.0
+
+Client (tools/kb-client)
+- Quick search starts again for every opening the input hint names: besides search, look up and 搜索, 查找, 知识库里, a message starting with tell me about, what is, 介绍, 讲讲, 讲解, 说说, 解释, 什么是, 查询, 查一下, 有没有 and the like is searched at once instead of being sent to the assistant. A test checks that every word the hint names starts a quick search.
+- Permission cards have Deny, Always allow and Allow once. Always allow asks once, then OpenCode remembers the actions the card lists and Allow everything is switched on for that window; the separate Allow everything on this page button is gone. The header switch, the remembered count and Clear stay.
+
+Skills
+- kb-query is used only when the user asks to search the knowledge base or a message says to use kb-query (as Deep search does); other questions are answered without it, even when a library might record the answer. The English and Chinese descriptions say so.
+- The instructions line names each library's folder ("<label> (<scope>) at <folder>"), says to use kb-query only when asked, and, with preferences.output plain, asks for plain-text replies. kb-query takes the libraries from that line and reads references/config.md only without it, references/environment.md only when Python cannot run or a folder cannot be reached, and references/backend-local.md only when searching without Python; the script, work-folder and ignored-file rules it needs are in SKILL.md. Upgrading through the client or install.py replaces the old line, found by its opening words; the rest of the file is kept.
+
 ## 6.4.1
 
 Client (tools/kb-client)

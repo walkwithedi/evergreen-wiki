@@ -76,7 +76,7 @@ class ManageTest(unittest.TestCase):
         p = self.manage(["rollback", "--id", bid], ["y"])
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         self.assertIn("name: kb-note", read(self.skill))
-        self.assertIn("I keep knowledge bases: Work (team projects).", read(self.claude_md))
+        self.assertIn("I keep knowledge bases: Work (team projects) at ~/kb/work.", read(self.claude_md))
         self.assertTrue(os.path.isfile(self.registry))
         self.assertEqual(read(os.path.join(self.lib, "new.md")), "kept\n")  # libraries are not restored
         # the state before the restore is a backup of its own, so the restore can be undone
