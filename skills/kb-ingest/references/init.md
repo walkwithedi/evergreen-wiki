@@ -67,9 +67,10 @@ With Python, python3 scripts/init_library.py plan --root <path> --preset work --
    python3 scripts/init_library.py register --id <id> --label <label> --scope "<scope>" --type local --root <path> --language <lang>
    It creates the file if needed, keeps every other entry and refuses an id or root already registered (exit 3: report it, ask for another id).
    A registry file you cannot write: run register on <work>/kb-libraries.json, then python3 scripts/init_library.py instructions --registry <work>/kb-libraries.json --project-block, and give that block to paste.
-5. Make the libraries visible. An assistant only consults kb-query when it knows a knowledge base exists, and it cannot see the registry until a skill reads it. The line lists every registered library:
-   "I keep knowledge bases: <label> (<scope>); <label> (<scope>). For questions about these, use kb-query before searching code or answering from memory; to save something, use kb-note; to add documents, use kb-ingest."
-   In Chinese: "我有知识库：<名称>（<范围>）；<名称>（<范围>）。相关问题先用 kb-query 查知识库，再查代码或凭记忆回答；要记录用 kb-note；要入库用 kb-ingest。"
+5. Make the libraries visible. The line lists every registered library with its folder, so kb-query needs no registry lookup, and says kb-query is used only when the user asks to search the knowledge base:
+   "I keep knowledge bases: <label> (<scope>) at <folder>; <label> (<scope>) at <folder>. Use kb-query only when I ask to search the knowledge base; the folders are named here, so there is no registry to look for. To save something, use kb-note; to add documents, use kb-ingest."
+   In Chinese: "我有知识库：<名称>（<范围>），位于 <文件夹>；<名称>（<范围>），位于 <文件夹>。只在我要求查知识库时用 kb-query，各库的文件夹已写在这里，不用再找注册表；要记录用 kb-note；要入库用 kb-ingest。"
+   With preferences.output plain, the line ends with "Replies use plain text without Markdown." ("回答用纯文本，不用 Markdown。").
    python3 scripts/init_library.py instructions --registry <registry> --file <file> prints the line and says whether it would be added or would update the line already there (found by its opening words, so a second library never adds a second line); add --apply to write. The file is the one the assistant always reads: AGENTS.md in the user's home or project for OpenCode. Write only after the user agrees, which the preview confirmation covers when item 6 named the file; every other line of the file stays as it is.
 6. Check: python3 scripts/kbconf.py validate <library root> passes, and the registry loads (python3 scripts/kbconf.py registry, where the registry is a file).
 7. Report in a few lines: what was written and where, anything that needs a manual step (the block to paste from step 4, if any, or a restart of the agent so it reads the new instructions line), then three things to try, in the library language:

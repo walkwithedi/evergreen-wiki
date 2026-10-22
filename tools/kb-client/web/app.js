@@ -206,7 +206,7 @@
       allow_always: "Always allow",
       allow_all: "Allow everything",
       allow_all_on: "Everything allowed · switch off",
-      allow_all_card: "Allow everything on this page",
+      allow_always_confirm: "Always allow? OpenCode stops asking for the actions listed on the card, also after the client is reopened (Clear in Manage forgets them), and everything else the assistant asks for in this window is allowed from now on, reading, changing and deleting files and running any command included, until you switch Allow everything off or quit the client. Changes to the knowledge-base skills stay refused.",
       allow_all_confirm: "Allow everything the assistant asks for from now on? Reading, changing and deleting files and running any command will no longer be asked about, until you switch it off or quit the client. Changes to the knowledge-base skills stay refused.",
       allow_all_note_on: "Everything is allowed without asking until you switch it off or quit the client.",
       allow_all_note_off: "The assistant asks for permission again.",
@@ -493,7 +493,7 @@
       allow_always: "总是允许",
       allow_all: "全部允许",
       allow_all_on: "已全部允许 · 关闭",
-      allow_all_card: "本页都允许",
+      allow_always_confirm: "总是允许吗？卡片上列出的操作今后不再询问，重开客户端后仍然有效（可在「管理」里「清除」）；这个窗口里助手的其他请求也从现在起自动允许，包括读取、修改、删除文件和运行任何命令，直到你关闭「全部允许」或退出客户端。修改知识库技能仍会被拒绝。",
       allow_all_confirm: "之后助手的所有请求都自动允许吗？读取、修改、删除文件和运行任何命令都不再询问，直到你关闭或退出客户端。修改知识库技能仍会被拒绝。",
       allow_all_note_on: "已全部允许：之后不再询问，直到你关闭或退出客户端。",
       allow_all_note_off: "已恢复询问授权。",
@@ -2090,11 +2090,16 @@
     }
     function reply(how) {
       dropCard(ev.id);
-      api("POST", "/api/chat/permission", { id: ev.id, reply: how }).catch(function (e) { note(String(e.message), "error"); });
+      return api("POST", "/api/chat/permission", { id: ev.id, reply: how }).catch(function (e) { note(String(e.message), "error"); });
+    }
+    // Always allow does both: OpenCode remembers the card's patterns, and the window allows everything.
+    function allowAlways() {
+      if (!window.confirm(t(always.length ? "allow_always_confirm" : "allow_all_confirm"))) return;
+      // the card is answered first, so that allowing everything does not answer it "once" meanwhile
+      (always.length ? reply("always") : Promise.resolve()).then(function () { setAllowAll(true, true); });
     }
     var buttons = [[t("deny"), "", function () { reply("reject"); }]];
-    if (always.length) buttons.push([t("allow_always"), "", function () { reply("always"); }]);
-    buttons.push([t("allow_all_card"), "", function () { setAllowAll(true); }]);
+    buttons.push([t("allow_always"), "", allowAlways]);
     buttons.push([t("allow_once"), "primary", function () { reply("once"); }]);
     buttonRow(c, buttons);
     c.scrollIntoView({ block: "nearest" });
@@ -2325,8 +2330,8 @@
 
   // Allow everything on the page: the client answers every request itself, until it is switched off or
   // the client quits. Switching it on also answers the waiting cards.
-  function setAllowAll(on) {
-    if (on && !window.confirm(t("allow_all_confirm"))) return;
+  function setAllowAll(on, confirmed) {
+    if (on && !confirmed && !window.confirm(t("allow_all_confirm"))) return;
     api("POST", "/api/chat/allow_all", { on: on, win: chat.win }).catch(function (e) { note(String(e.message), "error"); });
   }
 
@@ -2573,8 +2578,11 @@
   // at once and streams a short summary from one call to the model, numbered [n] after the passages. The
   // result stays on this page (not in the conversation); Deep search and Give to the assistant send it on.
 
-  // Only words that ask for a search: a message starting with "explain" or "is there" goes to the assistant.
-  var QUICK_WORDS = ["搜索一下", "搜一下", "搜索", "查找", "知识库里", "search for", "search", "look up"
+  // Words that open a question about something recorded: such a message is a quick search, not a message to
+  // the assistant. The input hint names some of them.
+  var QUICK_WORDS = ["搜索一下", "搜一下", "搜索", "搜", "查找", "查询", "查一下", "查查", "帮我查", "找一下",
+    "介绍一下", "介绍", "讲讲", "讲解一下", "讲解", "讲一下", "说说", "说一下", "解释一下", "解释", "什么是", "了解一下",
+    "问一下", "有没有", "知识库里", "search for", "search", "look up", "tell me about", "what is"
   ].sort(function (a, b) { return b.length - a.length; });
   var QUICK_KEY = "kb-client-quick";
 

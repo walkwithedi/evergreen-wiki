@@ -217,7 +217,7 @@ class KbClientTest(unittest.TestCase):
         self.assertTrue(any(q["kind"] == "folder" for q in asked))
         self.assertTrue(os.path.isfile(self.p("home", ".claude", "skills", "kb-note", "SKILL.md")))
         self.assertTrue(os.path.isfile(self.p("home", "kb", "work", "_kb.json")))
-        self.assertIn("I keep knowledge bases: Work (team projects).", read(self.p("home", ".claude", "CLAUDE.md")))
+        self.assertIn("I keep knowledge bases: Work (team projects) at ~/kb/work.", read(self.p("home", ".claude", "CLAUDE.md")))
         st = self.server.get("/api/state")[1]
         self.assertEqual([x["id"] for x in st["libraries"]], ["work"])
         self.assertTrue(st["libraries"][0]["exists"] and st["libraries"][0]["movable"])
@@ -439,7 +439,7 @@ class KbClientTest(unittest.TestCase):
         result, out, asked = self.server.run("skill_upgrade", [True])
         self.assertEqual(result, "ok", out)
         self.assertEqual(len(asked), 1)
-        self.assertIn("I keep knowledge bases: Work (team projects).", read(claude))
+        self.assertIn("I keep knowledge bases: Work (team projects) at ~/kb/work.", read(claude))
         self.assertFalse(os.path.exists(self.p("home", ".config", "opencode", "AGENTS.md")))
 
     def test_upgrade_replaces_only_the_copy_in_effect(self):
@@ -1493,16 +1493,27 @@ class DesktopEntryTest(unittest.TestCase):
 
 
 class QuickWordsTest(unittest.TestCase):
-    """Only words that ask for a search start a quick search; other openings go to the assistant."""
+    """Questions that open with a search or an asking word start a quick search, and the input hint names only
+    such words."""
+
+    def setUp(self):
+        with open(os.path.join(os.path.dirname(TOOL), "web", "app.js"), encoding="utf-8") as f:
+            self.js = f.read()
+        m = re.search(r"var QUICK_WORDS = \[(.*?)\]", self.js, re.S)
+        self.words = re.findall(r'"([^"]+)"', m.group(1))
 
     def test_words(self):
-        with open(os.path.join(os.path.dirname(TOOL), "web", "app.js"), encoding="utf-8") as f:
-            m = re.search(r"var QUICK_WORDS = \[(.*?)\]", f.read(), re.S)
-        words = re.findall(r'"([^"]+)"', m.group(1))
-        for w in ("搜索", "查找", "知识库里", "search", "look up"):
-            self.assertIn(w, words)
-        for w in ("解释", "介绍", "有没有", "什么是", "说说", "what is", "tell me about"):
-            self.assertNotIn(w, words)
+        for w in ("搜索", "查找", "知识库里", "介绍", "讲解", "什么是", "有没有", "search", "look up", "what is",
+                  "tell me about"):
+            self.assertIn(w, self.words)
+
+    def test_hint_names_quick_words(self):
+        en, zh = re.findall(r'input_hint: "([^"]+)"', self.js)
+        for w in re.findall(r"「([^」]+)」", zh):
+            self.assertIn(w, self.words)
+        named = re.match(r"Start with (.*?) \\u2026", en).group(1)
+        for w in named.split(", "):
+            self.assertIn(w, self.words)
 
 
 def skill_md(name, desc, version=""):

@@ -49,10 +49,10 @@ The scope matters: it is how the assistant decides which library a note or quest
 Add one line to `~/.config/opencode/AGENTS.md` (or the AGENTS.md of a project):
 
 ```text
-I keep knowledge bases: Project Atlas (Project Atlas plans, minutes and reports); Work (work goals and plans, projects and tasks, meetings and decisions, policies and procedures, reports). For questions about these, use kb-query before searching code or answering from memory; to save something, use kb-note; to add documents, use kb-ingest.
+I keep knowledge bases: Project Atlas (Project Atlas plans, minutes and reports) at ~/kb/atlas; Work (work goals and plans, projects and tasks, meetings and decisions, policies and procedures, reports) at ~/kb/work. Use kb-query only when I ask to search the knowledge base; the folders are named here, so there is no registry to look for. To save something, use kb-note; to add documents, use kb-ingest.
 ```
 
-Without it, questions that do not sound personal (for example "what is the payments API rate limit?") may be answered from code or general knowledge instead of your library. `init_library.py instructions --registry <registry> --file <file> --apply` writes or updates this line from the registry, leaving the rest of the file alone. OpenCode reads `~/.claude/CLAUDE.md` when it has no AGENTS.md; the knowledge base client writes the line where OpenCode will read it.
+The line names each library's folder, so kb-query starts searching at once instead of looking for the registry; kb-query is used only when you ask to search the knowledge base ("check the knowledge base: ..."), and other questions are answered normally. With preferences.output set to plain the line also asks for plain-text replies. `init_library.py instructions --registry <registry> --file <file> --apply` writes or updates this line from the registry, leaving the rest of the file alone. OpenCode reads `~/.claude/CLAUDE.md` when it has no AGENTS.md; the knowledge base client writes the line where OpenCode will read it.
 
 ## 5. Use it
 

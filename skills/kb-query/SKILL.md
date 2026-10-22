@@ -1,25 +1,31 @@
 ---
 name: kb-query
-description: Answers questions from the user's own knowledge base (an evergreen library in a local or Obsidian folder) by searching it first, never from memory; every fact is followed by the exact source sentence it rests on, with a link to it, and when nothing is found it says where it looked. Use when a question may be recorded there - what was agreed or decided, current values and limits, owners, dates, status, open issues, terms, how something changed, or whether some material is already in the library. Examples: "When is the launch date?", "Who owns Project Atlas?". When the user has a knowledge base set up (a kb-libraries.json registry, KB_LIBRARIES, or libraries named in project instructions), check it before searching code or answering from general knowledge, even if the user does not say "check my knowledge base". Not for unrelated general questions. Writes nothing except a status-card update the user confirmed; ingesting and setup belong to kb-ingest, saving notes to kb-note.
+description: Answers questions from the user's own knowledge base (an evergreen library in a local or Obsidian folder) by searching it, never from memory; every fact is followed by the exact source sentence it rests on, with a link to it, and when nothing is found it says where it looked. Use only when the user asks to search or check the knowledge base, or a message says to use kb-query. Examples: "Check the knowledge base: when is the launch date?", "Look up in my knowledge base who owns Project Atlas". Other questions, including ones a library might record, are answered without this skill. Writes nothing except a status-card update the user confirmed; ingesting and setup belong to kb-ingest, saving notes to kb-note.
 ---
 
 # Knowledge base questions
 
-Version: 6.4.1
+Version: 6.5.0
 
 Search, read and answer. The only file this skill ever changes is the status card, and only after the user confirmed the change (step 5). Partitions, topics, terms and entities are read from the library, never from this file.
 
-Read references/config.md and references/environment.md once before starting. Scripts are run as references/environment.md says; paths such as scripts/answer.py are relative to this skill's folder.
+## Before starting
+
+- Libraries: the instructions line names each library, its scope and its folder ("I keep knowledge bases: <label> (<scope>) at <folder>"). Use those folders and do not look for a registry. Without such a line, read references/config.md and find the registry as it says.
+- Scripts: paths such as scripts/answer.py are relative to this skill's folder. Run a script by its full path in the skill's folder, one command per call, with no pipes, redirections or chained commands; put text arguments in quotes.
+- Work folder (<work>): a temporary directory outside the library, so that answering never writes into it.
+- Replies: in the library language (_kb.json language, else the user's language); plain text without Markdown when the instructions line or preferences.output asks for it.
+- Read references/environment.md only when Python cannot run or a library folder cannot be reached, and references/backend-local.md only when searching without Python.
 
 ## Step 1: which library
 
 1. A question unrelated to every library's scope (general knowledge, writing, code): do not search; answer normally.
-2. Load the registry and match the question against each scope. Search the libraries that fit.
+2. Match the question against each library's scope (from the instructions line, or the registry). Search the libraries that fit.
 3. Unclear, or more than one could hold the answer: search every library that might, without asking.
 4. If unsure whether a question falls in a library, read that library's spec Table A to check; still unsure, treat as rule 3.
 5. Ingesting and setup requests belong to kb-ingest; "note this" belongs to kb-note.
 
-For each library searched, read references/backend-local.md and _kb.json. A _kb.json of schema 1 is a 1.x library: say that this release does not read it and that the 1.x release does. Start the answer with: Library: <label(s)>.
+For each library searched, read its _kb.json. A _kb.json of schema 1 is a 1.x library: say that this release does not read it and that the 1.x release does. Start the answer with: Library: <label(s)>.
 
 ## Step 2: where answers come from
 
@@ -33,7 +39,7 @@ For each library searched, read references/backend-local.md and _kb.json. A _kb.
 | which partition or topic a subject belongs to | spec Table A |
 | whether some material is in the library | the sources folder, by name |
 
-Never use the ignored files listed in references/config.md. The archive folder holds superseded versions: search it only when the user asks for an old version, and say the result is superseded.
+Never use ignored files: the archive folder; names that start with an underscore; names that start with snapshot_prefix; names that contain old_suffix followed by a time stamp (the scripts skip them already). The archive folder holds superseded versions: search it only when the user asks for an old version, and say the result is superseded.
 
 ## Step 3: find the material
 
