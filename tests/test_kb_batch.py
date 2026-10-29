@@ -181,6 +181,15 @@ class KbBatchTest(Tmp):
         p, out, names = self.batches("--library", lib)
         self.assertIn("Character limit: 30000", read(os.path.join(out, names[0])))
 
+    def test_numbering_over_the_whole_run(self):
+        # the converter's file batches would call the writer once per volume; make keeps one run
+        p, out, names = self.batches("--tier", "strong", "--batch-size", "2")
+        self.assertEqual(len(names), 1, names)
+        self.assertRegex(names[0], r"^src_\d{8}_b01\.md$")
+        heads = re.findall(r"^# (S\d+) ", read(os.path.join(out, names[0])), re.M)
+        self.assertGreater(len(heads), 2)
+        self.assertEqual(heads, ["S%02d" % i for i in range(1, len(heads) + 1)])
+
     def test_same_day_and_fingerprints(self):
         db = self.p("fp.tsv")
         p, out, first = self.batches("--fp-db", db)

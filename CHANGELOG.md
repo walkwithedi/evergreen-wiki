@@ -2,6 +2,12 @@
 
 All three skills share one version number. To release, update this file and the "Version:" line of every SKILL.md together and merge to main; the release workflow then publishes v<version>.
 
+## 6.5.1
+
+Skills
+- The converter copy is doc2kb 2.2.0 (DOC2KB_VERSION; was 1.1.0): it also reads legacy .doc, .xls and .ppt files, and a large folder no longer slows down as it goes, since the converter's report is written once per batch instead of after every document.
+- kb_batch.py make runs the converter as one batch (`batch_size` 0), so the writer sees the whole run and sources stay numbered and ordered across it, whatever the number of files; batch files are as before.
+
 ## 6.5.0
 
 Client (tools/kb-client)
