@@ -5,7 +5,7 @@ description: Answers questions from the user's own knowledge base (an evergreen 
 
 # Knowledge base questions
 
-Version: 6.5.0
+Version: 6.5.1
 
 Search, read and answer. The only file this skill ever changes is the status card, and only after the user confirmed the change (step 5). Partitions, topics, terms and entities are read from the library, never from this file.
 

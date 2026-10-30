@@ -517,6 +517,8 @@ def make_main(argv):
     except ValueError as e:
         ap.error(str(e))
     args.merge = True
+    # one batch, so the writer sees the whole run: sources numbered and ordered across it
+    args.batch_size = 0
     args.no_images = True
     writer = batch_writer(core, limit, tier)
     if args.batch:
