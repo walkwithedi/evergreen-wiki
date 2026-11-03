@@ -138,3 +138,7 @@ python3 scripts/sensitive_scan.py         # 个人信息检查
 ```
 
 见 [CONTRIBUTING.md](CONTRIBUTING.md)。许可证：[MIT](LICENSE)。
+
+## 反馈
+
+意见和建议请发邮件到 [hong.xie.me@outlook.com](mailto:hong.xie.me@outlook.com)。

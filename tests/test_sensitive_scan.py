@@ -46,6 +46,14 @@ def office(core="", app=""):
 
 
 class RuleTest(unittest.TestCase):
+    def test_public_feedback_address_only(self):
+        addr = "hong.xie.me" + "@" + "outlook.com"
+        self.assertEqual(labels("Send suggestions and feedback to [%s](mailto:%s)." % (addr, addr)), [])
+        self.assertEqual(labels("意见和建议请发邮件到 [%s](mailto:%s)。" % (addr, addr)), [])
+        for other in ("hong.xie.me2" + "@outlook.com", "a.hong.xie.me" + "@outlook.com",
+                      "hong.xie.me" + "@hotmail.com", "li.lei" + "@outlook.com"):
+            self.assertEqual(labels("mail " + other), ["e-mail"], other)
+
     def test_personal(self):
         self.assertEqual(labels("mail " + "li.lei" + "@gmail.com"), ["e-mail"])
         self.assertEqual(labels("call 1" + "3812345678"), ["phone"])
