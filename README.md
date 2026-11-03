@@ -140,3 +140,7 @@ python3 scripts/sensitive_scan.py         # personal data check
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Licence: [MIT](LICENSE).
+
+## Feedback
+
+Send suggestions and feedback to [hong.xie.me@outlook.com](mailto:hong.xie.me@outlook.com).

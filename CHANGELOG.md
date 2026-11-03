@@ -2,6 +2,11 @@
 
 All three skills share one version number. To release, update this file and the "Version:" line of every SKILL.md together and merge to main; the release workflow then publishes v<version>.
 
+## 6.5.2
+
+Repository
+- The READMEs end with a Feedback section giving the maintainer's feedback address. The sensitive-data scanner allows that one full address (PUBLIC_ADDRESSES) and still reports every other e-mail address. walkwithedi/edi-lab#206. Skills unchanged apart from the version line.
+
 ## 6.5.1
 
 Skills
