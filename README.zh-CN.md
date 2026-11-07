@@ -1,5 +1,7 @@
 # evergreen-wiki（常青知识库）
 
+> **已停止维护。** 本仓库已归档，不再更新；已有的[发行版](../../releases)仍可下载。在本机文件上建离线知识库，请用 [ask-local-files（资料管家）](https://github.com/walkwithedi/ask-local-files)。
+
 离线私有化知识库：在内网和信创环境（麒麟 + OpenCode）下，用 DeepSeek、Qwen 等私有部署的大模型维护文档知识库。三个技能（skill）管理一个 Markdown 文件夹（可直接作为 Obsidian 库打开）；凡是能按规则机械完成的步骤都交给脚本，所以能力一般的模型也够用。每个回答都附经脚本核对的原文出处，可溯源、不编造；只用 Python 标准库，不联网。
 
 | 技能 | 口令 | 作用 |

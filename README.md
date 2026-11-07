@@ -1,5 +1,7 @@
 # evergreen-wiki
 
+> **No longer maintained.** This repository is archived and receives no further changes. Existing [releases](../../releases) stay available for download. For a local, offline knowledge base over your own files, use [ask-local-files](https://github.com/walkwithedi/ask-local-files).
+
 An offline, privately deployed knowledge base for intranet workstations (Kylin + OpenCode), kept by a local model such as DeepSeek or Qwen. Three agent skills keep a folder of Markdown files in order (an Obsidian vault works as is), and scripts do every step that can be decided mechanically, so a model of modest ability is enough. Every answer quotes a source sentence a script has checked; only the Python standard library is needed, and nothing goes online:
 
 | Skill | You say | It does |
